@@ -3,7 +3,7 @@ import { useAppContext } from "../../../contexto/Context";
 import { categorias, subcategorias } from "../const";
 import { FormProducts } from "./FormProducts";
 import { ProductosCategorizados } from "./ProductosCategorizados";
-import { Loader1 } from "../../../contexto/loader1";
+import { Loader1 } from "../../../contexto/Loader1";
 import { Filtros } from "./Filtros";
 
 export function UlProducts() {
