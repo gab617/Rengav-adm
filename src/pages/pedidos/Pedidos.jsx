@@ -203,7 +203,7 @@ export function BotonConfirmarAccion({
       </button>
 
       {confirmando && (
-        <div className={`absolute right-full top-0 z-20 ${bgConfirm} border ${borderConfirm} shadow-lg rounded-md p-3 w-[160px] text-sm`}>
+        <div className={`absolute right-full top-0 z-20 ${bgConfirm} border ${borderConfirm} shadow-lg rounded-md p-3 w-40 text-sm`}>
           <p className="font-medium mb-2">{textoConfirmar}</p>
           <div className="flex gap-2">
             <button

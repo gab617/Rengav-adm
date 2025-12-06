@@ -12,7 +12,6 @@ import { useCategories } from "./hooksSB/useCategories";
 
 const App = () => {
   const location = useLocation();
-  const { categories, loading } = useCategories();
 
   // Ocultar NavBar en login
   const hideNavBar = location.pathname === "/";
