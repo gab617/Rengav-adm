@@ -1,0 +1,65 @@
+@media print {
+  body * {
+    visibility: hidden;
+    margin: 0;
+    padding: 0;
+  }
+
+  .panel-ventas,
+  .panel-ventas * {
+    visibility: visible;
+  }
+
+  .panel-ventas {
+    position: static !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+    padding: 0.5rem !important;
+    font-size: 10pt !important;
+    line-height: 1.1 !important;
+    margin: 0 !important;
+    font-family: Arial, sans-serif;
+  }
+
+  /* Bloques de datos (títulos y valores) */
+  .panel-ventas .data-block {
+    padding: 0.25rem 0.5rem !important; /* menos padding */
+    margin-bottom: 0.3rem !important;   /* menos separación entre bloques */
+  }
+
+  .panel-ventas .data-block p {
+    margin: 0 !important;               /* quitar margen default de párrafo */
+  }
+
+  .panel-ventas .data-block .title {
+    font-weight: bold !important;
+    font-size: 10pt !important;
+    margin-bottom: 0.1rem !important;   /* menos separación del valor */
+  }
+
+  .panel-ventas .data-block .value {
+    font-size: 10pt !important;
+    margin: 0 !important;
+  }
+
+  /* Ranking Top 5 o listas */
+  .panel-ventas ul {
+    padding-left: 1rem !important;
+    margin: 0 !important;
+  }
+
+  .panel-ventas li {
+    margin-bottom: 0.2rem !important;
+  }
+
+  @page {
+    size: A4;
+    margin: 0.5cm; 
+  }
+
+  html, body {
+    height: auto !important;
+  }
+}

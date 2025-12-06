@@ -1,0 +1,19 @@
+/* Estilos para hacer más delgada la barra de desplazamiento */
+.custom-scrollbar::-webkit-scrollbar {
+    width: 5px;  /* Ancho de la barra */
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: #f1f1f1; /* Color de fondo de la barra */
+    border-radius: 10px;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #888; /* Color de la barra */
+    border-radius: 10px;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #555; /* Color cuando se pasa el mouse */
+  }
+  
