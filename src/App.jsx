@@ -8,7 +8,6 @@ import { toast, ToastContainer } from "react-toastify";
 import { Login } from "./pages/login/Login";
 import { NavBar } from "./navBar/NavBar";
 import { Usuario } from "./pages/usuario/Usuario";
-import { useCategories } from "./hooksSB/useCategories";
 
 const App = () => {
   const location = useLocation();

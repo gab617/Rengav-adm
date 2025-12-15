@@ -6,20 +6,23 @@ export function ProductosCategorizados({ productosPorCategoria }) {
   const { preferencias, updatePreferencias } = useAppContext();
   const dark = preferencias?.theme === "dark";
 
-  // Vista inicial desde preferencias
-  const [vista, setVista] = useState(
-    preferencias?.view_products === "list" ? "listado" : "mosaico"
-  );
+  // Detectar mobile (simple y efectivo)
+  const esMobile = window.innerWidth < 768;
 
-  // Sincronizar cuando preferencias cambian
+  // Vista inicial
+  const [vista, setVista] = useState("listado");
+  const [tamano, setTamano] = useState("normal");
+
+  // Sincronizar vista según preferencias / mobile
   useEffect(() => {
-    if (preferencias?.view_products) {
+    if (esMobile) {
+      setVista("listado");
+    } else if (preferencias?.view_products) {
       setVista(preferencias.view_products === "list" ? "listado" : "mosaico");
     }
   }, [preferencias]);
 
-  const [tamano, setTamano] = useState("normal");
-
+  // Grid dinámico
   const gridCols =
     vista === "listado"
       ? "grid-cols-1"
@@ -43,25 +46,7 @@ export function ProductosCategorizados({ productosPorCategoria }) {
           dark ? "bg-gray-800" : "bg-white"
         }`}
       >
-        {/* BOTÓN MOSAICO */}
-        <button
-          onClick={() => {
-            setVista("mosaico");
-            updatePreferencias({ view_products: "mosaic" });
-          }}
-          className={`p-2 rounded-lg flex items-center gap-1 transition-colors ${
-            vista === "mosaico"
-              ? "bg-blue-500 text-white"
-              : dark
-              ? "bg-gray-700 text-gray-300 hover:bg-gray-600"
-              : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-          }`}
-        >
-          <span>🔳</span>
-          Mosaico
-        </button>
-
-        {/* BOTÓN LISTADO */}
+        {/* LISTADO (siempre disponible) */}
         <button
           onClick={() => {
             setVista("listado");
@@ -75,38 +60,70 @@ export function ProductosCategorizados({ productosPorCategoria }) {
               : "bg-gray-200 text-gray-700 hover:bg-gray-300"
           }`}
         >
-          <span>📋</span>
-          Listado
+          📋 Listado
         </button>
 
-        {/* Tamaños */}
-        <div className="ml-auto flex gap-2">
+        {/* MOSAICO (solo tablet / desktop) */}
+        {!esMobile && (
           <button
-            onClick={() =>
-              setTamano((prev) =>
-                prev === "grande" ? "normal" : prev === "normal" ? "chico" : "chico"
-              )
-            }
-            className={`p-2 rounded-lg transition-colors ${
-              dark ? "bg-gray-700 hover:bg-gray-600" : "bg-gray-200 hover:bg-gray-300"
+            onClick={() => {
+              setVista("mosaico");
+              updatePreferencias({ view_products: "mosaic" });
+            }}
+            className={`p-2 rounded-lg flex items-center gap-1 transition-colors ${
+              vista === "mosaico"
+                ? "bg-blue-500 text-white"
+                : dark
+                ? "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                : "bg-gray-200 text-gray-700 hover:bg-gray-300"
             }`}
           >
-            ➖
+            🔳 Mosaico
           </button>
+        )}
 
-          <button
-            onClick={() =>
-              setTamano((prev) =>
-                prev === "chico" ? "normal" : prev === "normal" ? "grande" : "grande"
-              )
-            }
-            className={`p-2 rounded-lg transition-colors ${
-              dark ? "bg-gray-700 hover:bg-gray-600" : "bg-gray-200 hover:bg-gray-300"
-            }`}
-          >
-            ➕
-          </button>
-        </div>
+        {/* Tamaños (no mobile) */}
+        {!esMobile && vista === "mosaico" && (
+          <div className="ml-auto flex gap-2">
+            <button
+              onClick={() =>
+                setTamano((prev) =>
+                  prev === "grande"
+                    ? "normal"
+                    : prev === "normal"
+                    ? "chico"
+                    : "chico"
+                )
+              }
+              className={`p-2 rounded-lg transition-colors ${
+                dark
+                  ? "bg-gray-700 hover:bg-gray-600"
+                  : "bg-gray-200 hover:bg-gray-300"
+              }`}
+            >
+              ➖
+            </button>
+
+            <button
+              onClick={() =>
+                setTamano((prev) =>
+                  prev === "chico"
+                    ? "normal"
+                    : prev === "normal"
+                    ? "grande"
+                    : "grande"
+                )
+              }
+              className={`p-2 rounded-lg transition-colors ${
+                dark
+                  ? "bg-gray-700 hover:bg-gray-600"
+                  : "bg-gray-200 hover:bg-gray-300"
+              }`}
+            >
+              ➕
+            </button>
+          </div>
+        )}
       </div>
 
       {/* === CONTENIDO === */}
@@ -128,15 +145,23 @@ export function ProductosCategorizados({ productosPorCategoria }) {
                 {categoria.nombre}
               </h2>
 
-              {/* Productos sin subcategoría */}
+              {/* SIN SUBCATEGORÍA */}
               {productosSinSubcategoria.length > 0 && (
                 <div
                   className={`shadow-md rounded-lg p-4 mb-2 transition-colors ${
-                    dark ? "bg-gray-800/90 text-white" : "bg-white/85 text-gray-900"
+                    dark
+                      ? "bg-gray-800/90 text-white"
+                      : "bg-white/85 text-gray-900"
                   }`}
                 >
-                  <h3 className="text-xl font-semibold mb-1">Productos sin subcategoría</h3>
-                  <ul className={`grid ${gridCols} gap-2 ${vista === "listado" ? "divide-y" : ""}`}>
+                  <h3 className="text-xl font-semibold mb-1">
+                    Productos sin subcategoría
+                  </h3>
+                  <ul
+                    className={`grid ${gridCols} gap-2 ${
+                      vista === "listado" ? "divide-y" : ""
+                    }`}
+                  >
                     {productosSinSubcategoria.map((prod) => (
                       <LiProduct
                         key={prod.id_producto}
@@ -144,25 +169,33 @@ export function ProductosCategorizados({ productosPorCategoria }) {
                         color={categoria.color}
                         vista={vista}
                         tamano={tamano}
-                        dark={dark} // opcional, si LiProduct necesita saber el tema
+                        dark={dark}
                       />
                     ))}
                   </ul>
                 </div>
               )}
 
-              {/* Productos con subcategoría */}
+              {/* CON SUBCATEGORÍA */}
               {productosConSubcategoria.map(
                 ({ subcategoria, productos }) =>
                   productos.length > 0 && (
                     <div
                       key={subcategoria.id}
-                      className={`shadow-md rounded-lg p-4 mb-2 transition-colors ${
-                        dark ? "bg-gray-800/90 text-white" : "bg-white/85 text-gray-900"
+                      className={`shadow-md rounded-lg p-[.3.em] md:p-4 mb-2 transition-colors ${
+                        dark
+                          ? "bg-gray-800/90 text-white"
+                          : "bg-white/85 text-gray-900"
                       }`}
                     >
-                      <h3 className="text-xl font-semibold mb-1">{subcategoria.nombre}</h3>
-                      <ul className={`grid ${gridCols} gap-2 ${vista === "listado" ? "divide-y" : ""}`}>
+                      <h3 className="text-xl font-semibold mb-1">
+                        {subcategoria.nombre}
+                      </h3>
+                      <ul
+                        className={`grid ${gridCols} gap-2 ${
+                          vista === "listado" ? "divide-y" : ""
+                        }`}
+                      >
                         {productos.map((prod) => (
                           <LiProduct
                             key={prod.id_producto}

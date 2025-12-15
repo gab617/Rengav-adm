@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useAppContext } from "../../../contexto/Context";
 
 export function UlCustomProducts({ customProducts }) {
-  const { categories, preferencias, updatePreferencias } = useAppContext();
+  const { categorias, preferencias, updatePreferencias } = useAppContext();
   const dark = preferencias?.theme === "dark";
 
   // === Vista ===
@@ -208,7 +208,7 @@ export function UlCustomProducts({ customProducts }) {
         {/* ======================= LISTADO POR CATEGORÍAS ======================= */}
         {Object.entries(productosPorCategoria).map(([catId, productos]) => {
           const catName =
-            categories.find((c) => c.id === Number(catId))?.name ||
+            categorias.find((c) => c.id === Number(catId))?.nombre ||
             "Sin categoría";
 
           return (

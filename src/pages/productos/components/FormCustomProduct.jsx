@@ -5,7 +5,7 @@ import { useAppContext } from "../../../contexto/Context";
 import { toast, ToastContainer } from "react-toastify";
 
 export function FormCustomProduct({ userId }) {
-  const { preferencias, categories, subcategories, crearCustomProduct } =
+  const { preferencias, categorias, subcategorias, crearCustomProduct } =
     useAppContext();
   const dark = preferencias?.theme === "dark";
 
@@ -31,12 +31,12 @@ export function FormCustomProduct({ userId }) {
       return;
     }
 
-    const filtradas = subcategories.filter(
-      (s) => s.category_id === Number(categoryId)
+    const filtradas = subcategorias.filter(
+      (s) => s.id_categoria === Number(categoryId)
     );
 
     setSubcategoriasFiltradas(filtradas);
-  }, [categoryId, subcategories]);
+  }, [categoryId, subcategorias]);
 
   function resetForm() {
     setName("");
@@ -139,9 +139,9 @@ export function FormCustomProduct({ userId }) {
               className={inputClass}
             >
               <option value="">Seleccionar categoría</option>
-              {categories.map((c) => (
+              {categorias.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.name}
+                  {c.nombre}
                 </option>
               ))}
             </select>
@@ -156,7 +156,7 @@ export function FormCustomProduct({ userId }) {
               <option value="">Seleccionar subcategoría</option>
               {subcategoriasFiltradas.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.name}
+                  {s.nombre}
                 </option>
               ))}
             </select>

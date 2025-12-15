@@ -1,23 +1,71 @@
-import React, { useState } from "react";
+import React, { useMemo } from "react";
 import { useAppContext } from "../../../contexto/Context";
-import { categorias, subcategorias } from "../../productos/const";
+import { useProductFilters } from "../../../hooksSB/useProductsFilters";
 import { LiPedido } from "./LiPedido";
 
 export function ListPedido() {
-  const { products, loading, error, preferencias } = useAppContext();
+  const { products, loading, error, preferencias, categorias, subcategorias } =
+    useAppContext();
+
   const dark = preferencias?.theme === "dark";
 
-  const [filtroCategorias, setFiltroCategorias] = useState([]);
-  const [filtroSubcategorias, setFiltroSubcategorias] = useState([]);
-  const [filtroNombre, setFiltroNombre] = useState("");
-  const [filtroStock, setFiltroStock] = useState("");
+  const {
+    filtros,
+    setFiltroNombre,
+    setFiltroMarca,
+    setFiltroStock,
+    toggleCategoria,
+    toggleSubcategoria,
+    productosFiltrados,
+    marcasDisponibles,
+  } = useProductFilters(products, categorias, subcategorias);
 
+  // ⬇️ FILTRAR SOLO PRODUCTOS ACTIVOS (regla específica de este componente)
+  const productosActivos = useMemo(
+    () => productosFiltrados.filter((p) => p.active !== false),
+    [productosFiltrados]
+  );
+
+  // ⬇️ AGRUPADO POR CATEGORÍA / SUBCATEGORÍA
+  const productosPorCategoria = useMemo(() => {
+    return categorias.map((categoria) => {
+      const productosEnCategoria = productosActivos.filter(
+        (p) => p.products_base?.category_id === categoria.id
+      );
+
+      const productosConSubcategoria = subcategorias
+        .filter((s) => s.id_categoria === categoria.id)
+        .map((sub) => ({
+          subcategoria: sub,
+          productos: productosEnCategoria
+            .filter((p) => p.products_base?.subcategory_id === sub.id)
+            .sort((a, b) =>
+              a.products_base.name.localeCompare(b.products_base.name)
+            ),
+        }));
+
+      const productosSinSubcategoria = productosEnCategoria
+        .filter((p) => !p.products_base?.subcategory_id)
+        .sort((a, b) =>
+          a.products_base.name.localeCompare(b.products_base.name)
+        );
+
+      return {
+        categoria,
+        productosConSubcategoria,
+        productosSinSubcategoria,
+      };
+    });
+  }, [categorias, subcategorias, productosActivos]);
+
+  // ⬇️ RETURNS CONDICIONALES (después de hooks)
   if (loading)
     return (
       <div className={dark ? "text-gray-200" : "text-gray-800"}>
         Cargando productos...
       </div>
     );
+
   if (error)
     return (
       <div className={dark ? "text-gray-200" : "text-gray-800"}>
@@ -26,86 +74,7 @@ export function ListPedido() {
     );
 
   // ------------------------------
-  // TOGGLE CATEGORÍA
-  // ------------------------------
-  const toggleCategoria = (id) => {
-    setFiltroCategorias((prev) =>
-      prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]
-    );
-    setFiltroSubcategorias((prev) =>
-      prev.filter(
-        (sub) =>
-          !subcategorias.some((s) => s.id === sub && s.id_categoria === id)
-      )
-    );
-  };
-
-  // ------------------------------
-  // TOGGLE SUBCATEGORÍA
-  // ------------------------------
-  const toggleSubcategoria = (id) => {
-    setFiltroSubcategorias((prev) =>
-      prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]
-    );
-  };
-
-  // ------------------------------
-  // FILTROS
-  // ------------------------------
-  const productosFiltrados = products
-    .filter((prod) => prod.active !== false) // ⬅⬅ SOLO productos activos
-    .filter((prod) => {
-      const base = prod.products_base || {};
-
-      const nombre = base.name?.toLowerCase() || "";
-      const categoriaID = base.category_id;
-      const subcategoriaID = base.subcategory_id;
-
-      const cumpleCategoria =
-        filtroCategorias.length === 0 || filtroCategorias.includes(categoriaID);
-      const cumpleSubcategoria =
-        filtroSubcategorias.length === 0 ||
-        filtroSubcategorias.includes(subcategoriaID);
-      const cumpleNombre = nombre.includes(filtroNombre.toLowerCase());
-      const cumpleStock = !filtroStock || prod.stock <= Number(filtroStock);
-
-      return (
-        cumpleCategoria && cumpleSubcategoria && cumpleNombre && cumpleStock
-      );
-    });
-
-  // ------------------------------
-  // AGRUPAR POR CATEGORÍA Y SUBCATEGORÍA
-  // ------------------------------
-  const productosPorCategoria = categorias.map((categoria) => {
-    const productosEnCategoria = productosFiltrados.filter(
-      (p) => p.products_base?.category_id === categoria.id
-    );
-
-    const productosPorSubcategoria = subcategorias
-      .filter((s) => s.id_categoria === categoria.id)
-      .map((sub) => {
-        const productos = productosEnCategoria
-          .filter((p) => p.products_base?.subcategory_id === sub.id)
-          .sort((a, b) =>
-            a.products_base.name.localeCompare(b.products_base.name)
-          );
-        return { subcategoria: sub, productos };
-      });
-
-    const productosSinSubcategoria = productosEnCategoria
-      .filter((p) => !p.products_base?.subcategory_id)
-      .sort((a, b) => a.products_base.name.localeCompare(b.products_base.name));
-
-    return {
-      categoria,
-      productosConSubcategoria: productosPorSubcategoria,
-      productosSinSubcategoria,
-    };
-  });
-
-  // ------------------------------
-  // CLASES ADAPTATIVAS
+  // CLASES
   // ------------------------------
   const bgContainer = dark
     ? "bg-gray-900 text-gray-200"
@@ -116,9 +85,6 @@ export function ListPedido() {
     ? "bg-gray-700 text-gray-200 border-gray-600 placeholder-gray-400"
     : "bg-white text-gray-900 border-gray-300 placeholder-gray-500";
 
-  // ------------------------------
-  // RENDER
-  // ------------------------------
   return (
     <div
       className={`flex flex-col w-[95%] mx-auto p-4 rounded-xl shadow-md ${bgContainer}`}
@@ -129,21 +95,49 @@ export function ListPedido() {
           type="text"
           placeholder="🔍 Buscar por nombre..."
           className={`p-3 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-400 w-full md:w-auto ${inputBg}`}
-          value={filtroNombre}
+          value={filtros.filtroNombre}
           onChange={(e) => setFiltroNombre(e.target.value)}
         />
+
+        {/* 🏷 Marca */}
+        {/* 🏷 Marca */}
+        <div className="flex gap-2 w-full md:w-auto">
+          {/* Input libre */}
+          <input
+            type="text"
+            placeholder="🏷 Marca..."
+            className={`p-3 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-400 w-full ${inputBg}`}
+            value={filtros.filtroMarca}
+            onChange={(e) => setFiltroMarca(e.target.value)}
+          />
+
+          {/* Select */}
+          <select
+            value={filtros.filtroMarca}
+            onChange={(e) => setFiltroMarca(e.target.value)}
+            className={`p-3 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-400 ${inputBg}`}
+          >
+            <option value="">Todas</option>
+            {marcasDisponibles.map((marca) => (
+              <option key={marca} value={marca}>
+                {marca}
+              </option>
+            ))}
+          </select>
+        </div>
+
         <input
           type="number"
           placeholder="📦 Stock máximo"
           className={`p-3 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-400 w-full md:w-auto ${inputBg}`}
-          value={filtroStock}
+          value={filtros.filtroStock}
           onChange={(e) => setFiltroStock(e.target.value)}
         />
       </div>
 
       {/* CATEGORÍAS */}
       <div
-        className={`flex flex-wrap gap-4 mb-4 p-3 rounded-lg shadow-sm text-lg ${bgCard}`}
+        className={`flex flex-wrap gap-4 mb-4 p-3 rounded-lg shadow-sm ${bgCard}`}
       >
         {categorias.map((cat) => (
           <label
@@ -152,7 +146,7 @@ export function ListPedido() {
           >
             <input
               type="checkbox"
-              checked={filtroCategorias.includes(cat.id)}
+              checked={filtros.filtroCategorias.includes(cat.id)}
               onChange={() => toggleCategoria(cat.id)}
               className="w-5 h-5 accent-blue-500"
             />
@@ -163,10 +157,10 @@ export function ListPedido() {
 
       {/* SUBCATEGORÍAS */}
       <div
-        className={`flex flex-wrap gap-4 mb-6 p-3 rounded-lg shadow-sm text-lg ${bgCard}`}
+        className={`flex flex-wrap gap-4 mb-6 p-3 rounded-lg shadow-sm ${bgCard}`}
       >
         {subcategorias
-          .filter((s) => filtroCategorias.includes(s.id_categoria))
+          .filter((s) => filtros.filtroCategorias.includes(s.id_categoria))
           .map((sub) => (
             <label
               key={sub.id}
@@ -174,7 +168,7 @@ export function ListPedido() {
             >
               <input
                 type="checkbox"
-                checked={filtroSubcategorias.includes(sub.id)}
+                checked={filtros.filtroSubcategorias.includes(sub.id)}
                 onChange={() => toggleSubcategoria(sub.id)}
                 className="w-5 h-5 accent-green-500"
               />
@@ -183,7 +177,7 @@ export function ListPedido() {
           ))}
       </div>
 
-      {/* LISTA DE PRODUCTOS */}
+      {/* LISTA */}
       <div className="w-full">
         {productosPorCategoria
           .filter(
@@ -208,32 +202,15 @@ export function ListPedido() {
                   {categoria.nombre}
                 </h3>
 
-                {/* SIN SUBCATEGORÍA */}
-                {productosSinSubcategoria.length > 0 && (
-                  <div>
-                    <h4 className={`text-lg font-semibold mt-3 ${textGray}`}>
-                      📌 Productos sin subcategoría
-                    </h4>
-                    <ul>
-                      {productosSinSubcategoria.map((prod) => (
-                        <li
-                          key={prod.id}
-                          className={`rounded-lg ${
-                            dark ? "bg-gray-700" : "bg-gray-100"
-                          }`}
-                        >
-                          <LiPedido
-                            prod={prod}
-                            categoria={categoria}
-                            dark={dark}
-                          />
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
+                {productosSinSubcategoria.map((prod) => (
+                  <LiPedido
+                    key={prod.id}
+                    prod={prod}
+                    categoria={categoria}
+                    dark={dark}
+                  />
+                ))}
 
-                {/* CON SUBCATEGORÍA */}
                 {productosConSubcategoria
                   .filter((s) => s.productos.length > 0)
                   .map(({ subcategoria, productos }) => (
@@ -241,22 +218,14 @@ export function ListPedido() {
                       <h4 className={`text-lg font-medium mt-3 ${textGray}`}>
                         {subcategoria.nombre}
                       </h4>
-                      <ul>
-                        {productos.map((prod) => (
-                          <li
-                            key={prod.id}
-                            className={`rounded-lg ${
-                              dark ? "bg-gray-500" : "bg-gray-100"
-                            }`}
-                          >
-                            <LiPedido
-                              prod={prod}
-                              categoria={categoria}
-                              dark={dark}
-                            />
-                          </li>
-                        ))}
-                      </ul>
+                      {productos.map((prod) => (
+                        <LiPedido
+                          key={prod.id}
+                          prod={prod}
+                          categoria={categoria}
+                          dark={dark}
+                        />
+                      ))}
                     </div>
                   ))}
               </div>

@@ -3,7 +3,7 @@ import { useAppContext } from "../../../contexto/Context";
 import { toast } from "react-toastify";
 
 export function InactiveProductsViewer({ inactiveProducts = [] }) {
-  const { preferencias, categories,reactivarProducto,loadingProductsIndividual } = useAppContext();
+  const { preferencias, categorias,reactivarProducto,loadingProductsIndividual } = useAppContext();
   const dark = preferencias?.theme === "dark";
 
 
@@ -58,14 +58,14 @@ export function InactiveProductsViewer({ inactiveProducts = [] }) {
         <div className={`mt-4 p-4 rounded-lg ${bgContainer}`}>
           <h2 className="text-xl font-bold mb-3">Productos inactivos por categoría</h2>
 
-          {inactiveProducts.length === 0 && (
+          {inactiveProducts?.length === 0 && (
             <p className={textSecondary}>No tienes productos inactivos.</p>
           )}
 
           {/* Categorías */}
           {Object.entries(productosPorCategoria).map(([catId, productos]) => {
             const catName =
-              categories.find((c) => c.id === Number(catId))?.name || "Sin categoría";
+              categorias.find((c) => c.id === Number(catId))?.nombre || "Sin categoría";
 
             return (
               <div key={catId} className={`mb-4 border rounded-lg ${borderColor}`}>

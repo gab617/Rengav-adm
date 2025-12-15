@@ -1,8 +1,8 @@
 import React from "react";
 
 import { UlProducts } from "./components/UlProducts";
-import { Carrito } from "../carrito/Carrito";
 import { useAppContext } from "../../contexto/Context";
+import { CarritoDrawer } from "./CarritoDrawer";
 
 export function Productos() {
   const { preferencias } = useAppContext();
@@ -17,9 +17,8 @@ export function Productos() {
         </div>
 
         {/* Carrito con ancho dinámico y diseño más atractivo */}
-        <div className="w-full md:w-[20%] lg:w-[20%] p-4 shadow-lg rounded-lg transition-colors">
-          <Carrito />
-        </div>
+        <CarritoDrawer />
+
       </div>
     </div>
   );

@@ -3,6 +3,11 @@ import { useAppContext } from "../../../contexto/Context";
 import { EditProduct } from "./EditProduct";
 import { DeleteProduct } from "./DeleteProduct";
 
+function capitalizarMayus(texto) {
+  if (!texto) return "";
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
+}
+
 export function LiProduct({
   prod,
   color,
@@ -59,7 +64,7 @@ export function LiProduct({
 
   const vistaClass =
     vista === "listado"
-      ? "flex items-center justify-between p-2 h-[60px] gap-2"
+      ? "flex items-center justify-between md:p-2 md:h-[60px] gap-2"
       : "flex flex-col justify-between p-2 min-h-[110px]";
 
   useEffect(() => {
@@ -90,55 +95,80 @@ export function LiProduct({
       {/* ================= VISTA LISTADO ================= */}
       {vista === "listado" ? (
         <div
-          className={` flex justify-between  items-center w-full px-2 ${
+          className={`flex flex-col md:flex-row justify-between w-full px-2 gap-2 ${
             dark ? "text-white" : "text-gray-900"
           }`}
         >
-          <div className="flex w-full  items-center gap-2 overflow-hidden">
+          {/* INFO PRODUCTO */}
+          <div className="flex flex-col md:flex-row w-full md:items-center gap-1 md:gap-2 overflow-hidden">
             <div
-              className="w-6 h-6 rounded-md"
+              className="hidden md:block w-6 h-6 rounded-md shrink-0"
               style={{ backgroundColor: color }}
             ></div>
-            <div className="flex items-center w-full truncate">
-              <span className="font-semibold text-xl truncate ">
+
+            <div className="flex flex-wrap items-center gap-2 w-full truncate">
+              <span className="font-semibold text-base md:text-xl truncate max-w-full">
                 {prod.tipo === "custom"
                   ? prod.user_custom_products?.name
                   : prod.products_base?.name}
               </span>
+
+              <div
+                className={`border rounded-xl px-2 md:px-3 py-0.5 md:py-1 shadow-md text-sm md:text-base ${
+                  dark
+                    ? "bg-white/5 border-white/10 text-white"
+                    : "bg-gray-100/40 border-gray-600/40 text-gray-900"
+                }`}
+              >
+                <strong className="block truncate max-w-[10rem] md:max-w-none">
+                  {prod.tipo === "custom"
+                    ? capitalizarMayus(prod.user_custom_products?.brand)
+                    : capitalizarMayus(prod.products_base?.brand)}
+                </strong>
+              </div>
             </div>
           </div>
 
-          <div className="flex gap-1 items-center">
-            <span
-              className={
-                dark
-                  ? "text-gray-100 text-xl font-bold truncate"
-                  : "text-gray-700 text-xl font-bold truncate"
-              }
-            >
-              ${precioFormateado} • Stock: {prod.stock}
-            </span>
-            <button
-              className="px-[.3em] p-[.2em] text-xl bg-green-600 text-white rounded hover:bg-green-400"
-              onClick={() => agregarProductoCarrito(prod, color)}
-              title="Agregar al carrito"
-            >
-              🛒
-            </button>
-            <button
-              className="px-[.3em] p-[.2em] text-xl bg-blue-600 text-white rounded hover:bg-blue-400"
-              onClick={() => setIsEditing(!isEditing)}
-              title="Editar producto"
-            >
-              ✏️
-            </button>
-            <button
-              className="px-[.3em] p-[.2em] text-xl bg-red-600 text-white rounded hover:bg-red-400"
-              onClick={() => setShowConfirmDelete(true)}
-              title="Eliminar producto"
-            >
-              ❌
-            </button>
+          {/* PRECIO + ACCIONES */}
+          <div className="flex justify-between items-center w-full md:w-auto mt-1 md:mt-0">
+            <div className="">
+              <span
+                className={`text-sm md:text-xl font-bold ${
+                  dark ? "text-gray-100" : "text-gray-700"
+                }`}
+              >
+                ${precioFormateado}
+              </span>
+              <span className="ml-1 text-base md:text-base">
+                • Stock: {prod.stock}
+              </span>
+            </div>
+
+            <div className="flex gap-1">
+              <button
+                className="px-2 py-1 md:px-[.3em] md:p-[.2em] text-lg md:text-xl bg-green-600 text-white rounded hover:bg-green-400"
+                onClick={() => agregarProductoCarrito(prod, color)}
+                title="Agregar al carrito"
+              >
+                🛒
+              </button>
+
+              <button
+                className="px-2 py-1 md:px-[.3em] md:p-[.2em] text-lg md:text-xl bg-blue-600 text-white rounded hover:bg-blue-400"
+                onClick={() => setIsEditing(!isEditing)}
+                title="Editar producto"
+              >
+                ✏️
+              </button>
+
+              <button
+                className="px-2 py-1 md:px-[.3em] md:p-[.2em] text-lg md:text-xl bg-red-600 text-white rounded hover:bg-red-400"
+                onClick={() => setShowConfirmDelete(true)}
+                title="Eliminar producto"
+              >
+                ❌
+              </button>
+            </div>
           </div>
         </div>
       ) : (
@@ -164,27 +194,41 @@ export function LiProduct({
               {prod.descripcion}
             </span>
           </div>
-
-          {/* Botonera */}
-          <div className="flex  flex-row gap-[0.15em] items-start">
-            <button
-              className="cursor-pointer px-[.3em] p-[.2em] text-xl bg-green-600 text-white rounded hover:bg-green-400"
-              onClick={() => agregarProductoCarrito(prod, color)}
+          <div className="flex justify-between items-center">
+            {/* Botonera */}
+            <div className="flex  flex-row gap-[0.15em] items-start">
+              <button
+                className="cursor-pointer px-[.3em] p-[.2em] text-xl bg-green-600 text-white rounded hover:bg-green-400"
+                onClick={() => agregarProductoCarrito(prod, color)}
+              >
+                🛒
+              </button>
+              <button
+                className="cursor-pointer px-[.3em] p-[.2em] text-xl bg-blue-600 text-white rounded hover:bg-blue-400"
+                onClick={() => setIsEditing(!isEditing)}
+              >
+                ✏️
+              </button>
+              <button
+                className="cursor-pointer px-[.3em] p-[.2em] text-xl bg-red-600 text-white rounded hover:bg-red-400"
+                onClick={() => setShowConfirmDelete(true)}
+              >
+                ❌
+              </button>
+            </div>
+            <div
+              className={`border rounded-xl px-3 py-1 inline-block shadow-md ${
+                dark
+                  ? "bg-white/5 border-white/10 text-white"
+                  : "bg-gray-100/40 border-gray-600/40 text-gray-900"
+              }`}
             >
-              🛒
-            </button>
-            <button
-              className="cursor-pointer px-[.3em] p-[.2em] text-xl bg-blue-600 text-white rounded hover:bg-blue-400"
-              onClick={() => setIsEditing(!isEditing)}
-            >
-              ✏️
-            </button>
-            <button
-              className="cursor-pointer px-[.3em] p-[.2em] text-xl bg-red-600 text-white rounded hover:bg-red-400"
-              onClick={() => setShowConfirmDelete(true)}
-            >
-              ❌
-            </button>
+              <strong className="block text-base">
+                {prod.tipo === "custom"
+                  ? capitalizarMayus(prod.user_custom_products?.brand)
+                  : capitalizarMayus(prod.products_base?.brand)}
+              </strong>
+            </div>
           </div>
         </>
       )}
