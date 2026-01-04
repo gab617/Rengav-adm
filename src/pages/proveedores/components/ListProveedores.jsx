@@ -139,7 +139,7 @@ export function ListProveedores({ proveedores }) {
                     ✘
                   </button>
                   <a
-                    href={`https://wa.me/${proveedor.telefono}`}
+                    href={`https://wa.me/+549${proveedor.telefono}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="w-[3em] cursor-pointer bg-green-500 text-white text-lg rounded-full hover:bg-green-600 transition duration-300 shadow-md hover:scale-105 flex items-center justify-center"

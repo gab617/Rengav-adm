@@ -12,6 +12,10 @@ export function LiPedido({ prod, categoria }) {
     handleBlurPedido,
     preferencias, // { theme: "dark" | "light" }
   } = useAppContext();
+  function capitalizarMayus(texto) {
+    if (!texto) return "";
+    return texto.charAt(0).toUpperCase() + texto.slice(1);
+  }
 
   const dark = preferencias?.theme === "dark";
 
@@ -25,7 +29,9 @@ export function LiPedido({ prod, categoria }) {
     : `${categoria.color}50`; // ligero en light (30% opacidad)
   const bgHover = dark ? `${categoria.color}66` : categoria.color; // más vivo en hover
 
-  const inputBg = dark ? "bg-gray-700 text-gray-200 border-gray-600" : "bg-white text-gray-900 border-gray-300";
+  const inputBg = dark
+    ? "bg-gray-700 text-gray-200 border-gray-600"
+    : "bg-white text-gray-900 border-gray-300";
   const btnBg = dark ? "bg-gray-600 text-gray-200" : "bg-gray-300 text-black";
   const btnHover = dark ? "hover:bg-gray-500" : "hover:bg-gray-400";
 
@@ -39,19 +45,40 @@ export function LiPedido({ prod, categoria }) {
           transition: "background 0.1s ease-in-out, transform 0.1s ease-in-out",
         }}
         onClick={() => agregarPedido(prod)}
-        onMouseEnter={(e) => e.currentTarget.style.setProperty("background", bgHover)}
-        onMouseLeave={(e) => e.currentTarget.style.setProperty("background", bgBase)}
+        onMouseEnter={(e) =>
+          e.currentTarget.style.setProperty("background", bgHover)
+        }
+        onMouseLeave={(e) =>
+          e.currentTarget.style.setProperty("background", bgBase)
+        }
       >
         {/* Info del producto */}
-        <div className={`flex text-xl font-semibold ${dark ? "text-white" : "text-gray-900"}`}>
+        <div
+          className={`flex text-xl font-semibold ${
+            dark ? "text-white" : "text-gray-900"
+          }`}
+        >
           <p className="p-pedido">{prod.products_base.name}</p>
-          <p className="p-pedido">Stock: {prod.stock}</p>
           <p className="p-pedido">
-            Precio Proveed.: $
-            {parseInt(prod.precio_compra)
-              .toFixed(2)
-              .replace(/\.00$/, "")
-              .replace(/\B(?=(\d{3})+(?!\d))/g, ".")}
+            <span className="text-sm">Stock:</span>
+            {prod.stock}
+          </p>
+          <p className="p-pedido">
+            <span className="text-sm">Precio:</span>
+
+            <span>
+              {" "}
+              $
+              {parseInt(prod.precio_compra)
+                .toFixed(2)
+                .replace(/\.00$/, "")
+                .replace(/\B(?=(\d{3})+(?!\d))/g, ".")}
+            </span>
+          </p>
+          <p className="p-pedido">
+            {capitalizarMayus(
+              prod.products_base?.brand ?? prod.products_base?.brand_text ?? "-"
+            )}
           </p>
         </div>
       </div>

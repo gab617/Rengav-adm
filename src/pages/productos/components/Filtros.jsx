@@ -8,6 +8,8 @@ export function Filtros({
   setFiltroMarca,
   filtroStock,
   setFiltroStock,
+  soloCustom,
+  setSoloCustom,
 
   filtroCategorias,
   toggleCategoria,
@@ -29,87 +31,120 @@ export function Filtros({
       }`}
     >
       {/* 🔍 Búsqueda / Marca / Stock */}
-      <div className="flex gap-3 flex-wrap md:flex-nowrap">
-        {/* Nombre */}
-        <div
-          className={`flex items-center gap-2 flex-1 rounded-lg px-3 py-2 border transition focus-within:ring-2 ${
-            dark
-              ? "bg-gray-700 border-gray-600 focus-within:ring-blue-400"
-              : "bg-gray-50 border-gray-200 focus-within:ring-blue-400"
-          }`}
-        >
-          <span className="text-gray-400">🔍</span>
-          <input
-            type="text"
-            placeholder="Buscar producto..."
-            value={filtroNombre}
-            onChange={(e) => setFiltroNombre(e.target.value)}
-            className={`bg-transparent flex-1 outline-none placeholder-gray-400 ${
-              dark ? "text-gray-100" : "text-gray-800"
-            }`}
-          />
-        </div>
-
-
-        {/* 🏷 Marca */}
-        <div className="flex gap-2 flex-1">
-          {/* Input libre */}
+      <div className="flex flex-col gap-3 flex-wrap md:flex-nowrap">
+        <div className="flex gap-1">
+          {/* Nombre */}
           <div
             className={`flex items-center gap-2 flex-1 rounded-lg px-3 py-2 border transition focus-within:ring-2 ${
               dark
-                ? "bg-gray-700 border-gray-600 focus-within:ring-purple-400"
-                : "bg-gray-50 border-gray-200 focus-within:ring-purple-400"
+                ? "bg-gray-700 border-gray-600 focus-within:ring-blue-400"
+                : "bg-gray-50 border-gray-200 focus-within:ring-blue-400"
             }`}
           >
-            <span className="text-gray-400">🏷</span>
+            <span className="text-gray-400">🔍</span>
             <input
               type="text"
-              placeholder="Marca..."
-              value={filtroMarca}
-              onChange={(e) => setFiltroMarca(e.target.value)}
+              placeholder="Buscar producto..."
+              value={filtroNombre}
+              onChange={(e) => setFiltroNombre(e.target.value)}
               className={`bg-transparent flex-1 outline-none placeholder-gray-400 ${
                 dark ? "text-gray-100" : "text-gray-800"
               }`}
             />
           </div>
 
-          {/* Select dinámico */}
-          <select
-            value={filtroMarca}
-            onChange={(e) => setFiltroMarca(e.target.value)}
-            className={`rounded-lg px-2 py-2 border text-sm ${
+          {/* 🏷 Marca */}
+          <div className="flex gap-2 flex-1">
+            {/* Input libre */}
+            <div
+              className={`flex items-center gap-2 flex-1 rounded-lg px-3 py-2 border transition focus-within:ring-2 ${
+                dark
+                  ? "bg-gray-700 border-gray-600 focus-within:ring-purple-400"
+                  : "bg-gray-50 border-gray-200 focus-within:ring-purple-400"
+              }`}
+            >
+              <span className="text-gray-400">🏷</span>
+              <input
+                type="text"
+                placeholder="Marca..."
+                value={filtroMarca}
+                onChange={(e) => setFiltroMarca(e.target.value)}
+                className={`bg-transparent flex-1 outline-none placeholder-gray-400 ${
+                  dark ? "text-gray-100" : "text-gray-800"
+                }`}
+              />
+            </div>
+
+            {/* Select dinámico */}
+            <select
+              value={filtroMarca}
+              onChange={(e) => setFiltroMarca(e.target.value)}
+              className={`rounded-lg px-2 py-2 border text-sm ${
+                dark
+                  ? "bg-gray-700 border-gray-600 text-gray-100"
+                  : "bg-gray-50 border-gray-200 text-gray-800"
+              }`}
+            >
+              <option value="">Todas</option>
+              {marcas?.map((marca) => (
+                <option key={marca} value={marca}>
+                  {marca}
+                </option>
+              ))}
+            </select>
+          </div>
+          {/* Stock */}
+          <div
+            className={`w-full md:w-40 flex items-center gap-2 rounded-lg px-3 py-2 border transition focus-within:ring-2 ${
               dark
-                ? "bg-gray-700 border-gray-600 text-gray-100"
-                : "bg-gray-50 border-gray-200 text-gray-800"
+                ? "bg-gray-700 border-gray-600 focus-within:ring-blue-400"
+                : "bg-gray-50 border-gray-200 focus-within:ring-blue-400"
             }`}
           >
-            <option value="">Todas</option>
-            {marcas.map((marca) => (
-              <option key={marca} value={marca}>
-                {marca}
-              </option>
-            ))}
-          </select>
+            <span className="text-gray-400">📦</span>
+            <input
+              type="number"
+              placeholder="Stock ≤"
+              value={filtroStock}
+              onChange={(e) => setFiltroStock(e.target.value)}
+              className={`bg-transparent w-full outline-none placeholder-gray-400 ${
+                dark ? "text-gray-100" : "text-gray-800"
+              }`}
+            />
+          </div>
         </div>
 
-        {/* Stock */}
-        <div
-          className={`w-full md:w-40 flex items-center gap-2 rounded-lg px-3 py-2 border transition focus-within:ring-2 ${
-            dark
-              ? "bg-gray-700 border-gray-600 focus-within:ring-blue-400"
-              : "bg-gray-50 border-gray-200 focus-within:ring-blue-400"
-          }`}
-        >
-          <span className="text-gray-400">📦</span>
-          <input
-            type="number"
-            placeholder="Stock ≤"
-            value={filtroStock}
-            onChange={(e) => setFiltroStock(e.target.value)}
-            className={`bg-transparent w-full outline-none placeholder-gray-400 ${
-              dark ? "text-gray-100" : "text-gray-800"
-            }`}
-          />
+        <div>
+          {/* 🎚 Tipo de productos */}
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-medium">Tipo:</span>
+
+            <button
+              onClick={() => setSoloCustom(false)}
+              className={`px-3 py-1 rounded-full text-xs border transition ${
+                !soloCustom
+                  ? "bg-blue-600 text-white border-blue-600"
+                  : dark
+                  ? "bg-gray-700 border-gray-600 text-gray-300"
+                  : "bg-gray-100 border-gray-300 text-gray-700"
+              }`}
+            >
+              Todos
+            </button>
+
+            <button
+              onClick={() => setSoloCustom(true)}
+              className={`px-3 py-1 rounded-full text-xs border transition ${
+                soloCustom
+                  ? "bg-emerald-600 text-white border-emerald-600"
+                  : dark
+                  ? "bg-gray-700 border-gray-600 text-gray-300"
+                  : "bg-gray-100 border-gray-300 text-gray-700"
+              }`}
+            >
+              Solo personalizados
+            </button>
+          </div>
         </div>
       </div>
 

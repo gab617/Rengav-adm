@@ -27,7 +27,7 @@ export function EditProduct({
 
   return (
     <div
-      className={`rounded-2xl absolute  bottom-[2.5em] mt-2 border shadow-2xl p-3 w-64 z-10 ${bg}`}
+      className={`rounded-2xl absolute  bottom-[-10em] mt-2 border shadow-2xl p-3 w-64 z-10 ${bg}`}
     >
       <h3 className="text-lg font-semibold mb-2">Editar Producto</h3>
 

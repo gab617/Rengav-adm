@@ -39,6 +39,7 @@ export function LiProduct({
 
   const handleSubmit = async () => {
     const payload = { ...editedProduct };
+    console.log(payload)
     delete payload.products_base;
     delete payload.id;
     await actualizarProducto(prod.id, payload);
@@ -121,9 +122,11 @@ export function LiProduct({
                 }`}
               >
                 <strong className="block truncate max-w-[10rem] md:max-w-none">
-                  {prod.tipo === "custom"
-                    ? capitalizarMayus(prod.user_custom_products?.brand)
-                    : capitalizarMayus(prod.products_base?.brand)}
+                  {capitalizarMayus(
+                    prod.products_base?.brand ??
+                      prod.products_base?.brand_text ??
+                      "-"
+                  )}
                 </strong>
               </div>
             </div>

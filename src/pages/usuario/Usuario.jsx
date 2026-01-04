@@ -42,14 +42,12 @@ export function Usuario() {
             Productos personalizados (Creados por el usuario):{" "}
             {customProducts.length}
           </h1>
-          {console.log(products, customProducts)}
           <h1>
             Productos Totales:{" "}
             {products.length ? products.length : customProducts.length}
           </h1>
         </div>
         <div className="flex flex-col w-[24em] gap-2">
-          <Config />
 
           {/*           <h1 className="text-xl font-bold mb-2">
             Usuario e-mail: {user?.email}
@@ -74,7 +72,6 @@ export function Usuario() {
       </div>
 
       <InactiveProductsViewer inactiveProducts={inactiveProducts} />
-
 
       {/* Modal */}
       {showModal && (

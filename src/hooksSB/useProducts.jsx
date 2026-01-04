@@ -1,20 +1,27 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { supabase } from "../services/supabaseClient";
 
-export const useProducts = ({
-  userId,
-  categoryId = null,
-  subcategoryId = null,
-} = {}) => {
+export const useProducts = (
+  { userId, categoryId = null, subcategoryId = null } = {},
+  brands,
+  brandsMap,
+  loadingBrands
+) => {
   const [products, setProducts] = useState([]);
   const [customProducts, setCustomProducts] = useState([]);
   const [inactiveProducts, setInactiveProducts] = useState([]);
   const [loadingProductos, setLoadingProductosFetch] = useState(true);
-  const [loadingProductsIndividual, setLoadingProductsIndividual] = useState({});
+  const [loadingProductsIndividual, setLoadingProductsIndividual] = useState(
+    {}
+  );
   const [error, setError] = useState(null);
-
   const setLoadingFor = (id, value) => {
     setLoadingProductsIndividual((prev) => ({ ...prev, [id]: value }));
+  };
+
+  const resolveBrandName = (brandId) => {
+    if (!brandId) return null;
+    return brandsMap?.[brandId] ?? null;
   };
 
   const sanitizeUserProduct = (obj) => {
@@ -62,7 +69,7 @@ export const useProducts = ({
             products_base (
               id,
               name,
-              brand,
+              brand_id,
               image_url,
               category_id,
               subcategory_id
@@ -70,10 +77,11 @@ export const useProducts = ({
             user_custom_products (
               id,
               name,
-              brand,
+              brand_id,
               image_url,
               category_id,
-              subcategory_id
+              subcategory_id,
+              brand_text
             )
           `
           )
@@ -83,7 +91,8 @@ export const useProducts = ({
       }
 
       if (categoryId) query.eq("products_base.category_id", categoryId);
-      if (subcategoryId) query.eq("products_base.subcategory_id", subcategoryId);
+      if (subcategoryId)
+        query.eq("products_base.subcategory_id", subcategoryId);
 
       const { data, error } = await query;
       if (error) throw error;
@@ -108,10 +117,11 @@ export const useProducts = ({
             products_base: {
               id: p.user_custom_products.id,
               name: p.user_custom_products.name,
-              brand: p.user_custom_products.brand,
+              brand: resolveBrandName(p.user_custom_products.brand_id),
               image_url: p.user_custom_products.image_url,
               category_id: p.user_custom_products.category_id,
               subcategory_id: p.user_custom_products.subcategory_id,
+              brand_text: p.user_custom_products.brand_text,
             },
           };
         }
@@ -122,36 +132,36 @@ export const useProducts = ({
           products_base: {
             id: p.products_base.id,
             name: p.products_base.name,
-            brand: p.products_base.brand,
+            brand: resolveBrandName(p.products_base.brand_id),
             image_url: p.products_base.image_url,
             category_id: p.products_base.category_id,
             subcategory_id: p.products_base.subcategory_id,
+            brand_text: null,
           },
         };
       };
-
       const activosNormalizados = activos.map(normalizar);
       const inactivosNormalizados = inactivos.map(normalizar);
+      console.log(activosNormalizados);
 
       setProducts(activosNormalizados);
       setInactiveProducts(inactivosNormalizados);
 
-      setCustomProducts(
-        activosNormalizados.filter((p) => p.tipo === "custom")
-      );
+      setCustomProducts(activosNormalizados.filter((p) => p.tipo === "custom"));
     } catch (err) {
       console.error(err);
       setError(err.message);
     } finally {
       setTimeout(() => {
         setLoadingProductosFetch(false);
-      }, 800);
+      }, 100);
     }
   };
 
   const crearCustomProduct = async ({
     name,
-    brand,
+    brandId,
+    brandText,
     categoryId,
     subcategoryId,
     descripcion,
@@ -160,16 +170,22 @@ export const useProducts = ({
     proveedor,
     stock,
     userId,
+    unifiedBrands, // 👈 pasar o tomar del contexto
   }) => {
     setLoadingProductosFetch(true);
+
     try {
+      /* ----------------------------------
+       1️⃣ CREAR PRODUCTO CUSTOM BASE
+    ---------------------------------- */
       const { data: customProd, error: err1 } = await supabase
         .from("user_custom_products")
         .insert([
           {
             user_id: userId,
             name,
-            brand,
+            brand_id: brandId || null,
+            brand_text: brandText || null,
             category_id: categoryId,
             subcategory_id: subcategoryId || null,
           },
@@ -179,6 +195,9 @@ export const useProducts = ({
 
       if (err1) throw err1;
 
+      /* ----------------------------------
+       2️⃣ CREAR PRODUCTO USUARIO
+    ---------------------------------- */
       const { data: newProduct, error: err2 } = await supabase
         .from("user_products")
         .insert([
@@ -198,12 +217,25 @@ export const useProducts = ({
 
       if (err2) throw err2;
 
+      /* ----------------------------------
+       3️⃣ NORMALIZAR MARCA (CLAVE)
+    ---------------------------------- */
+      const brandName =
+        (customProd.brand_id && brandsMap?.[customProd.brand_id]) ||
+        customProd.brand_text ||
+        null;
+
+      /* ----------------------------------
+       4️⃣ OBJETO FINAL NORMALIZADO
+    ---------------------------------- */
       const productFull = {
         ...newProduct,
         tipo: "custom",
         products_base: {
           name: customProd.name,
-          brand: customProd.brand,
+          brand_id: customProd.brand_id,
+          brand_text: customProd.brand_text,
+          brand: brandName, // 👈 ahora SIEMPRE existe
           category_id: customProd.category_id,
           subcategory_id: customProd.subcategory_id,
           image_url: customProd.image_url || null,
@@ -211,6 +243,9 @@ export const useProducts = ({
         user_custom_products: customProd,
       };
 
+      /* ----------------------------------
+       5️⃣ ACTUALIZAR ESTADO
+    ---------------------------------- */
       setProducts((prev) => [...prev, productFull]);
       setCustomProducts((prev) => [...prev, productFull]);
 
@@ -225,6 +260,7 @@ export const useProducts = ({
   };
 
   const actualizarProducto = async (id, producto) => {
+    console.log(producto);
     try {
       const limpio = sanitizeUserProduct(producto);
 
@@ -253,11 +289,23 @@ export const useProducts = ({
       }
 
       if (necesitaActualizarCustom) {
+        const brandData = producto.user_custom_products.brand_id
+          ? {
+              brand_id: producto.user_custom_products.brand_id,
+              brand_text: null,
+            }
+          : producto.user_custom_products.brand_text
+          ? {
+              brand_id: null,
+              brand_text: producto.user_custom_products.brand_text,
+            }
+          : { brand_id: null, brand_text: null };
+
         const { error: errCustom } = await supabase
           .from("user_custom_products")
           .update({
             name: producto.nombre,
-            brand: producto.brand ?? null,
+            ...brandData,
             image_url: producto.image_url ?? null,
           })
           .eq("id", producto.custom_id);
@@ -315,9 +363,7 @@ export const useProducts = ({
 
           if (errUpdate) throw errUpdate;
 
-          setProducts((prev) =>
-            prev.filter((p) => p.id !== id)
-          );
+          setProducts((prev) => prev.filter((p) => p.id !== id));
 
           setInactiveProducts((prev) => {
             const eliminado = products.find((p) => p.id === id);
@@ -392,8 +438,10 @@ export const useProducts = ({
   };
 
   useEffect(() => {
+    if (loadingBrands) return;
+
     fetchProductos();
-  }, [userId, categoryId, subcategoryId]);
+  }, [categoryId, subcategoryId, loadingBrands]);
 
   return {
     products,

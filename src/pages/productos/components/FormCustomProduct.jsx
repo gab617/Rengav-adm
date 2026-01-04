@@ -1,19 +1,35 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "../../../services/supabaseClient";
 import { useAppContext } from "../../../contexto/Context";
 import { toast, ToastContainer } from "react-toastify";
 
 export function FormCustomProduct({ userId }) {
-  const { preferencias, categorias, subcategorias, crearCustomProduct } =
-    useAppContext();
+  const {
+    brands,
+    preferencias,
+    categorias,
+    subcategorias,
+    crearCustomProduct,
+    loadingBrands,
+    unifiedBrands,
+  } = useAppContext();
   const dark = preferencias?.theme === "dark";
+  console.log(unifiedBrands);
 
   const [open, setOpen] = useState(false);
 
   // estados del formulario
   const [name, setName] = useState("");
   const [brand, setBrand] = useState("");
+
+  const [brandId, setBrandId] = useState(null);
+  const [selectedBrandKey, setSelectedBrandKey] = useState("");
+
+  const [brandInput, setBrandInput] = useState("");
+  const [brandsFiltradas, setBrandsFiltradas] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
   const [categoryId, setCategoryId] = useState("");
   const [subcategoryId, setSubcategoryId] = useState("");
   const [descripcion, setDescripcion] = useState("");
@@ -24,6 +40,22 @@ export function FormCustomProduct({ userId }) {
 
   // subcategorías filtradas según categoría seleccionada
   const [subcategoriasFiltradas, setSubcategoriasFiltradas] = useState([]);
+
+  const marcasPorCategoria = useMemo(() => {
+    if (!categoryId) return [];
+
+    return unifiedBrands.filter((b) =>
+      b.category_ids.includes(Number(categoryId))
+    );
+  }, [unifiedBrands, categoryId]);
+
+  const brandSuggestions = useMemo(() => {
+    if (!brandInput || !categoryId) return [];
+
+    return marcasPorCategoria.filter((b) =>
+      b.label.toLowerCase().includes(brandInput.toLowerCase())
+    );
+  }, [brandInput, marcasPorCategoria]);
 
   useEffect(() => {
     if (!categoryId) {
@@ -38,9 +70,24 @@ export function FormCustomProduct({ userId }) {
     setSubcategoriasFiltradas(filtradas);
   }, [categoryId, subcategorias]);
 
+  useEffect(() => {
+    if (!categoryId) {
+      setBrandsFiltradas([]);
+      setBrandId("");
+      return;
+    }
+
+    const filtradas = brands.filter((b) =>
+      b.category_ids.includes(Number(categoryId))
+    );
+
+    setBrandsFiltradas(filtradas);
+  }, [categoryId, brands]);
+
   function resetForm() {
     setName("");
-    setBrand("");
+    setBrandId(null);
+    setBrandInput("");
     setCategoryId("");
     setSubcategoryId("");
     setDescripcion("");
@@ -64,7 +111,8 @@ export function FormCustomProduct({ userId }) {
     try {
       await crearCustomProduct({
         name,
-        brand,
+        brandId: brandId || null,
+        brandText: brandId ? null : brandInput?.trim() || null,
         categoryId,
         subcategoryId,
         descripcion,
@@ -125,13 +173,6 @@ export function FormCustomProduct({ userId }) {
               className={inputClass}
             />
 
-            <input
-              value={brand}
-              onChange={(e) => setBrand(e.target.value)}
-              placeholder="Marca"
-              className={inputClass}
-            />
-
             {/* --- CATEGORÍA --- */}
             <select
               value={categoryId}
@@ -160,6 +201,96 @@ export function FormCustomProduct({ userId }) {
                 </option>
               ))}
             </select>
+
+            <select
+              value={selectedBrandKey}
+              onChange={(e) => {
+                const key = e.target.value;
+                setSelectedBrandKey(key);
+
+                const selected = unifiedBrands.find((b) => b.key === key);
+
+                if (!selected) return;
+
+                if (selected.type === "system") {
+                  setBrandId(selected.brand_id);
+                  setBrandInput(selected.label);
+                } else {
+                  setBrandId(null);
+                  setBrandInput(selected.brand_text);
+                }
+              }}
+              className={inputClass}
+              disabled={!categoryId}
+            >
+              <option value="">Seleccionar marca</option>
+
+              {marcasPorCategoria.map((b) => (
+                <option key={b.key} value={b.key}>
+                  {b.label}
+                  {b.type === "text" ? " (personalizada)" : ""}
+                </option>
+              ))}
+            </select>
+
+            <div className="relative">
+              {brandInput && !brandId && (
+                <p className="text-sm text-gray-500">
+                  Se creará una nueva marca si no existe
+                </p>
+              )}
+
+              {brandId && (
+                <p className="text-sm text-green-600">
+                  Marca existente seleccionada
+                </p>
+              )}
+
+              <input
+                value={brandInput}
+                onChange={(e) => {
+                  setBrandInput(e.target.value);
+                  setBrandId(null);
+                  setShowSuggestions(true);
+                }}
+                onFocus={() => setShowSuggestions(true)}
+                placeholder="Marca"
+                className={inputClass}
+                disabled={!categoryId}
+              />
+
+              {showSuggestions && brandSuggestions.length > 0 && (
+                <ul
+                  className={`absolute z-20 w-full border rounded mt-1 max-h-40 overflow-auto ${
+                    dark
+                      ? "bg-gray-800 border-gray-600"
+                      : "bg-white border-gray-300"
+                  }`}
+                >
+                  {brandSuggestions.map((b) => (
+                    <li
+                      key={b.id}
+                      onClick={() => {
+                        setSelectedBrandKey(b.key);
+
+                        if (b.type === "system") {
+                          setBrandId(b.brand_id);
+                          setBrandInput(b.label);
+                        } else {
+                          setBrandId(null);
+                          setBrandInput(b.brand_text);
+                        }
+
+                        setShowSuggestions(false);
+                      }}
+                      className="px-3 py-2 cursor-pointer hover:bg-blue-500 hover:text-white"
+                    >
+                      {b.name}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
 
             <textarea
               value={descripcion}
@@ -206,7 +337,7 @@ export function FormCustomProduct({ userId }) {
           </motion.form>
         )}
       </AnimatePresence>
-      <ToastContainer/>
+      <ToastContainer />
     </div>
   );
 }

@@ -62,7 +62,7 @@ const enviarPorWhatsApp = () => {
   }
 
   // Limpiar el número
-  const numeroFinal = `549${numero.replace(/\D/g, "")}`;
+  const numeroFinal = `+549${numero.replace(/\D/g, "")}`;
 
   // Enviar
   const url = `https://wa.me/${numeroFinal}?text=${encodeURIComponent(mensaje)}`;

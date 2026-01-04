@@ -17,9 +17,7 @@ export function UlCustomProducts({ customProducts }) {
   }, [preferencias]);
 
   // === NUEVO: estado general expandible ===
-  const [showSection, setShowSection] = useState(
-    false
-  );
+  const [showSection, setShowSection] = useState(false);
 
   const toggleSection = () => {
     const newState = !showSection;
@@ -47,11 +45,7 @@ export function UlCustomProducts({ customProducts }) {
       const desc = p.descripcion?.toLowerCase() || "";
       const prov = p.proveedor_nombre?.toLowerCase() || "";
 
-      return (
-        name.includes(term) ||
-        desc.includes(term) ||
-        prov.includes(term)
-      );
+      return name.includes(term) || desc.includes(term) || prov.includes(term);
     });
   }, [search, customProducts]);
 
@@ -97,7 +91,8 @@ export function UlCustomProducts({ customProducts }) {
   }
 
   // === Estilos ===
-  const btnBase = "px-3 py-1 rounded-lg font-medium transition-all duration-200";
+  const btnBase =
+    "px-3 py-1 rounded-lg font-medium transition-all duration-200";
   const btnActive = dark
     ? "bg-blue-600 text-white shadow"
     : "bg-blue-500 text-white shadow";
@@ -119,7 +114,6 @@ export function UlCustomProducts({ customProducts }) {
 
   return (
     <div className="w-full">
-
       {/* ====== Barra superior ====== */}
       <div className="flex flex-wrap justify-between items-center mb-4 gap-2">
         {/* Vista */}
@@ -150,7 +144,10 @@ export function UlCustomProducts({ customProducts }) {
         </div>
 
         {/* Expandir todos */}
-        <button className={`${btnBase} ${btnToggle}`} onClick={toggleExpandedAll}>
+        <button
+          className={`${btnBase} ${btnToggle}`}
+          onClick={toggleExpandedAll}
+        >
           {expandedAll ? "Colapsar todos" : "Expandir todos"}
         </button>
       </div>
@@ -194,7 +191,11 @@ export function UlCustomProducts({ customProducts }) {
           onChange={(e) => setSearch(e.target.value)}
           className={`
             mt-2 w-full px-3 py-2 rounded-lg border
-            ${dark ? "bg-gray-800 text-gray-200 border-gray-700" : "bg-white border-gray-300"}
+            ${
+              dark
+                ? "bg-gray-800 text-gray-200 border-gray-700"
+                : "bg-white border-gray-300"
+            }
           `}
         />
       </div>
@@ -213,7 +214,6 @@ export function UlCustomProducts({ customProducts }) {
 
           return (
             <div key={catId} className="mb-4">
-
               {/* Título Categoría */}
               <h2
                 className={`text-lg font-bold mb-2 ${
@@ -257,6 +257,17 @@ export function UlCustomProducts({ customProducts }) {
                           >
                             Creado
                           </span>
+                          <span
+                            className={`text-[11px] px-2 py-0.5 rounded-full ${
+                              dark
+                                ? "bg-gray-700 text-gray-300"
+                                : "bg-gray-200 text-gray-700"
+                            }`}
+                          >
+                            {prod.products_base?.brand ??
+                              prod.products_base?.brand_text ??
+                              "Sin marca"}
+                          </span>
                         </div>
 
                         <span
@@ -280,7 +291,11 @@ export function UlCustomProducts({ customProducts }) {
                           }`}
                         >
                           <div className="flex flex-col">
-                            <span className={dark ? "text-gray-300" : "text-gray-700"}>
+                            <span
+                              className={
+                                dark ? "text-gray-300" : "text-gray-700"
+                              }
+                            >
                               Precio compra
                             </span>
                             <span
@@ -293,7 +308,11 @@ export function UlCustomProducts({ customProducts }) {
                           </div>
 
                           <div className="flex flex-col">
-                            <span className={dark ? "text-gray-100" : "text-gray-900"}>
+                            <span
+                              className={
+                                dark ? "text-gray-100" : "text-gray-900"
+                              }
+                            >
                               Precio venta
                             </span>
                             <span
@@ -306,7 +325,11 @@ export function UlCustomProducts({ customProducts }) {
                           </div>
 
                           <div className="flex flex-col">
-                            <span className={dark ? "text-gray-300" : "text-gray-700"}>
+                            <span
+                              className={
+                                dark ? "text-gray-300" : "text-gray-700"
+                              }
+                            >
                               Stock
                             </span>
                             <span
@@ -319,7 +342,11 @@ export function UlCustomProducts({ customProducts }) {
                           </div>
 
                           <div className="flex items-center gap-2">
-                            <span className={dark ? "text-gray-200" : "text-gray-900"}>
+                            <span
+                              className={
+                                dark ? "text-gray-200" : "text-gray-900"
+                              }
+                            >
                               Proveedor
                             </span>
                             <span

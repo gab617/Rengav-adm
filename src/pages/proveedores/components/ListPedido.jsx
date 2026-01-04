@@ -4,8 +4,15 @@ import { useProductFilters } from "../../../hooksSB/useProductsFilters";
 import { LiPedido } from "./LiPedido";
 
 export function ListPedido() {
-  const { products, loading, error, preferencias, categorias, subcategorias } =
-    useAppContext();
+  const {
+    products,
+    loading,
+    error,
+    preferencias,
+    categorias,
+    subcategorias,
+    unifiedBrands,
+  } = useAppContext();
 
   const dark = preferencias?.theme === "dark";
 
@@ -14,16 +21,21 @@ export function ListPedido() {
     setFiltroNombre,
     setFiltroMarca,
     setFiltroStock,
+    setSoloCustom,
     toggleCategoria,
     toggleSubcategoria,
     productosFiltrados,
+    productosCustomFiltrados,
     marcasDisponibles,
-  } = useProductFilters(products, categorias, subcategorias);
+  } = useProductFilters(products, categorias, subcategorias, unifiedBrands);
 
-  // ⬇️ FILTRAR SOLO PRODUCTOS ACTIVOS (regla específica de este componente)
+  const productosBase = filtros.soloCustom
+    ? productosCustomFiltrados
+    : productosFiltrados;
+
   const productosActivos = useMemo(
-    () => productosFiltrados.filter((p) => p.active !== false),
-    [productosFiltrados]
+    () => productosBase.filter((p) => p.active !== false),
+    [productosBase]
   );
 
   // ⬇️ AGRUPADO POR CATEGORÍA / SUBCATEGORÍA
@@ -134,6 +146,18 @@ export function ListPedido() {
           onChange={(e) => setFiltroStock(e.target.value)}
         />
       </div>
+      {/* TOGGLE SOLO PERSONALIZADOS */}
+      <label className="px-3 mb-2 flex items-center gap-3 cursor-pointer select-none">
+        <input
+          type="checkbox"
+          checked={filtros.soloCustom}
+          onChange={(e) => setSoloCustom(e.target.checked)}
+          className="w-5 h-5 accent-purple-500"
+        />
+        <span className={`font-medium ${textGray}`}>
+          Solo productos personalizados
+        </span>
+      </label>
 
       {/* CATEGORÍAS */}
       <div

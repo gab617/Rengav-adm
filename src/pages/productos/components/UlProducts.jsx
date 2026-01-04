@@ -6,56 +6,69 @@ import { Loader1 } from "../../../contexto/Loader1";
 import { Filtros } from "./Filtros";
 
 export function UlProducts() {
-  const { products, loadingProductos, categorias, subcategorias } =
-    useAppContext();
+  const {
+    products,
+    loadingProductos,
+    categorias,
+    subcategorias,
+    unifiedBrands, // 👈 si lo tenés en contexto
+  } = useAppContext();
 
   const {
     filtros,
     setFiltroNombre,
     setFiltroMarca,
     setFiltroStock,
+    setSoloCustom,
     toggleCategoria,
     toggleSubcategoria,
     productosFiltrados,
-    marcasDisponibles,
-  } = useProductFilters(products, categorias, subcategorias);
+    productosCustomFiltrados, // 👈 NUEVO
+    marcasDisponibles, // 👈 AHORA VIENE DEL HOOK
+  } = useProductFilters(products, categorias, subcategorias, unifiedBrands);
+  const productosActivos = filtros.soloCustom
+    ? productosCustomFiltrados
+    : productosFiltrados;
 
   const [mostrarFiltros, setMostrarFiltros] = useState(
     window.innerWidth >= 768
   );
 
-  const productosPorCategoria = useMemo(() => {
-    if (!categorias?.length) return [];
+const productosPorCategoria = useMemo(() => {
+  if (!categorias?.length) return [];
 
-    return categorias.map((categoria) => {
-      const productosEnCategoria = productosFiltrados.filter(
-        (p) => p.products_base?.category_id === categoria.id
+  return categorias.map((categoria) => {
+    const productosEnCategoria = productosActivos.filter(
+      (p) => p.products_base?.category_id === categoria.id
+    );
+
+    const productosConSubcategoria = subcategorias
+      .filter((s) => s.id_categoria === categoria.id)
+      .map((subcategoria) => ({
+        subcategoria,
+        productos: productosEnCategoria
+          .filter(
+            (p) => p.products_base?.subcategory_id === subcategoria.id
+          )
+          .sort((a, b) =>
+            a.products_base.name.localeCompare(b.products_base.name)
+          ),
+      }));
+
+    const productosSinSubcategoria = productosEnCategoria
+      .filter((p) => !p.products_base?.subcategory_id)
+      .sort((a, b) =>
+        a.products_base.name.localeCompare(b.products_base.name)
       );
 
-      const productosConSubcategoria = subcategorias
-        .filter((s) => s.id_categoria === categoria.id)
-        .map((subcategoria) => ({
-          subcategoria,
-          productos: productosEnCategoria
-            .filter((p) => p.products_base?.subcategory_id === subcategoria.id)
-            .sort((a, b) =>
-              a.products_base.name.localeCompare(b.products_base.name)
-            ),
-        }));
+    return {
+      categoria,
+      productosConSubcategoria,
+      productosSinSubcategoria,
+    };
+  });
+}, [categorias, subcategorias, productosActivos]);
 
-      const productosSinSubcategoria = productosEnCategoria
-        .filter((p) => !p.products_base?.subcategory_id)
-        .sort((a, b) =>
-          a.products_base.name.localeCompare(b.products_base.name)
-        );
-
-      return {
-        categoria,
-        productosConSubcategoria,
-        productosSinSubcategoria,
-      };
-    });
-  }, [categorias, subcategorias, productosFiltrados]);
 
   // ⬇️ AHORA SÍ, returns condicionales
   if (loadingProductos) return <Loader1 />;
@@ -88,6 +101,8 @@ export function UlProducts() {
           filtroStock={filtros.filtroStock}
           setFiltroStock={setFiltroStock}
           filtroCategorias={filtros.filtroCategorias}
+          soloCustom={filtros.soloCustom}
+          setSoloCustom = {setSoloCustom}
           toggleCategoria={toggleCategoria}
           filtroSubcategorias={filtros.filtroSubcategorias}
           toggleSubcategoria={toggleSubcategoria}
