@@ -8,7 +8,8 @@ import { useProducts } from "../hooksSB/useProducts";
 import { usePreferences } from "../hooksSB/usePreferencesUser";
 import { useProductFilters } from "../hooksSB/useProductsFilters";
 import { useBrands } from "../hooksSB/useBrands";
-
+import { useProfile } from "../hooksSB/useProfile";
+import { useAdminUsers } from "../pages/Admin/hooksAdmin/useAdminUsers";
 const AppContext = createContext();
 
 export const AppContextProvider = ({ children }) => {
@@ -92,7 +93,9 @@ export const AppContextProvider = ({ children }) => {
     carritoHook.subcategorias,
     unifiedBrands
   );
-  console.log(unifiedBrands);
+
+  const profileHook = useProfile()
+  /* console.log(unifiedBrands); */
 
   // 🔹 Aplicar el tema global dark/light
   useEffect(() => {
@@ -115,6 +118,7 @@ export const AppContextProvider = ({ children }) => {
         ...preferencesUserHook,
         ...productsFiltersHook,
         ...brandsHook,
+        ...profileHook,
         unifiedBrands,
       }}
     >

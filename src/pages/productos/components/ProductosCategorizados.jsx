@@ -34,11 +34,11 @@ export function ProductosCategorizados({ productosPorCategoria }) {
 
   return (
     <div
-      className={
+      className={`${
         dark
           ? "bg-gray-900 text-white min-h-screen"
           : "bg-gray-50 text-gray-900 min-h-screen"
-      }
+      }`}
     >
       {/* === BOTONERA === */}
       <div

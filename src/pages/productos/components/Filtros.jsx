@@ -24,7 +24,7 @@ export function Filtros({
 
   return (
     <div
-      className={`p-2 rounded-2xl shadow-lg border flex flex-col gap-4 text-sm transition-all duration-300 ${
+      className={`p-2 rounded-2xl shadow-lg border sm:flex flex-col gap-4 text-sm transition-all duration-300 ${
         dark
           ? "bg-gray-800/80 border-gray-700 text-gray-100 backdrop-blur-md"
           : "bg-white/80 border-gray-200 text-gray-900 backdrop-blur-md"

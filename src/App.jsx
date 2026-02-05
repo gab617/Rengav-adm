@@ -8,6 +8,12 @@ import { toast, ToastContainer } from "react-toastify";
 import { Login } from "./pages/login/Login";
 import { NavBar } from "./navBar/NavBar";
 import { Usuario } from "./pages/usuario/Usuario";
+import { AdminLayout } from "./pages/Admin/AdminLayaout";
+import { AdminRoute } from "./pages/Admin/AdminRoute";
+import { AdminDashboard } from "./pages/Admin/components/AdminDashboard";
+import { Users } from "./pages/Admin/components/Users";
+import { AssignProducts } from "./pages/Admin/components/AssignProducts";
+import { UserDetail } from "./pages/Admin/components/userDetail/UserDetail";
 
 const App = () => {
   const location = useLocation();
@@ -43,6 +49,20 @@ const App = () => {
         <Route path="/proveedores" element={<Proveedores />} />
         <Route path="/pedidos" element={<Pedidos />} />
         <Route path="/usuario" element={<Usuario />} />
+
+        <Route
+          path="/admin"
+          element={
+            <AdminRoute>
+              <AdminLayout />
+            </AdminRoute>
+          }
+        >
+          <Route index element={<AdminDashboard />} />
+          <Route path="/admin/assign" element={<AssignProducts />} />
+          <Route path="/admin/users" element={<Users />} />
+          <Route path="/admin/users/:userId" element={<UserDetail />} />
+        </Route>
       </Routes>
     </div>
   );
