@@ -13,7 +13,7 @@ export function AssignProductForm({ userId, userProducts, onAssigned }) {
   });
   console.log(userProducts);
   const assignedBaseIds = useMemo(() => {
-    return new Set(userProducts.filter((p) => p.products_base.id).map((p) => p.products_base.id));
+    return new Set(userProducts.filter((p) => p?.products_base?.id).map((p) => p?.products_base?.id));
   }, [userProducts]);
 
   const [selected, setSelected] = useState({});
