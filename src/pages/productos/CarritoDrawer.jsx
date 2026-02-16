@@ -1,15 +1,18 @@
 import React, { useState } from "react";
 import { Carrito } from "../carrito/Carrito";
 import { useAppContext } from "../../contexto/Context";
+import { CarritoMobile } from "../carrito/CarritoMobile";
+import { ToastContainer } from "react-toastify";
 
 export function CarritoDrawer() {
   const [open, setOpen] = useState(false);
-  const { preferencias } = useAppContext();
+  const { preferencias, carrito } = useAppContext();
   const dark = preferencias?.theme === "dark";
 
   return (
     <>
       {/* BOTÓN FLOTANTE SOLO EN MOBILE */}
+
       <button
         onClick={() => setOpen(true)}
         className="
@@ -23,11 +26,19 @@ export function CarritoDrawer() {
           background: dark ? "#facc15" : "#facc15",
         }}
       >
-        <img
-          src="/icons/cart.png"
-          alt="carrito"
-          className="w-8 h-8"
-        />
+        <span
+          className="
+            absolute -top-1 -right-1
+            bg-red-600 text-white
+            text-xs font-bold
+            w-5 h-5
+            flex items-center justify-center
+            rounded-full
+            "
+        >
+          {carrito.length}
+        </span>
+        <img src="./cart.png" alt="carrito" className="w-8 h-8" />
       </button>
 
       {/* OVERLAY */}
@@ -56,7 +67,7 @@ export function CarritoDrawer() {
         </button>
 
         <div className="p-4 mt-10">
-          <Carrito />
+          <CarritoMobile />
         </div>
       </div>
 
@@ -68,6 +79,13 @@ export function CarritoDrawer() {
       >
         <Carrito />
       </div>
+      <ToastContainer
+        position="top-center"
+        autoClose={3000}
+        newestOnTop
+        closeOnClick
+        draggable
+      />
     </>
   );
 }

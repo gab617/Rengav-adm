@@ -5,17 +5,22 @@ import { ListVentas } from "./components/ListVentas";
 export function Ventas() {
   const { ventas, loadingVentas, preferencias } = useAppContext();
   const dark = preferencias?.theme === "dark";
+  const esMobile = window.innerWidth < 768;
 
   return (
     <div
-      className={`p-6 min-h-screen transition-colors duration-300 ${
-        dark ? "bg-gray-900 text-gray-200" : "bg-gray-50 text-gray-900"
-      }`}
+      className={`
+        min-h-screen transition-colors duration-300
+        ${dark ? "bg-gray-900 text-gray-200" : "bg-gray-50 text-gray-900"}
+        px-3 py-4 md:p-6
+      `}
     >
       <h1
-        className={`text-3xl font-bold mb-4 text-start ${
-          dark ? "text-blue-400" : "text-blue-600"
-        }`}
+        className={`
+          font-bold mb-4
+          ${dark ? "text-blue-400" : "text-blue-600"}
+          text-xl md:text-3xl
+        `}
       >
         📊 Historial de Ventas
       </h1>

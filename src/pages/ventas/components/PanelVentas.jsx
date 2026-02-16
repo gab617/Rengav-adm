@@ -8,8 +8,10 @@ export function PanelVentas({
   fechaSeleccionada,
   mesSeleccionado,
 }) {
-    const { preferencias } = useAppContext();
+  const { preferencias } = useAppContext();
   const dark = preferencias?.theme === "dark";
+  const esMobile = window.innerWidth < 768;
+
   // Normalizamos ventas (día → array | semana/mes → object)
   let ventasProcesadas = [];
   if (Array.isArray(ventasFiltradas)) {
@@ -43,9 +45,12 @@ export function PanelVentas({
   }, {});
 
   const productoMenosVendido =
-    Object.keys(contadorProductos).reduce((min, prod) => {
-      return contadorProductos[prod] < contadorProductos[min] ? prod : min;
-    }, Object.keys(contadorProductos)[0] || "") || "N/A";
+    Object.keys(contadorProductos).reduce(
+      (min, prod) => {
+        return contadorProductos[prod] < contadorProductos[min] ? prod : min;
+      },
+      Object.keys(contadorProductos)[0] || "",
+    ) || "N/A";
 
   // Ranking Top 5
   const rankingTop5 = Object.entries(contadorProductos)
@@ -56,7 +61,7 @@ export function PanelVentas({
   const ventaMasReciente =
     ventasProcesadas.length > 0
       ? ventasProcesadas.reduce((latest, venta) =>
-          new Date(venta.fecha) > new Date(latest.fecha) ? venta : latest
+          new Date(venta.fecha) > new Date(latest.fecha) ? venta : latest,
         )
       : null;
 
@@ -74,15 +79,27 @@ export function PanelVentas({
 
   // Función para formatear números con puntos
   const formatNumber = (num) =>
-    num.toFixed(2).replace(/\.00$/, "").replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    num
+      .toFixed(2)
+      .replace(/\.00$/, "")
+      .replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 
   // Clases condicionales por tema
-  const bgPanel = dark ? "bg-gray-800 text-gray-200" : "bg-gray-50 text-gray-900";
+  const bgPanel = dark
+    ? "bg-gray-800 text-gray-200"
+    : "bg-gray-50 text-gray-900";
   const bgCard = (colorClass) => `${dark ? "bg-gray-700" : colorClass}`;
 
   return (
     <div
-      className={`panel-ventas w-[35%] sm:w-[35%] md:w-[29%]  lg:w-[25%] fixed right-0 top-[4.1em] h-[calc(100vh-4.1em)] rounded-l-lg p-3 pb-6 overflow-y-auto shadow-xl transition-colors duration-300 ${bgPanel}`}
+      className={`
+      ${
+        esMobile
+          ? "w-full max-h-[90vh] overflow-y-auto rounded-2xl p-[.1em]"
+          : "panel-ventas w-[35%] sm:w-[35%] md:w-[29%] lg:w-[25%] fixed right-0 top-[4.1em] h-[calc(100vh-4.1em)] rounded-l-lg p-3 pb-6 overflow-y-auto"
+      }
+      shadow-xl transition-colors duration-300 ${bgPanel}
+    `}
     >
       {/* Filtro encabezado */}
       <h3 className="text-center md:text-lg text-xl mb-4 font-bold">
@@ -90,9 +107,11 @@ export function PanelVentas({
         {filtro === "semana" &&
           (() => {
             const hoy = new Date();
-            const primerDia = new Date(hoy.setDate(hoy.getDate() - hoy.getDay()));
+            const primerDia = new Date(
+              hoy.setDate(hoy.getDate() - hoy.getDay()),
+            );
             const ultimoDia = new Date(
-              hoy.setDate(hoy.getDate() - hoy.getDay() + 6)
+              hoy.setDate(hoy.getDate() - hoy.getDay() + 6),
             );
             return `🗓️ Semana detallada: ${primerDia.toLocaleDateString()} - ${ultimoDia.toLocaleDateString()}`;
           })()}
@@ -108,7 +127,9 @@ export function PanelVentas({
             <p className="text-lg font-semibold uppercase tracking-wide">
               Total de Ventas
             </p>
-            <p className="text-2xl font-extrabold">${formatNumber(totalVentas)}</p>
+            <p className="text-2xl font-extrabold">
+              ${formatNumber(totalVentas)}
+            </p>
           </div>
 
           <div
@@ -125,8 +146,12 @@ export function PanelVentas({
         <div
           className={`border-l-8 p-6 rounded-xl shadow-xl text-center flex flex-col items-center gap-2 ${dark ? "bg-green-700 border-green-500 text-green-200" : "bg-green-100 border-green-600 text-green-800"}`}
         >
-          <p className="text-xl font-semibold uppercase tracking-wide">Ganancias Estimadas</p>
-          <p className="text-3xl font-extrabold">${formatNumber(gananciasEstimadas)}</p>
+          <p className="text-xl font-semibold uppercase tracking-wide">
+            Ganancias Estimadas
+          </p>
+          <p className="text-3xl font-extrabold">
+            ${formatNumber(gananciasEstimadas)}
+          </p>
         </div>
 
         {/* Producto más vendido */}
@@ -143,7 +168,9 @@ export function PanelVentas({
             <ul>
               {rankingTop5.map(([nombre, cantidad], index) => (
                 <li key={nombre} className="flex justify-between py-1">
-                  <span>{index + 1}. {nombre}</span>
+                  <span>
+                    {index + 1}. {nombre}
+                  </span>
                   <span className="font-semibold">{cantidad}</span>
                 </li>
               ))}
@@ -156,7 +183,9 @@ export function PanelVentas({
           <div
             className={`border-l-8 p-4 rounded-xl shadow-xl text-center ${dark ? "bg-red-700 border-red-500 text-red-200" : "bg-red-100 border-red-600 text-red-800"}`}
           >
-            <p className="text-lg font-semibold uppercase tracking-wide">📉 Menos Vendido</p>
+            <p className="text-lg font-semibold uppercase tracking-wide">
+              📉 Menos Vendido
+            </p>
             <p className="text-xl font-bold">{productoMenosVendido}</p>
           </div>
         )}
@@ -166,9 +195,11 @@ export function PanelVentas({
           <div
             className={`border-l-8 p-4 rounded-xl shadow-xl text-center ${dark ? "bg-gray-700 border-gray-500 text-gray-200" : "bg-gray-100 border-gray-600 text-gray-700"}`}
           >
-            <p className="text-lg font-semibold uppercase tracking-wide">Última Venta</p>
+            <p className="text-lg font-semibold uppercase tracking-wide">
+              Última Venta
+            </p>
             <p className="text-xl font-bold">
-             {new Date(ventaMasReciente.fecha).toLocaleString()}
+              {new Date(ventaMasReciente.fecha).toLocaleString()}
             </p>
           </div>
         )}

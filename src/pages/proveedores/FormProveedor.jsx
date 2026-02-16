@@ -44,7 +44,7 @@ export function FormProveedor() {
   const labelText = dark ? "text-gray-200" : "text-gray-900";
 
   return (
-    <div className="w-1/3 mx-auto mt-4">
+    <div className="w-full md:w-1/3 mx-auto mt-4">
       <button
         onClick={() => setIsFormVisible(!isFormVisible)}
         className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-500 transition"
@@ -71,7 +71,9 @@ export function FormProveedor() {
             { label: "Dirección", name: "direccion", type: "text", required: false },
           ].map(({ label, name, type, required }) => (
             <div key={name}>
-              <label className={`block font-semibold mb-1 ${labelText}`}>{label}</label>
+              <label className={`block font-semibold mb-1 ${labelText}`}>
+                {label}
+              </label>
               <input
                 type={type}
                 name={name}

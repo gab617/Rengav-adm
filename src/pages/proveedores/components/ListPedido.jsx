@@ -28,6 +28,7 @@ export function ListPedido() {
     productosCustomFiltrados,
     marcasDisponibles,
   } = useProductFilters(products, categorias, subcategorias, unifiedBrands);
+  const esMobile = window.innerWidth < 768;
 
   const productosBase = filtros.soloCustom
     ? productosCustomFiltrados
@@ -35,14 +36,14 @@ export function ListPedido() {
 
   const productosActivos = useMemo(
     () => productosBase.filter((p) => p.active !== false),
-    [productosBase]
+    [productosBase],
   );
 
   // ⬇️ AGRUPADO POR CATEGORÍA / SUBCATEGORÍA
   const productosPorCategoria = useMemo(() => {
     return categorias.map((categoria) => {
       const productosEnCategoria = productosActivos.filter(
-        (p) => p.products_base?.category_id === categoria.id
+        (p) => p.products_base?.category_id === categoria.id,
       );
 
       const productosConSubcategoria = subcategorias
@@ -52,14 +53,14 @@ export function ListPedido() {
           productos: productosEnCategoria
             .filter((p) => p.products_base?.subcategory_id === sub.id)
             .sort((a, b) =>
-              a.products_base.name.localeCompare(b.products_base.name)
+              a.products_base.name.localeCompare(b.products_base.name),
             ),
         }));
 
       const productosSinSubcategoria = productosEnCategoria
         .filter((p) => !p.products_base?.subcategory_id)
         .sort((a, b) =>
-          a.products_base.name.localeCompare(b.products_base.name)
+          a.products_base.name.localeCompare(b.products_base.name),
         );
 
       return {
@@ -99,10 +100,10 @@ export function ListPedido() {
 
   return (
     <div
-      className={`flex flex-col w-[95%] mx-auto p-4 rounded-xl shadow-md ${bgContainer}`}
+      className={`flex flex-col sm:w-[95%] mx-auto p-1 sm:p-4 rounded-xl shadow-md ${bgContainer}`}
     >
       {/* FILTROS */}
-      <div className="flex flex-wrap gap-4 mb-6">
+      <div className="flex flex-wrap gap-1 sm:gap-4 sm:mb-6">
         <input
           type="text"
           placeholder="🔍 Buscar por nombre..."
@@ -112,8 +113,7 @@ export function ListPedido() {
         />
 
         {/* 🏷 Marca */}
-        {/* 🏷 Marca */}
-        <div className="flex gap-2 w-full md:w-auto">
+        <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto">
           {/* Input libre */}
           <input
             type="text"
@@ -127,7 +127,7 @@ export function ListPedido() {
           <select
             value={filtros.filtroMarca}
             onChange={(e) => setFiltroMarca(e.target.value)}
-            className={`p-3 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-400 ${inputBg}`}
+            className={`p-3 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-400 w-full md:w-auto ${inputBg}`}
           >
             <option value="">Todas</option>
             {marcasDisponibles.map((marca) => (
@@ -207,7 +207,7 @@ export function ListPedido() {
           .filter(
             (c) =>
               c.productosSinSubcategoria.length > 0 ||
-              c.productosConSubcategoria.some((s) => s.productos.length > 0)
+              c.productosConSubcategoria.some((s) => s.productos.length > 0),
           )
           .map(
             ({
@@ -253,7 +253,7 @@ export function ListPedido() {
                     </div>
                   ))}
               </div>
-            )
+            ),
           )}
       </div>
     </div>

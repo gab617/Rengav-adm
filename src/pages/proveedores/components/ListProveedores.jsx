@@ -5,6 +5,7 @@ export function ListProveedores({ proveedores }) {
   const { eliminarProveedor, actualizarProveedor, preferencias } =
     useAppContext();
   const dark = preferencias?.theme === "dark";
+  const esMobile = window.innerWidth < 768;
 
   const [editando, setEditando] = useState(null);
   const [datosEditados, setDatosEditados] = useState({});
@@ -36,12 +37,12 @@ export function ListProveedores({ proveedores }) {
 
   return (
     <div
-      className={`grid grid-cols-2 gap-3 text-lg w-[85%] mx-auto p-2 rounded-xl shadow-inner transition-colors duration-300`}
+      className={`grid grid-cols-1 md:grid-cols-2 gap-3 sm:text-lg w-full md:w-[85%] mx-auto p-2 rounded-xl shadow-inner transition-colors duration-300`}
     >
       {proveedores.map((proveedor) => (
         <div
           key={proveedor.id}
-          className={`p-4 rounded-3xl shadow-lg hover:shadow-2xl transition duration-300 border ${cardBg}`}
+          className={`p-1 sm:p-4 rounded-3xl shadow-lg hover:shadow-2xl transition duration-300 border ${cardBg}`}
         >
           {editando === proveedor.id ? (
             // Formulario de edición

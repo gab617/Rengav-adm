@@ -28,16 +28,19 @@ export function ListVentas({
 }) {
   const { preferencias } = useAppContext();
   const dark = preferencias?.theme === "dark";
+  const esMobile = window.innerWidth < 768;
 
   const panelRef = useRef();
   const [ventaActiva, setVentaActiva] = useState(null);
   const [mostrarDetalles, setMostrarDetalles] = useState(false);
+  const [openPanel, setOpenPanel] = useState(false);
+
   const [filtro, setFiltro] = useState("dia");
   const [fechaSeleccionada, setFechaSeleccionada] = useState(
-    dayjs().format("YYYY-MM-DD")
+    dayjs().format("YYYY-MM-DD"),
   );
   const [mesSeleccionado, setMesSeleccionado] = useState(
-    dayjs().format("YYYY-MM")
+    dayjs().format("YYYY-MM"),
   );
 
   const toggleVenta = (id) => setVentaActiva(ventaActiva === id ? null : id);
@@ -74,7 +77,7 @@ export function ListVentas({
           hoy.startOf("week"),
           hoy.endOf("week"),
           null,
-          "[]"
+          "[]",
         );
       return true;
     });
@@ -247,17 +250,56 @@ export function ListVentas({
             </div>
           )}
         </div>
-
-        <div className="ml-4" ref={panelRef}>
-          <PanelVentas
-            filtro={filtro}
-            ventas={ventas}
-            ventasFiltradas={ventasFiltradas}
-            fechaSeleccionada={fechaSeleccionada}
-            mesSeleccionado={mesSeleccionado}
-          />
-        </div>
+        {!esMobile && (
+          <div className="ml-4" ref={panelRef}>
+            <PanelVentas
+              filtro={filtro}
+              ventas={ventas}
+              ventasFiltradas={ventasFiltradas}
+              fechaSeleccionada={fechaSeleccionada}
+              mesSeleccionado={mesSeleccionado}
+            />
+          </div>
+        )}
       </div>
+      {/* MOBILE PANEL */}
+      {esMobile && (
+        <button
+          onClick={() => setOpenPanel(true)}
+          className="
+      fixed bottom-4 right-4 z-30
+      w-14 h-14 rounded-full shadow-xl
+      flex items-center justify-center
+      bg-blue-600 text-white text-xl
+    "
+        >
+          📊
+        </button>
+      )}
+      {esMobile && openPanel && (
+        <div className="fixed inset-0 z-40 bg-black/50 flex items-center justify-center">
+          <div
+            className={`w-[98%] max-h-[95%] overflow-y-auto rounded-2xl p-1 shadow-2xl ${
+              dark ? "bg-gray-900 text-white" : "bg-white text-gray-900"
+            }`}
+          >
+            <div className="flex justify-between items-center mb-3">
+              <h2 className="text-xl font-bold">Resumen de ventas</h2>
+              <button onClick={() => setOpenPanel(false)} className="text-xl">
+                ❌
+              </button>
+            </div>
+
+            <PanelVentas
+              filtro={filtro}
+              ventas={ventas}
+              ventasFiltradas={ventasFiltradas}
+              fechaSeleccionada={fechaSeleccionada}
+              mesSeleccionado={mesSeleccionado}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

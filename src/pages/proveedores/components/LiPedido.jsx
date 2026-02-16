@@ -18,6 +18,7 @@ export function LiPedido({ prod, categoria }) {
   }
 
   const dark = preferencias?.theme === "dark";
+  const esMobile = window.innerWidth < 768;
 
   // Verificar si el producto está en la lista
   const pedidoExistente = pedidos.find((p) => p.id === prod.id);
@@ -36,7 +37,7 @@ export function LiPedido({ prod, categoria }) {
   const btnHover = dark ? "hover:bg-gray-500" : "hover:bg-gray-400";
 
   return (
-    <div className="flex w-full">
+    <div className="flex flex-col md:flex-row w-full gap-2">
       <div
         key={prod.id}
         className="cursor-pointer transition-all duration-200 w-full"
@@ -54,45 +55,44 @@ export function LiPedido({ prod, categoria }) {
       >
         {/* Info del producto */}
         <div
-          className={`flex text-xl font-semibold ${
+          className={`flex flex-col md:flex-row md:items-center text-base md:text-xl font-semibold ${
             dark ? "text-white" : "text-gray-900"
           }`}
         >
           <p className="p-pedido">{prod.products_base.name}</p>
           <p className="p-pedido">
-            <span className="text-sm">Stock:</span>
-            {prod.stock}
+            <span className="text-sm">Precio:</span> $
+            {parseInt(prod.precio_compra)
+              .toFixed(2)
+              .replace(/\.00$/, "")
+              .replace(/\B(?=(\d{3})+(?!\d))/g, ".")}
           </p>
           <p className="p-pedido">
-            <span className="text-sm">Precio:</span>
-
-            <span>
-              {" "}
-              $
-              {parseInt(prod.precio_compra)
-                .toFixed(2)
-                .replace(/\.00$/, "")
-                .replace(/\B(?=(\d{3})+(?!\d))/g, ".")}
-            </span>
+            <span className="text-sm">Stock:</span> {prod.stock}
           </p>
+
           <p className="p-pedido">
             {capitalizarMayus(
-              prod.products_base?.brand ?? prod.products_base?.brand_text ?? "-"
+              prod.products_base?.brand ??
+                prod.products_base?.brand_text ??
+                "-",
             )}
           </p>
         </div>
       </div>
 
-      {/* Controles de cantidad (Solo si está agregado) */}
+      {/* Controles */}
       <div
-        className={`px-2 border-b rounded-xl flex items-center gap-2 transition-all duration-300 ease-in-out ${
-          cantidad > 0 || cantidad === ""
-            ? "opacity-100 scale-100"
-            : "opacity-0 scale-90 pointer-events-none"
-        }`}
+        className={`px-2 border-b rounded-xl flex items-center justify-center gap-2 transition-all duration-300 ease-in-out
+      ${
+        cantidad > 0 || cantidad === ""
+          ? "opacity-100 scale-100"
+          : "opacity-0 scale-90 pointer-events-none"
+      }
+      md:justify-start`}
       >
         <button
-          className="px-2 py-1 bg-red-600 hover:bg-red-400 text-white rounded-md cursor-pointer"
+          className="px-2 py-1 bg-red-600 hover:bg-red-400 text-white rounded-md"
           onClick={(e) => {
             e.stopPropagation();
             eliminarPedido(prod.id);
@@ -100,8 +100,9 @@ export function LiPedido({ prod, categoria }) {
         >
           ✘
         </button>
+
         <button
-          className={`px-2 py-1 ${btnBg} ${btnHover} rounded-md font-bold text-lg`}
+          className={`px-2 py-1 ${btnBg} ${btnHover} rounded-md font-bold`}
           onClick={(e) => {
             e.stopPropagation();
             restarPedido(prod.id);
@@ -110,10 +111,9 @@ export function LiPedido({ prod, categoria }) {
           -
         </button>
 
-        {/* Input para modificar cantidad manualmente */}
         <input
           type="number"
-          className={`w-12 text-center border rounded-md text-lg ${inputBg}`}
+          className={`w-14 text-center border rounded-md ${inputBg}`}
           value={cantidad === 0 ? "" : cantidad}
           min="1"
           onClick={(e) => e.stopPropagation()}
@@ -122,7 +122,7 @@ export function LiPedido({ prod, categoria }) {
         />
 
         <button
-          className={`px-2 py-1 ${btnBg} ${btnHover} rounded-md font-bold text-lg`}
+          className={`px-2 py-1 ${btnBg} ${btnHover} rounded-md font-bold`}
           onClick={(e) => {
             e.stopPropagation();
             agregarPedido(prod);

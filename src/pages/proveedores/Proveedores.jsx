@@ -7,14 +7,16 @@ import { ListPedido } from "./components/ListPedido";
 export function Proveedores() {
   const { proveedores, pedido, eliminarProveedor, loading, error, productos, preferencias } = useAppContext();
   const dark = preferencias?.theme === "dark";
+  const esMobile = window.innerWidth < 768;
+
 
   const bgMain = dark ? "bg-gray-900 text-gray-200" : "bg-gray-100 text-gray-900";
   const textHeading = dark ? "text-blue-400" : "text-blue-600";
   const textEmpty = dark ? "text-gray-400" : "text-gray-500";
 
   return (
-    <div className={`p-6 min-h-screen transition-colors duration-300 ${bgMain}`}>
-      <h2 className={`text-2xl font-bold mb-4 text-center ${textHeading}`}>
+    <div className={`sm:p-6 min-h-screen transition-colors duration-300 ${bgMain}`}>
+      <h2 className={`sm:text-2xl font-bold mb-4 text-center ${textHeading}`}>
         📜 Lista de Proveedores
       </h2>
 
