@@ -39,7 +39,7 @@ export function LiProduct({
 
   const handleSubmit = async () => {
     const payload = { ...editedProduct };
-    console.log(payload)
+    console.log(payload);
     delete payload.products_base;
     delete payload.id;
     await actualizarProducto(prod.id, payload);
@@ -60,8 +60,8 @@ export function LiProduct({
     tamano === "chico"
       ? "scale-90 text-sm"
       : tamano === "grande"
-      ? "scale-105 text-xl"
-      : "text-base";
+        ? "scale-105 text-xl"
+        : "text-base";
 
   const vistaClass =
     vista === "listado"
@@ -88,8 +88,8 @@ export function LiProduct({
               ? "rgba(255,0,0,0.4)"
               : "rgba(251,0,0,0.4)"
             : dark
-            ? "#1f2937" // gray-800
-            : "white",
+              ? "#1f2937" // gray-800
+              : "white",
         color: dark ? "white" : "black",
       }}
     >
@@ -107,33 +107,40 @@ export function LiProduct({
               style={{ backgroundColor: color }}
             ></div>
 
-            <div className="flex flex-wrap items-center gap-2 w-full truncate">
-              <span className="font-semibold text-base md:text-xl truncate max-w-full">
-                {prod.tipo === "custom"
-                  ? prod.user_custom_products?.name
-                  : prod.products_base?.name}
-              </span>
+            <div className="flex flex-col sm:flex-row items-start  w-full truncate">
+              <div className="flex gap-1">
+                <span className="font-semibold text-base md:text-xl truncate max-w-full">
+                  {prod.tipo === "custom"
+                    ? prod.user_custom_products?.name
+                    : prod.products_base?.name}
+                </span>
 
-              <div
-                className={`border rounded-xl px-2 md:px-3 py-0.5 md:py-1 shadow-md text-sm md:text-base ${
-                  dark
-                    ? "bg-white/5 border-white/10 text-white"
-                    : "bg-gray-100/40 border-gray-600/40 text-gray-900"
-                }`}
-              >
-                <strong className="block truncate max-w-[10rem] md:max-w-none">
-                  {capitalizarMayus(
-                    prod.products_base?.brand ??
-                      prod.products_base?.brand_text ??
-                      "-"
-                  )}
-                </strong>
+                <div
+                  className={`border rounded-xl px-2 md:px-3 py-0.5 md:py-1 shadow-md text-sm md:text-base ${
+                    dark
+                      ? "bg-white/5 border-white/10 text-white"
+                      : "bg-gray-100/40 border-gray-600/40 text-gray-900"
+                  }`}
+                >
+                  <strong className="block truncate max-w-[10rem] md:max-w-none">
+                    {capitalizarMayus(
+                      prod.products_base?.brand ??
+                        prod.products_base?.brand_text ??
+                        "-",
+                    )}
+                  </strong>
+                </div>
+              </div>
+              <div>
+                <span>
+                #{`${prod.custom_id ? " C-":""}${prod.id}`}
+              </span>
               </div>
             </div>
           </div>
 
           {/* PRECIO + ACCIONES */}
-          <div className="flex justify-between items-center w-full md:w-auto mt-1 md:mt-0">
+          <div className="flex justify-between items-center w-full md:w-auto md:mt-0">
             <div className="">
               <span
                 className={`text-sm md:text-xl font-bold ${

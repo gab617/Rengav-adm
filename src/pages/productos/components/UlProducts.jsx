@@ -17,6 +17,7 @@ export function UlProducts() {
   const {
     filtros,
     setFiltroNombre,
+    setFiltroId,
     setFiltroMarca,
     setFiltroStock,
     setSoloCustom,
@@ -96,6 +97,8 @@ const productosPorCategoria = useMemo(() => {
         <Filtros
           filtroNombre={filtros.filtroNombre}
           setFiltroNombre={setFiltroNombre}
+          filtroId={filtros.filtroId}
+          setFiltroId={setFiltroId}
           filtroMarca={filtros.filtroMarca}
           setFiltroMarca={setFiltroMarca}
           filtroStock={filtros.filtroStock}

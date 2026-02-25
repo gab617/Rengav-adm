@@ -4,9 +4,10 @@ export function useProductFilters(
   products = [],
   categorias = [],
   subcategorias = [],
-  unifiedBrands = []
+  unifiedBrands = [],
 ) {
   const [filtroNombre, setFiltroNombre] = useState("");
+  const [filtroId, setFiltroId] = useState("");
   const [filtroMarca, setFiltroMarca] = useState("");
   const [filtroStock, setFiltroStock] = useState("");
   const [filtroCategorias, setFiltroCategorias] = useState([]);
@@ -15,20 +16,20 @@ export function useProductFilters(
 
   const toggleCategoria = (id) => {
     setFiltroCategorias((prev) =>
-      prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]
+      prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id],
     );
 
     setFiltroSubcategorias((prev) =>
       prev.filter(
         (subId) =>
-          !subcategorias.some((s) => s.id === subId && s.id_categoria === id)
-      )
+          !subcategorias.some((s) => s.id === subId && s.id_categoria === id),
+      ),
     );
   };
 
   const toggleSubcategoria = (id) => {
     setFiltroSubcategorias((prev) =>
-      prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]
+      prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id],
     );
   };
 
@@ -42,7 +43,9 @@ export function useProductFilters(
     const cumpleNombre =
       !filtroNombre ||
       base.name?.toLowerCase().includes(filtroNombre.toLowerCase());
-
+    const cumpleId =
+      !filtroId ||
+      String(prod.id).toLowerCase().includes(filtroId.toLowerCase());
     const cumpleMarca =
       !filtroMarca ||
       brandLabel.toLowerCase().includes(filtroMarca.toLowerCase());
@@ -59,6 +62,7 @@ export function useProductFilters(
 
     return (
       cumpleNombre &&
+      cumpleId &&
       cumpleMarca &&
       cumpleCategoria &&
       cumpleSubcategoria &&
@@ -72,6 +76,7 @@ export function useProductFilters(
   }, [
     products,
     filtroNombre,
+    filtroId,
     filtroMarca,
     filtroStock,
     filtroCategorias,
@@ -81,11 +86,12 @@ export function useProductFilters(
   // 🔹 SOLO productos custom
   const productosCustomFiltrados = useMemo(() => {
     return products.filter(
-      (prod) => prod.tipo === "custom" && filtrarProducto(prod)
+      (prod) => prod.tipo === "custom" && filtrarProducto(prod),
     );
   }, [
     products,
     filtroNombre,
+    filtroId,
     filtroMarca,
     filtroStock,
     filtroCategorias,
@@ -108,20 +114,22 @@ export function useProductFilters(
   return {
     filtros: {
       filtroNombre,
+      filtroId,
       filtroMarca,
       filtroStock,
       filtroCategorias,
       filtroSubcategorias,
-      soloCustom
+      soloCustom,
     },
     setFiltroNombre,
+    setFiltroId,
     setFiltroMarca,
     setFiltroStock,
     setSoloCustom,
     toggleCategoria,
     toggleSubcategoria,
     productosFiltrados,
-    productosCustomFiltrados, 
+    productosCustomFiltrados,
     marcasDisponibles,
     resetFiltros,
   };

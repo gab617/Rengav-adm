@@ -4,6 +4,8 @@ import { useAppContext } from "../../../contexto/Context";
 export function Filtros({
   filtroNombre,
   setFiltroNombre,
+  filtroId,
+  setFiltroId,
   filtroMarca,
   setFiltroMarca,
   filtroStock,
@@ -24,7 +26,7 @@ export function Filtros({
 
   return (
     <div
-      className={`p-3 rounded-2xl shadow-lg border flex flex-col gap-4 text-sm ${
+      className={`p-1 sm:w-[70%] sm:mx-auto rounded-2xl shadow-lg border flex flex-col gap-2 text-sm ${
         dark
           ? "bg-gray-800/80 border-gray-700 text-gray-100"
           : "bg-white/80 border-gray-200 text-gray-900"
@@ -32,19 +34,32 @@ export function Filtros({
     >
       {/* 🔍 BUSCADOR */}
       <div
-        className={`flex items-center gap-2 rounded-xl px-3 py-2 border ${
-          dark
-            ? "bg-gray-700 border-gray-600"
-            : "bg-gray-50 border-gray-200"
-        }`}
+        className={`flex gap-2`}
       >
-        🔍
+        
         <input
           type="text"
-          placeholder="Buscar producto..."
+          placeholder="🔍Buscar producto..."
           value={filtroNombre}
           onChange={(e) => setFiltroNombre(e.target.value)}
-          className="bg-transparent flex-1 outline-none"
+           className={`flex-1 px-3 py-2 rounded-xl border ${
+            dark
+              ? "bg-gray-700 border-gray-600"
+              : "bg-gray-50 border-gray-200"
+          }`}
+        />
+        
+
+        <input
+          type="text"
+          placeholder="🔍Buscar ID..."
+          value={filtroId}
+          onChange={(e) => setFiltroId(e.target.value)}
+                    className={`w-28 px-3 py-2 rounded-xl border ${
+            dark
+              ? "bg-gray-700 border-gray-600"
+              : "bg-gray-50 border-gray-200"
+          }`}
         />
       </div>
 
