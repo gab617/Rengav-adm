@@ -1,18 +1,20 @@
 // contexto/AuthContext.jsx
 import { createContext, useContext, useEffect, useState } from "react";
-import { supabase } from "../services/supabaseClient"
+import { supabase } from "../services/supabaseClient";
 
 const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);        // usuario actual
-  const [loading, setLoading] = useState(true);  // para evitar parpadeos
+  const [user, setUser] = useState(null); // usuario actual
+  const [loading, setLoading] = useState(true); // para evitar parpadeos
 
   useEffect(() => {
     // Obtener sesión al cargar
     async function loadSession() {
       const { data } = await supabase.auth.getSession();
-        setUser(data?.session?.user ?? null);
+      setUser(data?.session?.user ?? null);
+/*       console.log(data.session.user.app_metadata);
+      console.log(data.session.user.role); */
       setLoading(false);
     }
 
@@ -22,7 +24,7 @@ export function AuthProvider({ children }) {
     const { data: listener } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         setUser(session?.user ?? null);
-      }
+      },
     );
 
     return () => listener.subscription.unsubscribe();

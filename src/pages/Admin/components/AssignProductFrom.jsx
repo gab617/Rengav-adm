@@ -11,7 +11,6 @@ export function AssignProductForm({ userId, userProducts, onAssigned }) {
     brandId: "",
     search: "",
   });
-  console.log(userProducts);
   const assignedBaseIds = useMemo(() => {
     return new Set(userProducts.filter((p) => p?.products_base?.id).map((p) => p?.products_base?.id));
   }, [userProducts]);
@@ -43,7 +42,6 @@ export function AssignProductForm({ userId, userProducts, onAssigned }) {
     return products.filter((p) => {
 
       if (assignedBaseIds.has(p.id)) {
-        console.log(p);
 
         return false;
       }

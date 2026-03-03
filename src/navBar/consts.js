@@ -22,7 +22,7 @@ export const menuItems = [
   },
   {
     id: 6,
-    title: "Pedidos",
+    title: "Listas",
     icon: "📜",
     path: "/pedidos",
   },  {

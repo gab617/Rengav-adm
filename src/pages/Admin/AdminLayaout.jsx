@@ -7,6 +7,7 @@ export function AdminLayout() {
         <h2 className="font-bold mb-4">Admin</h2>
         <nav className="flex flex-col gap-2">
           <Link to="/admin">Dashboard</Link>
+          <Link to="/admin/prods-base">Productos base</Link>
           <Link to="/admin/users">Usuarios</Link>
           <Link to="/admin/assign">Asignar productos</Link>
         </nav>
