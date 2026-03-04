@@ -139,7 +139,7 @@ export function ProductosCategorizados({ productosPorCategoria }) {
               style={{ background: categoria.color }}
             >
               <h2
-                className="text-2xl font-bold mb-1 text-white px-2 py-1 rounded-t-lg"
+                className=" text-2xl font-bold mb-1 text-white px-2 py-1 rounded-t-lg"
                 style={{ background: categoria.color }}
               >
                 {categoria.nombre}
@@ -188,7 +188,7 @@ export function ProductosCategorizados({ productosPorCategoria }) {
                           : "bg-white/85 text-gray-900"
                       }`}
                     >
-                      <h3 className="text-xl font-semibold mb-1">
+                      <h3 className="px-2 py-1 text-xl font-semibold mb-1">
                         {subcategoria.nombre}
                       </h3>
                       <ul

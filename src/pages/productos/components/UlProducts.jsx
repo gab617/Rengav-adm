@@ -75,7 +75,7 @@ const productosPorCategoria = useMemo(() => {
   if (loadingProductos) return <Loader1 />;
   if (!categorias?.length) return null;
   return (
-    <div className="w-full px-2 md:px-6 py-1">
+    <div className="w-full px-[.1em] md:px-6 py-1">
       {/* BOTÓN FILTROS → SOLO MOBILE */}
       <div className="mb-1 md:hidden">
         <button

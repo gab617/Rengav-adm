@@ -78,8 +78,8 @@ export function LiProduct({
   return (
     <li
       key={prod.id}
-      className={`rounded-xl border transition-all ${vistaClass} ${sizeClass} ${
-        dark ? "border-gray-600" : "border-gray-400"
+      className={`rounded-xl border-2 transition-all ${vistaClass} ${sizeClass} ${
+        dark ? "border-gray-300" : "border-gray-400"
       }`}
       style={{
         backgroundColor:
@@ -132,31 +132,65 @@ export function LiProduct({
                 </div>
               </div>
               <div>
-                <span>
-                #{`${prod.custom_id ? " C-":""}${prod.id}`}
-              </span>
+                <span>#️⃣​{`${prod.custom_id ? " C-" : ""}${prod.id}`}</span>
               </div>
             </div>
           </div>
 
           {/* PRECIO + ACCIONES */}
           <div className="flex justify-between items-center w-full md:w-auto md:mt-0">
-            <div className="">
-              <span
-                className={`text-sm md:text-xl font-bold ${
-                  dark ? "text-gray-100" : "text-gray-700"
+            <div className="flex justify-between items-center w-full md:w-auto md:mt-0">
+              <div
+                className={`flex items-center gap-2 px-1 py-1 md:py-0 rounded-lg border ${
+                  dark
+                    ? "border-gray-600 bg-gray-800"
+                    : "border-gray-300 bg-gray-50"
                 }`}
               >
-                ${precioFormateado}
-              </span>
-              <span className="ml-1 text-base md:text-base">
-                • Stock: {prod.stock}
-              </span>
+                {/* PRECIO DESTACADO */}
+                <span
+                  className={`text-base md:text-xl font-bold tracking-tight ${
+                    dark ? "text-green-400" : "text-green-900"
+                  }`}
+                >
+                  ${precioFormateado}
+                </span>
+
+                {/* SEPARADOR */}
+                <span
+                  className={`text-sm ${dark ? "text-gray-500" : "text-gray-400"}`}
+                >
+                  |
+                </span>
+
+                {/* STOCK SECUNDARIO */}
+                <span
+                  className={`text-sm md:text-base md:text-center font-medium ${
+                    prod.stock <= 5
+                      ? "text-red-500"
+                      : dark
+                        ? "text-gray-300"
+                        : "text-gray-600"
+                  }`}
+                >
+                  Stock: {prod.stock}
+                </span>
+              </div>
             </div>
 
             <div className="flex gap-1">
               <button
-                className="px-2 py-1 md:px-[.3em] md:p-[.2em] text-lg md:text-xl bg-green-600 text-white rounded hover:bg-green-400"
+                className="
+    px-2 py-1 md:px-[.3em] md:p-[.2em]
+    text-lg md:text-xl
+    bg-green-600 text-white
+    rounded
+    active:scale-90
+    active:bg-green-700
+    transition-transform
+    duration-200
+    hover:bg-green-200
+  "
                 onClick={() => agregarProductoCarrito(prod, color)}
                 title="Agregar al carrito"
               >
