@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useAppContext } from "../../../contexto/Context";
 import { EditProduct } from "./EditProduct";
 import { DeleteProduct } from "./DeleteProduct";
+import { Balanza } from "./liProductComponents/Balanza";
 
 function capitalizarMayus(texto) {
   if (!texto) return "";
@@ -30,12 +31,33 @@ export function LiProduct({
     nombre:
       prod.tipo === "custom" ? prod.user_custom_products?.name : prod.nombre,
   });
+  const [pesoSeleccionado, setPesoSeleccionado] = useState(null);
 
   const handleChange = (e) => {
     setEditedProduct({ ...editedProduct, [e.target.name]: e.target.value });
   };
 
   const handleCancel = () => setIsEditing(false);
+
+  const handleAgregarCarrito = () => {
+    if (prod.products_base?.type_unit === "weight") {
+      if (!pesoSeleccionado) {
+        alert("Seleccioná un peso primero");
+        return;
+      }
+
+      const precioCalculado = Number(
+        (Number(prod.precio_venta) * pesoSeleccionado).toFixed(2),
+      );
+
+      agregarProductoCarrito(prod, color, {
+        peso: pesoSeleccionado,
+        precioCalculado,
+      });
+    } else {
+      agregarProductoCarrito(prod, color);
+    }
+  };
 
   const handleSubmit = async () => {
     const payload = { ...editedProduct };
@@ -107,8 +129,8 @@ export function LiProduct({
               style={{ backgroundColor: color }}
             ></div>
 
-            <div className="flex flex-col sm:flex-row items-start  w-full truncate">
-              <div className="flex gap-1">
+            <div className="flex flex-col sm:flex-row sm:items-center w-full truncate">
+              <div className="flex gap-1 ">
                 <span className="font-semibold text-base md:text-xl truncate max-w-full">
                   {prod.tipo === "custom"
                     ? prod.user_custom_products?.name
@@ -131,8 +153,26 @@ export function LiProduct({
                   </strong>
                 </div>
               </div>
-              <div>
-                <span>#️⃣​{`${prod.custom_id ? " C-" : ""}${prod.id}`}</span>
+              <div
+                className={`flex items-center justify-between w-full px-[0.1em] py-1 rounded-md border
+  ${
+    dark
+      ? "bg-white/5 border-white/10 text-white"
+      : "bg-gray-100/40 border-gray-600/40 text-gray-900"
+  }`}
+              >
+                <span className="font-medium">
+                  #️⃣​{`${prod.custom_id ? " C-" : ""}${prod.id}`}
+                </span>
+
+                {prod.products_base?.type_unit === "weight" && (
+                  <Balanza
+                    dark={dark}
+                    onChange={(peso) => {
+                      setPesoSeleccionado(peso);
+                    }}
+                  />
+                )}
               </div>
             </div>
           </div>
@@ -181,17 +221,17 @@ export function LiProduct({
             <div className="flex gap-1">
               <button
                 className="
-    px-2 py-1 md:px-[.3em] md:p-[.2em]
-    text-lg md:text-xl
-    bg-green-600 text-white
-    rounded
-    active:scale-90
-    active:bg-green-700
-    transition-transform
-    duration-200
-    hover:bg-green-200
+                px-2 py-1 md:px-[.3em] md:p-[.2em]
+                text-lg md:text-xl
+                bg-green-600 text-white
+                rounded
+                active:scale-90
+                active:bg-green-700
+                transition-transform
+                duration-200
+                hover:bg-green-200
   "
-                onClick={() => agregarProductoCarrito(prod, color)}
+                onClick={handleAgregarCarrito}
                 title="Agregar al carrito"
               >
                 🛒
@@ -243,7 +283,7 @@ export function LiProduct({
             <div className="flex  flex-row gap-[0.15em] items-start">
               <button
                 className="cursor-pointer px-[.3em] p-[.2em] text-xl bg-green-600 text-white rounded hover:bg-green-400"
-                onClick={() => agregarProductoCarrito(prod, color)}
+                onClick={handleAgregarCarrito}
               >
                 🛒
               </button>

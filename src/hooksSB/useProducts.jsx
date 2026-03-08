@@ -72,7 +72,8 @@ export const useProducts = (
               brand_id,
               image_url,
               category_id,
-              subcategory_id
+              subcategory_id,
+              type_unit
             ),
             user_custom_products (
               id,
@@ -137,6 +138,7 @@ export const useProducts = (
             category_id: p.products_base.category_id,
             subcategory_id: p.products_base.subcategory_id,
             brand_text: null,
+            type_unit: p.products_base.type_unit
           },
         };
       };

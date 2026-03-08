@@ -29,7 +29,7 @@ export function Carrito() {
 
     const ventaExitosa = await crearVenta(
       carrito,
-      actualizarProductosPostVenta
+      actualizarProductosPostVenta,
     );
 
     if (ventaExitosa) {
@@ -77,7 +77,7 @@ export function Carrito() {
           </div>
         </div>
       ),
-      { containerId: "carrito-toast", autoClose: false, closeButton: false }
+      { containerId: "carrito-toast", autoClose: false, closeButton: false },
     );
   };
 
@@ -120,90 +120,116 @@ export function Carrito() {
       </div>
 
       <ul className="divide-y divide-gray-200 dark:divide-gray-700">
-        {carrito.map((producto) => (
-          <li
-            key={producto.id_user_product}
-            className={`p-3 rounded-lg transition-all duration-500 ${
-              animatingItems.has(producto.id_user_product)
-                ? "opacity-100 translate-y-0"
-                : "opacity-0 translate-y-[-10px]"
-            }`}
-            style={{
-              backgroundColor: dark
-                ? `${producto.color}33`
-                : `${producto.color}22`,
-            }}
-          >
-            <div className="mb-2">
-              <h3
-                className={`text-lg font-semibold ${
-                  dark ? "text-white" : "text-gray-800"
-                }`}
-              >
-                {producto.products_base.name}
-              </h3>
-              <p
-                className={`text-sm ${
-                  dark ? "text-gray-300" : "text-gray-600"
-                }`}
-              >
-                Precio: <strong>${producto.precio_venta}</strong>
-              </p>
-            </div>
+        {carrito.map((producto) => {
+          const esPeso = producto.products_base?.type_unit === "weight";
+          const totalItem = producto.cantidad * producto.precio_venta;
 
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <button
-                  className={`w-8 h-8 text-lg font-bold rounded transition disabled:opacity-50 disabled:cursor-not-allowed ${
-                    dark
-                      ? "bg-gray-700 hover:bg-gray-600 text-white"
-                      : "bg-gray-100 hover:bg-gray-300"
-                  }`}
-                  onClick={() =>
-                    actualizarCantidad(producto.id, producto.cantidad - 1)
-                  }
-                  disabled={producto.cantidad <= 1}
-                >
-                  −
-                </button>
-
-                <span
-                  className={`text-lg font-medium ${
+          return (
+            <li
+              key={producto.id_user_product}
+              className={`p-3 rounded-lg transition-all duration-500 ${
+                animatingItems.has(producto.id_user_product)
+                  ? "opacity-100 translate-y-0"
+                  : "opacity-0 translate-y-[-10px]"
+              }`}
+              style={{
+                backgroundColor: dark
+                  ? `${producto.color}33`
+                  : `${producto.color}22`,
+              }}
+            >
+              <div className="mb-2">
+                <h3
+                  className={`text-lg font-semibold ${
                     dark ? "text-white" : "text-gray-800"
                   }`}
                 >
-                  {producto.cantidad}
-                </span>
+                  {producto.products_base.name}
+                </h3>
 
-                <button
-                  className={`w-8 h-8 text-lg font-bold rounded transition disabled:opacity-50 disabled:cursor-not-allowed ${
-                    dark
-                      ? "bg-gray-700 hover:bg-gray-600 text-white"
-                      : "bg-gray-100 hover:bg-gray-300"
-                  }`}
-                  onClick={() => {
-                    if (producto.cantidad < producto.stock) {
-                      actualizarCantidad(producto.id, producto.cantidad + 1);
-                    } else {
-                      toast.warning("⚠️ Stock insuficiente.", {
-                        containerId: "carrito-toast",
-                      });
-                    }
-                  }}
-                >
-                  +
-                </button>
+                {esPeso ? (
+                  <p
+                    className={`text-sm ${
+                      dark ? "text-gray-300" : "text-gray-600"
+                    }`}
+                  >
+                    Peso:{" "}
+                    <strong>{Number(producto.cantidad).toFixed(3)} kg</strong>
+                    {" • "}
+                    Precio/kg: <strong>${producto.precio_venta}</strong>
+                    {" • "}<br/>
+                    Total: <strong>${totalItem.toFixed(2)}</strong>
+                  </p>
+                ) : (
+                  <p
+                    className={`text-sm ${
+                      dark ? "text-gray-300" : "text-gray-600"
+                    }`}
+                  >
+                    Precio: <strong>${producto.precio_venta}</strong>
+                  </p>
+                )}
               </div>
 
-              <button
-                className="text-white bg-red-500 dark:bg-red-600 hover:bg-red-600 dark:hover:bg-red-700 px-3 py-1 rounded transition"
-                onClick={() => eliminarProductoCarrito(producto.id)}
-              >
-                ✘
-              </button>
-            </div>
-          </li>
-        ))}
+              <div className="flex items-center justify-between gap-3">
+                {!esPeso && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      className={`w-8 h-8 text-lg font-bold rounded transition disabled:opacity-50 disabled:cursor-not-allowed ${
+                        dark
+                          ? "bg-gray-700 hover:bg-gray-600 text-white"
+                          : "bg-gray-100 hover:bg-gray-300"
+                      }`}
+                      onClick={() =>
+                        actualizarCantidad(producto.id, producto.cantidad - 1)
+                      }
+                      disabled={producto.cantidad <= 1}
+                    >
+                      −
+                    </button>
+
+                    <span
+                      className={`text-lg font-medium ${
+                        dark ? "text-white" : "text-gray-800"
+                      }`}
+                    >
+                      {producto.cantidad}
+                    </span>
+
+                    <button
+                      className={`w-8 h-8 text-lg font-bold rounded transition disabled:opacity-50 disabled:cursor-not-allowed ${
+                        dark
+                          ? "bg-gray-700 hover:bg-gray-600 text-white"
+                          : "bg-gray-100 hover:bg-gray-300"
+                      }`}
+                      onClick={() => {
+                        if (producto.cantidad < producto.stock) {
+                          actualizarCantidad(
+                            producto.id,
+                            producto.cantidad + 1,
+                          );
+                        } else {
+                          toast.warning("⚠️ Stock insuficiente.", {
+                            containerId: "carrito-toast",
+                          });
+                        }
+                      }}
+                    >
+                      +
+                    </button>
+                  </div>
+                )}
+
+                <button
+                  className="text-white bg-red-500 dark:bg-red-600 hover:bg-red-600 dark:hover:bg-red-700 px-3 py-1 rounded transition"
+                  onClick={() => eliminarProductoCarrito(producto.id)}
+                >
+                  ✘
+                </button>
+              </div>
+            </li>
+          );
+        })}
       </ul>
 
       <ToastContainer

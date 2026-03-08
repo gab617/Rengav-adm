@@ -9,29 +9,51 @@ export function useCarrito() {
   }, [carrito]);
 
   // === AGREGAR AL CARRITO ===
-  const agregarProductoCarrito = (producto, color) => {
-    if (producto.stock <= 0) return;
+const agregarProductoCarrito = (producto, color, extra = {}) => {
+  if (producto.stock <= 0) return;
 
-    setCarrito((prevCarrito) => {
-      const existente = prevCarrito.find(
-        (item) => item.id === producto.id   // ← ahora usamos id real
+  setCarrito((prevCarrito) => {
+
+    const esPeso = producto.products_base?.type_unit === "weight";
+
+    // Si es por peso, no buscamos existente porque cada pesado es único
+    if (esPeso && extra.peso) {
+      return [
+        ...prevCarrito,
+        {
+          ...producto,
+          cantidad: Number(extra.peso),
+          color
+        }
+      ];
+    }
+
+    // ----- PRODUCTOS POR UNIDAD -----
+
+    const existente = prevCarrito.find(
+      (item) => item.id === producto.id
+    );
+
+    if (existente) {
+      if (existente.cantidad >= producto.stock) return prevCarrito;
+
+      return prevCarrito.map((item) =>
+        item.id === producto.id
+          ? { ...item, cantidad: item.cantidad + 1 }
+          : item
       );
+    }
 
-      if (existente) {
-        // Evita pasar el stock disponible
-        if (existente.cantidad >= producto.stock) return prevCarrito;
-
-        return prevCarrito.map((item) =>
-          item.id === producto.id
-            ? { ...item, cantidad: item.cantidad + 1 }
-            : item
-        );
+    return [
+      ...prevCarrito,
+      {
+        ...producto,
+        cantidad: 1,
+        color
       }
-
-      // Producto nuevo
-      return [...prevCarrito, { ...producto, cantidad: 1, color }];
-    });
-  };
+    ];
+  });
+};
 
   // === ELIMINAR DEL CARRITO ===
   const eliminarProductoCarrito = (id_producto) => {
