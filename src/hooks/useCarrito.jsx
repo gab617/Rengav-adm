@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { toast } from "react-toastify";
 
 export function useCarrito() {
   const [carrito, setCarrito] = useState([]);
@@ -13,18 +14,31 @@ const agregarProductoCarrito = (producto, color, extra = {}) => {
   if (producto.stock <= 0) return;
 
   setCarrito((prevCarrito) => {
-
     const esPeso = producto.products_base?.type_unit === "weight";
 
-    // Si es por peso, no buscamos existente porque cada pesado es único
+    // ----- PRODUCTOS POR PESO -----
     if (esPeso && extra.peso) {
+
+      const pesoNuevo = Number(extra.peso);
+
+      const pesoEnCarrito = prevCarrito
+        .filter((item) => item.id === producto.id)
+        .reduce((acc, item) => acc + Number(item.cantidad), 0);
+
+      const totalSiAgrego = pesoEnCarrito + pesoNuevo;
+
+      if (totalSiAgrego > producto.stock) {
+        toast.warning("⚠️ Stock insuficiente.");
+        return prevCarrito;
+      }
+
       return [
         ...prevCarrito,
         {
           ...producto,
-          cantidad: Number(extra.peso),
-          color
-        }
+          cantidad: pesoNuevo,
+          color,
+        },
       ];
     }
 
@@ -49,8 +63,8 @@ const agregarProductoCarrito = (producto, color, extra = {}) => {
       {
         ...producto,
         cantidad: 1,
-        color
-      }
+        color,
+      },
     ];
   });
 };
