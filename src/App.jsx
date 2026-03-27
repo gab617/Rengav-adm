@@ -15,6 +15,7 @@ import { Users } from "./pages/Admin/components/Users";
 import { AssignProducts } from "./pages/Admin/components/AssignProducts";
 import { UserDetail } from "./pages/Admin/components/userDetail/UserDetail";
 import { ProductsBase } from "./pages/Admin/components/productsBase/ProductsBase";
+import { InfoApp } from "./pages/infoApp/InfoApp";
 
 const App = () => {
   const location = useLocation();
@@ -50,6 +51,7 @@ const App = () => {
         <Route path="/proveedores" element={<Proveedores />} />
         <Route path="/pedidos" element={<Pedidos />} />
         <Route path="/usuario" element={<Usuario />} />
+        <Route path="/info-app" element={<InfoApp />} />
 
         <Route
           path="/admin"

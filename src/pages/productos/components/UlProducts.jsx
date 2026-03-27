@@ -24,15 +24,15 @@ export function UlProducts() {
     toggleCategoria,
     toggleSubcategoria,
     productosFiltrados,
-    productosCustomFiltrados, // 👈 NUEVO
-    marcasDisponibles, // 👈 AHORA VIENE DEL HOOK
+    productosCustomFiltrados, //  NUEVO
+    marcasDisponibles, //  AHORA VIENE DEL HOOK
   } = useProductFilters(products, categorias, subcategorias, unifiedBrands);
   const productosActivos = filtros.soloCustom
     ? productosCustomFiltrados
     : productosFiltrados;
 
   const [mostrarFiltros, setMostrarFiltros] = useState(
-    window.innerWidth >= 768
+    true
   );
 
 const productosPorCategoria = useMemo(() => {
@@ -71,7 +71,7 @@ const productosPorCategoria = useMemo(() => {
 }, [categorias, subcategorias, productosActivos]);
 
 
-  // ⬇️ AHORA SÍ, returns condicionales
+  //  AHORA SÍ, returns condicionales
   if (loadingProductos) return <Loader1 />;
   if (!categorias?.length) return null;
   return (

@@ -16,7 +16,7 @@ const agregarProductoCarrito = (producto, color, extra = {}) => {
   setCarrito((prevCarrito) => {
     const esPeso = producto.products_base?.type_unit === "weight";
 
-    // ----- PRODUCTOS POR PESO 
+    // ----- PRODUCTOS POR PESO
     if (esPeso && extra.peso) {
 
       const pesoNuevo = Number(extra.peso);
