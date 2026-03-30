@@ -117,10 +117,14 @@ export function AgregarProductosSistema({ onClose }) {
   const [search, setSearch] = useState("");
   const [categoriaActiva, setCategoriaActiva] = useState("todas");
   const [subcategoriaActiva, setSubcategoriaActiva] = useState("todas");
+  const [showHistorial, setShowHistorial] = useState(false);
   
   // Selección múltiple
   const [selectedProducts, setSelectedProducts] = useState([]);
   const [submitting, setSubmitting] = useState(false);
+  
+  // Historial de productos agregados
+  const [historialAgregados, setHistorialAgregados] = useState([]);
   
   // Formulario para un solo producto
   const [formSingle, setFormSingle] = useState({
@@ -129,6 +133,12 @@ export function AgregarProductosSistema({ onClose }) {
     stock: "",
     descripcion: "",
   });
+
+  // Cálculos para el formulario
+  const precioCompraNum = parseFloat(formSingle.precio_compra) || 0;
+  const precioVentaNum = parseFloat(formSingle.precio_venta) || 0;
+  const gananciaPorUnidad = precioVentaNum - precioCompraNum;
+  const gananciaNegativa = precioCompraNum > 0 && precioVentaNum > 0 && precioCompraNum > precioVentaNum;
 
   // Subcategorías de la categoría seleccionada
   const subcategoriasDeCategoria = useMemo(() => {
@@ -229,18 +239,46 @@ export function AgregarProductosSistema({ onClose }) {
     if (selectedProducts.length !== 1) return;
     
     const producto = selectedProducts[0];
+    const precio_compra = formSingle.precio_compra ? parseFloat(formSingle.precio_compra) : 0;
+    const precio_venta = formSingle.precio_venta ? parseFloat(formSingle.precio_venta) : 0;
+    const stock = formSingle.stock ? parseInt(formSingle.stock) : 0;
+    
+    // Validar ganancia negativa
+    if (precio_compra > 0 && precio_venta > 0 && precio_compra > precio_venta) {
+      const confirmacion = confirm(
+        `⚠️ Ganancia negativa\n\n` +
+        `Precio Compra: $${precio_compra.toLocaleString()}\n` +
+        `Precio Venta: $${precio_venta.toLocaleString()}\n` +
+        `Ganancia por unidad: -$${(precio_compra - precio_venta).toLocaleString()}\n\n` +
+        `¿Deseas continuar de todos modos?`
+      );
+      if (!confirmacion) return;
+    }
+    
     setSubmitting(true);
 
     const result = await agregarProductosBulk([producto], {
-      precio_compra: formSingle.precio_compra ? parseFloat(formSingle.precio_compra) : 0,
-      precio_venta: formSingle.precio_venta ? parseFloat(formSingle.precio_venta) : 0,
-      stock: formSingle.stock ? parseInt(formSingle.stock) : 0,
+      precio_compra,
+      precio_venta,
+      stock,
       descripcion: formSingle.descripcion || null,
     });
 
     setSubmitting(false);
 
     if (result.success && result.productos.length > 0) {
+      // Agregar al historial
+      const datosProducto = {
+        id: Date.now(),
+        nombre: producto.name,
+        brand_name: producto.brand_name,
+        precio_compra,
+        precio_venta,
+        stock,
+        fecha: new Date().toLocaleString("es-AR"),
+      };
+      setHistorialAgregados(prev => [datosProducto, ...prev].slice(0, 10));
+      
       result.productos.forEach(p => agregarProductoBase(p));
       setSelectedProducts([]);
       setFormSingle({ precio_compra: "", precio_venta: "", stock: "", descripcion: "" });
@@ -300,13 +338,48 @@ export function AgregarProductosSistema({ onClose }) {
               {loading ? "Cargando..." : `${productosDisponibles.length} disponibles • ${productosAsignados.length} agregados`}
             </p>
           </div>
-          <button
-            onClick={onClose}
-            className={`p-2 rounded-xl ${dark ? "hover:bg-gray-500 text-white" : "hover:bg-gray-200"}`}
-          >
-            ✕
-          </button>
+          <div className="flex items-center gap-2">
+            {historialAgregados.length > 0 && (
+              <button
+                onClick={() => setShowHistorial(!showHistorial)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium ${dark ? "bg-blue-500/20 text-blue-400 hover:bg-blue-500/30" : "bg-blue-100 text-blue-600 hover:bg-blue-200"}`}
+              >
+                📋 {historialAgregados.length}
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className={`p-2 rounded-xl ${dark ? "hover:bg-gray-500 text-white" : "hover:bg-gray-200"}`}
+            >
+              ✕
+            </button>
+          </div>
         </div>
+
+        {/* HISTORIAL COLAPSABLE */}
+        {showHistorial && historialAgregados.length > 0 && (
+          <div className={`px-4 py-3 border-b ${dark ? "bg-blue-500/10 border-blue-500/30" : "bg-blue-50 border-blue-200"}`}>
+            <h3 className={`text-xs font-bold mb-2 ${dark ? "text-blue-400" : "text-blue-600"}`}>
+              📋 Últimos agregados
+            </h3>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {historialAgregados.slice(0, 5).map((item) => (
+                <div
+                  key={item.id}
+                  className={`shrink-0 px-3 py-2 rounded-lg text-xs ${dark ? "bg-gray-800" : "bg-white border border-gray-200"}`}
+                >
+                  <p className={`font-medium truncate max-w-[120px] ${textPrimary}`}>{item.nombre}</p>
+                  <p className={`${dark ? "text-gray-400" : "text-gray-500"}`}>
+                    C:${item.precio_compra || 0} V:${item.precio_venta || 0}
+                  </p>
+                  <p className={`text-[10px] ${dark ? "text-gray-500" : "text-gray-400"}`}>
+                    {item.fecha}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* TABS */}
         <div className={`px-4 py-2 border-b ${borderColor}`}>
@@ -626,6 +699,17 @@ export function AgregarProductosSistema({ onClose }) {
                   </div>
                 </div>
 
+                {/* Indicador de ganancia */}
+                {precioVentaNum > 0 && precioCompraNum > 0 && (
+                  <div className={`p-2 rounded-lg text-xs ${gananciaNegativa ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" : "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"}`}>
+                    {gananciaNegativa ? (
+                      <span>⚠️ Ganancia: -${Math.abs(gananciaPorUnidad).toLocaleString()} por unidad</span>
+                    ) : (
+                      <span>✓ Ganancia: ${gananciaPorUnidad.toLocaleString()} por unidad</span>
+                    )}
+                  </div>
+                )}
+
                 <div>
                   <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>Stock</label>
                   <input
@@ -640,9 +724,11 @@ export function AgregarProductosSistema({ onClose }) {
                 <button
                   onClick={handleAgregarUno}
                   disabled={submitting}
-                  className="w-full py-2 bg-green-500 text-white rounded-lg font-medium disabled:opacity-50 hover:bg-green-600 transition-colors text-sm"
+                  className={`w-full py-2 text-white rounded-lg font-medium disabled:opacity-50 transition-colors text-sm ${
+                    gananciaNegativa ? "bg-yellow-600 hover:bg-yellow-500" : "bg-green-500 hover:bg-green-600"
+                  }`}
                 >
-                  {submitting ? "..." : "✓ Agregar"}
+                  {submitting ? "..." : gananciaNegativa ? "⚠️ Agregar con pérdida" : "✓ Agregar"}
                 </button>
               </div>
             ) : (
@@ -700,6 +786,12 @@ export function AgregarProductosSistema({ onClose }) {
                       ✕
                     </button>
                   </div>
+                  {/* Indicador de ganancia */}
+                  {precioVentaNum > 0 && precioCompraNum > 0 && (
+                    <p className={`text-[10px] px-1 ${gananciaNegativa ? "text-red-500" : "text-green-500"}`}>
+                      {gananciaNegativa ? `⚠️ -$${Math.abs(gananciaPorUnidad).toLocaleString()}/u` : `✓ +$${gananciaPorUnidad.toLocaleString()}/u`}
+                    </p>
+                  )}
                   <div className="flex gap-1">
                     <input
                       type="number"
@@ -725,7 +817,9 @@ export function AgregarProductosSistema({ onClose }) {
                     <button
                       onClick={handleAgregarUno}
                       disabled={submitting}
-                      className="px-2 py-1 bg-green-500 text-white rounded font-medium text-xs disabled:opacity-50"
+                      className={`px-2 py-1 text-white rounded font-medium text-xs disabled:opacity-50 ${
+                        gananciaNegativa ? "bg-yellow-600" : "bg-green-500"
+                      }`}
                     >
                       ✓
                     </button>
@@ -763,6 +857,7 @@ export function AgregarProductosSistema({ onClose }) {
             </div>
           )}
         </div>
+
       </div>
     </div>
   );
