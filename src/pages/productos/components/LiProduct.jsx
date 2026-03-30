@@ -3,6 +3,7 @@ import { useAppContext } from "../../../contexto/Context";
 import { EditProduct } from "./EditProduct";
 import { DeleteProduct } from "./DeleteProduct";
 import { Balanza } from "./liProductComponents/Balanza";
+import { toast } from "react-toastify";
 
 function capitalizarMayus(texto) {
   if (!texto) return "";
@@ -51,6 +52,12 @@ export function LiProduct({
     .filter((item) => item.id === prod.id)
     .reduce((acc, item) => acc + (esPeso ? Number(item.cantidad) : 1), 0);
 
+  const precioVenta = parseFloat(prod.precio_venta) || 0;
+  const precioCompra = parseFloat(prod.precio_compra) || 0;
+  const sinPrecios = precioVenta <= 0 || precioCompra <= 0;
+  const faltaPrecioVenta = precioVenta <= 0;
+  const faltaPrecioCompra = precioCompra <= 0;
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     if (name === "stock") {
@@ -63,6 +70,15 @@ export function LiProduct({
   const handleCancel = () => setIsEditing(false);
 
   const handleAgregarCarrito = () => {
+    if (sinPrecios) {
+      let msg = "⚠️ Faltan definir los siguientes precios:";
+      if (faltaPrecioVenta) msg += "\n• Precio de VENTA";
+      if (faltaPrecioCompra) msg += "\n• Precio de COMPRA";
+      msg += "\n\nEditá el producto para agregarlos.";
+      toast.warning(msg);
+      return;
+    }
+
     if (esPeso) {
       if (!pesoSeleccionado) {
         alert("Seleccioná un peso primero");
@@ -134,7 +150,7 @@ export function LiProduct({
         rounded-xl border-2 transition-all duration-200
         ${vista === "listado"
           ? "flex items-center justify-between md:p-2 md:h-[60px] gap-2"
-          : "flex flex-col justify-between p-2 min-h-[110px]"
+          : "flex flex-col justify-between p-2 pt-5 pl-5 min-h-[110px]"
         }
         ${sizeClass}
         ${borderClass}
@@ -163,8 +179,14 @@ export function LiProduct({
       )}
 
       {sinStock && (
-        <div className="absolute -top-2 -left-2 bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full shadow-lg z-10 animate-pulse">
+        <div className="absolute -top-3 -left-2 sm:-top-2 bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full shadow-lg z-10 animate-pulse">
           SIN STOCK
+        </div>
+      )}
+
+      {sinPrecios && !sinStock && (
+        <div className="absolute -top-3 -left-2 sm:-top-2 bg-yellow-500 text-black text-xs font-bold px-2 py-0.5 rounded-full shadow-lg z-10 animate-pulse">
+          ⚠️ {faltaPrecioVenta && faltaPrecioCompra ? "SIN PRECIOS" : faltaPrecioVenta ? "SIN PRECIO VENTA" : "SIN PRECIO COMPRA"}
         </div>
       )}
 
@@ -188,7 +210,12 @@ export function LiProduct({
 
             <div className="flex flex-col sm:flex-row sm:items-center w-full truncate">
               <div className="flex gap-1 items-center">
-                <span className="font-semibold text-base md:text-xl truncate max-w-full flex items-center gap-1">
+                <span 
+                  className="font-semibold text-base md:text-xl truncate max-w-full flex items-center gap-1"
+                  title={prod.tipo === "custom"
+                    ? prod.user_custom_products?.name
+                    : prod.products_base?.name}
+                >
                   {prod.tipo === "custom"
                     ? prod.user_custom_products?.name
                     : prod.products_base?.name}
@@ -285,19 +312,23 @@ export function LiProduct({
                 rounded
                 active:scale-90
                 transition-all duration-200
-                ${enCarrito
-                  ? "bg-yellow-500 hover:bg-yellow-400 text-black"
-                  : "bg-green-600 text-white hover:bg-green-500 active:bg-green-700"
+                ${sinPrecios
+                  ? "bg-gray-500 text-gray-300 cursor-not-allowed"
+                  : enCarrito
+                    ? "bg-yellow-500 hover:bg-yellow-400 text-black"
+                    : "bg-green-600 text-white hover:bg-green-500 active:bg-green-700"
                 }
-  `}
+              `}
                 onClick={handleAgregarCarrito}
-                title={enCarrito ? "Agregar más" : "Agregar al carrito"}
+                title={sinPrecios 
+                  ? `No se puede agregar: ${faltaPrecioVenta && faltaPrecioCompra ? "falta precio de venta y compra" : faltaPrecioVenta ? "falta precio de venta" : "falta precio de compra"}` 
+                  : enCarrito ? "Agregar más" : "Agregar al carrito"}
               >
-                {enCarrito ? "➕" : "🛒"}
+                {sinPrecios ? "⚠️" : enCarrito ? "➕" : "🛒"}
               </button>
 
               <button
-                className="px-2 py-1 md:px-[.3em] md:p-[.2em] text-lg md:text-xl bg-blue-600 text-white rounded hover:bg-blue-400"
+                className="px-2 py-1 md:px-2 md:py-1 text-base md:text-lg bg-blue-500 hover:bg-blue-400 text-white rounded-lg transition-colors"
                 onClick={() => setIsEditing(!isEditing)}
                 title="Editar producto"
               >
@@ -305,11 +336,13 @@ export function LiProduct({
               </button>
 
               <button
-                className="px-2 py-1 md:px-[.3em] md:p-[.2em] text-lg md:text-xl bg-red-600 text-white rounded hover:bg-red-400"
+                className={`px-2 py-1 md:px-2 md:py-1 text-sm md:text-base rounded-lg transition-all opacity-50 hover:opacity-100 ${
+                  dark ? "hover:bg-red-600 text-gray-500" : "hover:bg-red-100 text-gray-400 hover:text-red-500"
+                }`}
                 onClick={() => setShowConfirmDelete(true)}
                 title="Eliminar producto"
               >
-                ❌
+                🗑️
               </button>
             </div>
           </div>
@@ -317,9 +350,9 @@ export function LiProduct({
       ) : (
         <div className="w-full flex flex-col">
           <div className="flex flex-col items-start justify-between gap-2 mb-2">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5">
-                <span className={`font-semibold text-sm truncate ${dark ? "text-white" : "text-gray-900"}`}>
+            <div className="w-full min-w-0 overflow-hidden">
+              <div className="flex items-start gap-1.5">
+                <span className={`font-semibold text-sm truncate max-w-full block ${dark ? "text-white" : "text-gray-900"}`}>
                   {prod.tipo === "custom"
                     ? prod.user_custom_products?.name
                     : prod.products_base?.name}
@@ -335,14 +368,17 @@ export function LiProduct({
                 </span>
               </div>
             </div>
-            <div className="flex gap-1 shrink-0">
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
               <button
-                className={`w-9 h-9 rounded-lg flex items-center justify-center text-sm transition-all ${
+                className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg font-bold transition-all shadow-md ${
                   enCarrito
-                    ? "bg-yellow-500 hover:bg-yellow-400 text-black"
-                    : esPeso && !pesoSeleccionado
-                      ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                      : "bg-green-600 hover:bg-green-500 text-white"
+                    ? "bg-yellow-500 hover:bg-yellow-400 text-black shadow-yellow-500/30"
+                    : sinPrecios
+                      ? "bg-gray-400 text-gray-200 cursor-not-allowed"
+                      : esPeso && !pesoSeleccionado
+                        ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                        : "bg-green-600 hover:bg-green-500 text-white shadow-green-600/30"
                 }`}
                 onClick={() => {
                   if (esPeso && pesoSeleccionado && pesoSeleccionado > 0) {
@@ -352,30 +388,32 @@ export function LiProduct({
                     handleAgregarCarrito();
                   }
                 }}
-                disabled={esPeso && !pesoSeleccionado}
+                disabled={sinPrecios || (esPeso && !pesoSeleccionado)}
+                title={sinPrecios ? "Faltan precios" : enCarrito ? "Agregar más" : "Agregar al carrito"}
               >
                 {esPeso ? (
                   pesoSeleccionado ? pesoSeleccionado.toFixed(2) : "⚖️"
                 ) : enCarrito ? "➕" : "🛒"}
               </button>
               <button
-                className={`w-9 h-9 rounded-lg flex items-center justify-center text-sm ${
+                className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm transition-all ${
                   dark ? "bg-blue-600 hover:bg-blue-500 text-white" : "bg-blue-500 hover:bg-blue-400 text-white"
                 }`}
                 onClick={() => setIsEditing(!isEditing)}
+                title="Editar producto"
               >
                 ✏️
               </button>
               <button
-                className={`w-9 h-9 rounded-lg flex items-center justify-center text-sm ${
-                  dark ? "bg-red-600 hover:bg-red-500 text-white" : "bg-red-500 hover:bg-red-400 text-white"
+                className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs transition-all opacity-50 hover:opacity-100 ${
+                  dark ? "hover:bg-red-600 text-gray-500" : "hover:bg-red-100 text-gray-400 hover:text-red-500"
                 }`}
                 onClick={() => setShowConfirmDelete(true)}
+                title="Eliminar producto"
               >
                 🗑️
               </button>
             </div>
-          </div>
 
           {enCarrito && (
             <div className={`text-xs font-medium mb-1.5 ${dark ? "text-yellow-400" : "text-yellow-700"}`}>
@@ -384,7 +422,7 @@ export function LiProduct({
           )}
 
           {esPeso && (
-            <div className={`flex  flex-col items-center gap-1.5 p-1 rounded-lg border text-base ${
+            <div className={`flex flex-col items-center gap-1.5 p-1 rounded-lg border text-base ${
               dark ? "border-yellow-500/30 bg-yellow-500/10" : "border-yellow-200 bg-yellow-50"
             }`}>
               <input
@@ -405,13 +443,21 @@ export function LiProduct({
                   <button
                     key={val}
                     onClick={() => {
+                      if (sinPrecios) {
+                        let msg = "⚠️ Faltan definir los siguientes precios:";
+                        if (faltaPrecioVenta) msg += "\n• Precio de VENTA";
+                        if (faltaPrecioCompra) msg += "\n• Precio de COMPRA";
+                        msg += "\n\nEditá el producto para agregarlos.";
+                        toast.warning(msg);
+                        return;
+                      }
                       if (enCarrito) {
                         agregarProductoCarrito(prod, color, { peso: val });
                       } else {
                         setPesoSeleccionado((prev) => (prev || 0) + val);
                       }
                     }}
-                    className={` flex-1 p-1 rounded text-center font-medium transition-colors ${
+                    className={`flex-1 p-1 rounded text-center font-medium transition-colors ${
                       dark ? "bg-gray-700 hover:bg-yellow-500/30" : "bg-white hover:bg-yellow-100 border border-gray-200"
                     }`}
                   >

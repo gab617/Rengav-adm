@@ -714,7 +714,7 @@ export function AgregarProductosSistema({ onClose }) {
                   <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>Stock</label>
                   <input
                     type="number"
-                    value={formSingle.stock}
+                    value={formSingle.stock === 0 ? "" : formSingle.stock}
                     onChange={(e) => setFormSingle(prev => ({ ...prev, stock: e.target.value }))}
                     placeholder="0"
                     className={`w-full px-2 py-1.5 rounded-lg border ${inputBg} text-sm`}
