@@ -12,6 +12,7 @@ export function AgregarProductosSistema({ onClose }) {
 
   const {
     productosSistema,
+    productosInactivos,
     assignedProducts,
     loading,
     fetchProductosSistema,
@@ -36,7 +37,7 @@ export function AgregarProductosSistema({ onClose }) {
     return new Set(products.map(p => p.base_id).filter(Boolean));
   }, [products]);
 
-  // Map de productos asignados con su info
+  // Map de productos asignados ACTIVOS con su info
   const productosAsignadosMap = useMemo(() => {
     const map = {};
     products.forEach(p => {
@@ -47,21 +48,34 @@ export function AgregarProductosSistema({ onClose }) {
     return map;
   }, [products]);
 
-  // Separar productos en dos listas (disponibles + asignados instantáneos)
+  // Set de productos INACTIVOS (del servidor)
+  const productosInactivosSet = useMemo(() => {
+    return new Set(productosInactivos || []);
+  }, [productosInactivos]);
+
+  // Separar productos en dos listas (disponibles + asignados)
+  // Los productos INACTIVOS van a "ya agregados", NO a disponibles
   const { productosDisponibles, productosAsignados } = useMemo(() => {
     const disponibles = [];
     const asignados = [];
     const seenBaseIds = new Set();
 
-    // Productos del sistema (ya asignados previamente)
+    // Productos del sistema
     productosSistema.forEach(p => {
+      const infoUsuario = productosAsignadosMap[p.id];
+      const isInactive = productosInactivosSet.has(p.id);
+
       seenBaseIds.add(p.id);
-      if (idsAsignados.has(p.id)) {
+
+      // Si tiene infoUsuario (activo) o está en inactivos, va a "ya agregados"
+      if (infoUsuario || isInactive) {
         asignados.push({
           ...p,
-          infoUsuario: productosAsignadosMap[p.id],
+          infoUsuario: infoUsuario || null,
+          isInactive,
         });
       } else {
+        // Si NO está asignado (ni activo ni inactivo), va a "disponibles"
         disponibles.push(p);
       }
     });
@@ -70,6 +84,7 @@ export function AgregarProductosSistema({ onClose }) {
     assignedProducts.forEach(p => {
       if (!seenBaseIds.has(p.base_id)) {
         seenBaseIds.add(p.base_id);
+        // Los recién agregados van a ambas listas
         disponibles.push({
           id: p.base_id,
           name: p.products_base?.name,
@@ -77,6 +92,7 @@ export function AgregarProductosSistema({ onClose }) {
           category_id: p.products_base?.category_id,
           subcategory_id: p.products_base?.subcategory_id,
           infoUsuario: p,
+          isInactive: false,
         });
       }
       // También agregar a asignados
@@ -88,19 +104,19 @@ export function AgregarProductosSistema({ onClose }) {
           category_id: p.products_base?.category_id,
           subcategory_id: p.products_base?.subcategory_id,
           infoUsuario: p,
+          isInactive: false,
         });
       }
     });
 
     return { productosDisponibles: disponibles, productosAsignados: asignados };
-  }, [productosSistema, assignedProducts, idsAsignados, productosAsignadosMap]);
+  }, [productosSistema, assignedProducts, productosAsignadosMap, productosInactivosSet]);
 
   // Estado
   const [activeTab, setActiveTab] = useState("disponibles");
   const [search, setSearch] = useState("");
   const [categoriaActiva, setCategoriaActiva] = useState("todas");
   const [subcategoriaActiva, setSubcategoriaActiva] = useState("todas");
-  const [soloDisponibles, setSoloDisponibles] = useState(false);
   
   // Selección múltiple
   const [selectedProducts, setSelectedProducts] = useState([]);
@@ -120,14 +136,18 @@ export function AgregarProductosSistema({ onClose }) {
     return subcategorias.filter(s => s.id_categoria === categoriaActiva);
   }, [categoriaActiva, subcategorias]);
 
-  // Filtrar productos según la pestaña activa y toggle
+  // Filtrar productos según la pestaña activa
+  // La pestaña "disponibles" SOLO muestra productos NO asignados
+  // La pestaña "asignados" muestra productos YA agregados
   const productosFiltrados = useMemo(() => {
     let source;
 
-    if (soloDisponibles) {
-      source = productosDisponibles.filter(p => !p.infoUsuario);
+    if (activeTab === "disponibles") {
+      // Solo productos NO asignados al usuario
+      source = productosDisponibles;
     } else {
-      source = activeTab === "disponibles" ? productosDisponibles : productosAsignados;
+      // Productos YA asignados
+      source = productosAsignados;
     }
 
     let result = source;
@@ -149,24 +169,24 @@ export function AgregarProductosSistema({ onClose }) {
     }
 
     return result;
-  }, [activeTab, productosDisponibles, productosAsignados, soloDisponibles, search, categoriaActiva, subcategoriaActiva]);
+  }, [activeTab, productosDisponibles, productosAsignados, search, categoriaActiva, subcategoriaActiva]);
 
-  // Contadores por categoría
+  // Contadores por categoría (solo para productos NO asignados)
   const conteoPorCategoria = useMemo(() => {
-    const counts = { todas: productosSistema.length };
-    productosSistema.forEach(p => {
+    const counts = { todas: productosDisponibles.length };
+    productosDisponibles.forEach(p => {
       if (p.category_id) {
         counts[p.category_id] = (counts[p.category_id] || 0) + 1;
       }
     });
     return counts;
-  }, [productosSistema]);
+  }, [productosDisponibles]);
 
-  // Contadores por subcategoría
+  // Contadores por subcategoría (solo para productos NO asignados)
   const conteoPorSubcategoria = useMemo(() => {
     if (categoriaActiva === "todas") return {};
     const counts = { todas: conteoPorCategoria[categoriaActiva] || 0 };
-    productosSistema
+    productosDisponibles
       .filter(p => p.category_id === categoriaActiva)
       .forEach(p => {
         if (p.subcategory_id) {
@@ -174,13 +194,13 @@ export function AgregarProductosSistema({ onClose }) {
         }
       });
     return counts;
-  }, [productosSistema, categoriaActiva, conteoPorCategoria]);
+  }, [productosDisponibles, categoriaActiva, conteoPorCategoria]);
 
-  // Categorías con productos
+  // Categorías con productos NO asignados
   const categoriasConProductos = useMemo(() => {
-    const catIds = new Set(productosSistema.map(p => p.category_id).filter(Boolean));
+    const catIds = new Set(productosDisponibles.map(p => p.category_id).filter(Boolean));
     return categorias.filter(c => catIds.has(c.id));
-  }, [categorias, productosSistema]);
+  }, [categorias, productosDisponibles]);
 
   // Toggle selección de producto (clic en toda la card)
   const toggleProductSelection = (producto) => {
@@ -193,11 +213,9 @@ export function AgregarProductosSistema({ onClose }) {
     });
   };
 
-  // Toggle seleccionar todos (solo disponibles cuando el filtro está activo)
+  // Toggle seleccionar todos
   const toggleSelectAll = () => {
-    const source = soloDisponibles 
-      ? productosDisponibles.filter(p => !p.infoUsuario)
-      : productosDisponibles;
+    const source = productosDisponibles;
     
     if (selectedProducts.length === source.length) {
       setSelectedProducts([]);
@@ -338,29 +356,6 @@ export function AgregarProductosSistema({ onClose }) {
           </div>
         </div>
 
-        {/* TOGGLE SOLO DISPONIBLES */}
-        <div className={`px-4 py-2 border-b ${borderColor} flex items-center justify-between`}>
-          <span className={`text-xs ${textSecondary}`}>
-            {productosAsignados.length} ya asignados
-          </span>
-          <button
-            onClick={() => {
-              setSoloDisponibles(!soloDisponibles);
-              setActiveTab("disponibles");
-              setSelectedProducts([]);
-            }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-2 ${
-              soloDisponibles
-                ? "bg-green-500 text-white"
-                : dark
-                  ? "bg-gray-700 text-gray-300"
-                  : "bg-gray-100 text-gray-600"
-            }`}
-          >
-            {soloDisponibles ? "✓" : "○"} Solo disponibles
-          </button>
-        </div>
-
         {/* BARRA DE ACCIÓN */}
         {activeTab === "disponibles" && selectedProducts.length > 0 && (
           <div className={`px-4 py-2 border-b ${borderColor} ${dark ? "bg-green-500/10" : "bg-green-50"}`}>
@@ -386,7 +381,7 @@ export function AgregarProductosSistema({ onClose }) {
         {/* CONTENIDO */}
         <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
           {/* LISTA DE PRODUCTOS */}
-          <div className={`flex-1 overflow-y-auto p-4 ${borderColor} md:border-r`}>
+          <div className={`flex-1 overflow-y-auto p-2 sm:p-4 ${borderColor} md:border-r ${selectedProducts.length > 0 && esMobile ? "pb-28" : ""}`}>
             {/* BÚSQUEDA */}
             <div className="relative mb-3">
               <span className="absolute left-3 top-1/2 -translate-y-1/2">🔍</span>
@@ -504,17 +499,22 @@ export function AgregarProductosSistema({ onClose }) {
                   const cat = categorias.find(c => c.id === producto.category_id);
                   const subcat = subcategorias.find(s => s.id === producto.subcategory_id);
                   const infoUsuario = producto.infoUsuario;
+                  const isInactive = producto.isInactive;
                   const isSelected = selectedProducts.some(p => p.id === producto.id);
+
+                  const cardClasses = isSelected
+                    ? `border-green-500 ${dark ? "bg-green-500/20" : "bg-green-50"}`
+                    : isInactive
+                      ? `${bgCard} ${borderColor} opacity-50`
+                      : `${bgCard} ${borderColor} hover:border-blue-400`;
 
                   return (
                     <div
                       key={producto.id}
-                      onClick={() => activeTab === "disponibles" && toggleProductSelection(producto)}
-                      className={`p-3 rounded-xl border cursor-pointer transition-all ${
-                        isSelected
-                          ? `border-green-500 ${dark ? "bg-green-500/20" : "bg-green-50"}`
-                          : `${bgCard} ${borderColor} hover:border-blue-400`
-                      }`}
+                      onClick={() => activeTab === "disponibles" && !isInactive && toggleProductSelection(producto)}
+                      className={`p-3 rounded-xl border cursor-pointer transition-all ${cardClasses} ${
+                        activeTab === "disponibles" && !isInactive ? "cursor-pointer" : ""
+                      } ${isInactive && activeTab === "yaAsignados" ? "cursor-default" : ""}`}
                     >
                       <div className="flex items-start gap-3">
                         {/* INDICADOR DE SELECCIÓN */}
@@ -543,14 +543,19 @@ export function AgregarProductosSistema({ onClose }) {
                               </p>
                             </div>
                             <div className="flex items-center gap-1 flex-shrink-0">
-                              {infoUsuario && (
+                              {isInactive ? (
+                                <span className={`px-2 py-0.5 rounded text-xs ${
+                                  dark ? "bg-red-500/30 text-red-400" : "bg-red-100 text-red-600"
+                                }`}>
+                                  ⛔ Inactivo
+                                </span>
+                              ) : infoUsuario ? (
                                 <span className={`px-2 py-0.5 rounded text-xs ${
                                   dark ? "bg-blue-500/30 text-blue-400" : "bg-blue-100 text-blue-600"
                                 }`}>
                                   ✓
                                 </span>
-                              )}
-                              {!infoUsuario && (
+                              ) : (
                                 <span className={`px-2 py-0.5 rounded text-xs ${
                                   dark ? "bg-green-500/30 text-green-400" : "bg-green-100 text-green-600"
                                 }`}>
@@ -580,14 +585,13 @@ export function AgregarProductosSistema({ onClose }) {
           </div>
 
           {/* PANEL LATERAL */}
-          <div className={`w-full md:w-72 p-4 overflow-y-auto ${bgModal}`}>
+          <div className={`hidden md:block md:w-72 p-4 overflow-y-auto ${bgModal}`}>
             {selectedProducts.length === 0 ? (
               <div className={`text-center py-8 ${textSecondary}`}>
                 <span className="text-4xl mb-2 block">👆</span>
                 <p className="text-sm">Hacé click en un producto para seleccionarlo</p>
               </div>
             ) : isSingleSelection ? (
-              /* UN SOLO PRODUCTO - FORMULARIO */
               <div className="space-y-4">
                 <div>
                   <h3 className={`font-bold ${textPrimary}`}>
@@ -599,121 +603,165 @@ export function AgregarProductosSistema({ onClose }) {
                   </p>
                 </div>
 
-                <div>
-                  <label className={`block text-sm font-medium mb-1 ${textSecondary}`}>
-                    Precio Compra
-                  </label>
-                  <input
-                    type="number"
-                    value={formSingle.precio_compra}
-                    onChange={(e) => setFormSingle(prev => ({ ...prev, precio_compra: e.target.value }))}
-                    placeholder="0"
-                    className={`w-full px-3 py-2 rounded-xl border ${inputBg} text-sm`}
-                  />
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>P. Compra</label>
+                    <input
+                      type="number"
+                      value={formSingle.precio_compra}
+                      onChange={(e) => setFormSingle(prev => ({ ...prev, precio_compra: e.target.value }))}
+                      placeholder="0"
+                      className={`w-full px-2 py-1.5 rounded-lg border ${inputBg} text-sm`}
+                    />
+                  </div>
+                  <div>
+                    <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>P. Venta</label>
+                    <input
+                      type="number"
+                      value={formSingle.precio_venta}
+                      onChange={(e) => setFormSingle(prev => ({ ...prev, precio_venta: e.target.value }))}
+                      placeholder="0"
+                      className={`w-full px-2 py-1.5 rounded-lg border ${inputBg} text-sm`}
+                    />
+                  </div>
                 </div>
 
                 <div>
-                  <label className={`block text-sm font-medium mb-1 ${textSecondary}`}>
-                    Precio Venta
-                  </label>
-                  <input
-                    type="number"
-                    value={formSingle.precio_venta}
-                    onChange={(e) => setFormSingle(prev => ({ ...prev, precio_venta: e.target.value }))}
-                    placeholder="0"
-                    className={`w-full px-3 py-2 rounded-xl border ${inputBg} text-sm`}
-                  />
-                </div>
-
-                <div>
-                  <label className={`block text-sm font-medium mb-1 ${textSecondary}`}>
-                    Stock
-                  </label>
+                  <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>Stock</label>
                   <input
                     type="number"
                     value={formSingle.stock}
                     onChange={(e) => setFormSingle(prev => ({ ...prev, stock: e.target.value }))}
                     placeholder="0"
-                    className={`w-full px-3 py-2 rounded-xl border ${inputBg} text-sm`}
-                  />
-                </div>
-
-                <div>
-                  <label className={`block text-sm font-medium mb-1 ${textSecondary}`}>
-                    Descripción
-                  </label>
-                  <textarea
-                    value={formSingle.descripcion}
-                    onChange={(e) => setFormSingle(prev => ({ ...prev, descripcion: e.target.value }))}
-                    placeholder="Notas..."
-                    rows={2}
-                    className={`w-full px-3 py-2 rounded-xl border ${inputBg} text-sm resize-none`}
+                    className={`w-full px-2 py-1.5 rounded-lg border ${inputBg} text-sm`}
                   />
                 </div>
 
                 <button
                   onClick={handleAgregarUno}
                   disabled={submitting}
-                  className="w-full py-3 bg-green-500 text-white rounded-xl font-medium disabled:opacity-50 hover:bg-green-600 transition-colors"
+                  className="w-full py-2 bg-green-500 text-white rounded-lg font-medium disabled:opacity-50 hover:bg-green-600 transition-colors text-sm"
                 >
-                  {submitting ? "Agregando..." : "✓ Agregar producto"}
+                  {submitting ? "..." : "✓ Agregar"}
                 </button>
               </div>
             ) : (
-              /* MÚLTIPLES PRODUCTOS - LISTADO */
-              <div className="space-y-4">
+              <div className="space-y-3">
                 <div>
                   <h3 className={`font-bold ${textPrimary}`}>
                     📋 {selectedProducts.length} productos
                   </h3>
-                  <p className={`text-sm ${textSecondary}`}>
-                    Carga masiva sin datos específicos
-                  </p>
+                  <p className={`text-xs ${textSecondary}`}>Carga masiva</p>
                 </div>
 
-                <div className={`max-h-64 overflow-y-auto rounded-xl border ${borderColor}`}>
-                  {selectedProducts.map((producto, index) => {
-                    const cat = categorias.find(c => c.id === producto.category_id);
-                    return (
-                      <div
-                        key={producto.id}
-                        className={`p-2 flex items-center justify-between gap-2 ${
-                          index !== 0 ? `border-t ${borderColor}` : ""
-                        }`}
+                <div className={`max-h-48 overflow-y-auto rounded-lg border ${borderColor}`}>
+                  {selectedProducts.map((producto, index) => (
+                    <div
+                      key={producto.id}
+                      className={`p-2 flex items-center justify-between gap-2 ${
+                        index !== 0 ? `border-t ${borderColor}` : ""
+                      }`}
+                    >
+                      <p className={`text-sm truncate flex-1 ${textPrimary}`}>{producto.name}</p>
+                      <button
+                        onClick={() => toggleProductSelection(producto)}
+                        className={`p-1 rounded text-xs ${dark ? "hover:bg-gray-700 text-gray-400" : "hover:bg-gray-100 text-gray-500"}`}
                       >
-                        <div className="flex-1 min-w-0">
-                          <p className={`text-sm font-medium truncate ${textPrimary}`}>
-                            {producto.name}
-                          </p>
-                          <p className={`text-xs truncate ${textSecondary}`}>
-                            {cat?.nombre || "Sin categoría"}
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => toggleProductSelection(producto)}
-                          className={`p-1 rounded ${dark ? "hover:bg-gray-700 text-gray-400" : "hover:bg-gray-100 text-gray-500"}`}
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    );
-                  })}
+                        ✕
+                      </button>
+                    </div>
+                  ))}
                 </div>
 
                 <button
                   onClick={handleAgregarBulk}
                   disabled={submitting}
-                  className="w-full py-3 bg-green-500 text-white rounded-xl font-medium disabled:opacity-50 hover:bg-green-600 transition-colors"
+                  className="w-full py-2 bg-green-500 text-white rounded-lg font-medium disabled:opacity-50 hover:bg-green-600 transition-colors text-sm"
                 >
-                  {submitting ? "Agregando..." : `✓ Agregar ${selectedProducts.length} productos`}
+                  {submitting ? "..." : `✓ Agregar ${selectedProducts.length}`}
                 </button>
-
-                <p className={`text-xs text-center ${textSecondary}`}>
-                  Los productos se agregarán con precio y stock en 0
-                </p>
               </div>
             )}
           </div>
+
+          {/* BARRA INFERIOR MOBILE */}
+          {esMobile && selectedProducts.length > 0 && (
+            <div className={`fixed bottom-0 left-0 right-0 p-2 ${bgModal} border-t ${borderColor} shadow-xl z-50`}>
+              {isSingleSelection ? (
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className={`text-xs font-medium truncate flex-1 ${textPrimary}`}>
+                      {selectedProducts[0].name}
+                    </p>
+                    <button
+                      onClick={() => setSelectedProducts([])}
+                      className={`p-1 rounded text-xs ${dark ? "bg-gray-700 text-gray-300" : "bg-gray-200 text-gray-600"}`}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <div className="flex gap-1">
+                    <input
+                      type="number"
+                      value={formSingle.precio_compra}
+                      onChange={(e) => setFormSingle(prev => ({ ...prev, precio_compra: e.target.value }))}
+                      placeholder="Comp"
+                      className={`flex-1 min-w-0 px-1.5 py-1 rounded border ${inputBg} text-xs`}
+                    />
+                    <input
+                      type="number"
+                      value={formSingle.precio_venta}
+                      onChange={(e) => setFormSingle(prev => ({ ...prev, precio_venta: e.target.value }))}
+                      placeholder="Vent"
+                      className={`flex-1 min-w-0 px-1.5 py-1 rounded border ${inputBg} text-xs`}
+                    />
+                    <input
+                      type="number"
+                      value={formSingle.stock}
+                      onChange={(e) => setFormSingle(prev => ({ ...prev, stock: e.target.value }))}
+                      placeholder="Stk"
+                      className={`w-12 px-1.5 py-1 rounded border ${inputBg} text-xs`}
+                    />
+                    <button
+                      onClick={handleAgregarUno}
+                      disabled={submitting}
+                      className="px-2 py-1 bg-green-500 text-white rounded font-medium text-xs disabled:opacity-50"
+                    >
+                      ✓
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between gap-1">
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-xs font-medium ${textPrimary}`}>
+                      📋 {selectedProducts.length} productos
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setSelectedProducts([])}
+                    className={`p-1 rounded text-xs ${dark ? "bg-gray-700 text-gray-300" : "bg-gray-200 text-gray-600"}`}
+                  >
+                    ✕
+                  </button>
+                  <button
+                    onClick={handleAgregarBulk}
+                    disabled={submitting}
+                    className="px-3 py-1 bg-green-500 text-white rounded font-medium text-xs disabled:opacity-50"
+                  >
+                    ✓ Agregar
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* INDICADOR MOBILE CUANDO NO HAY SELECCIÓN */}
+          {esMobile && selectedProducts.length === 0 && (
+            <div className={`md:hidden fixed bottom-0 left-0 right-0 p-2 ${bgModal} border-t ${borderColor}`}>
+              <p className={`text-xs text-center ${textSecondary}`}>👆 Seleccioná productos</p>
+            </div>
+          )}
         </div>
       </div>
     </div>

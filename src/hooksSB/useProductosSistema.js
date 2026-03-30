@@ -7,6 +7,7 @@ import { supabase } from "../services/supabaseClient";
  */
 export const useProductosSistema = (userId, categorias = [], productosActuales = []) => {
   const [productosSistema, setProductosSistema] = useState([]);
+  const [productosInactivos, setProductosInactivos] = useState([]);
   const [assignedProducts, setAssignedProducts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -17,12 +18,14 @@ export const useProductosSistema = (userId, categorias = [], productosActuales =
     if (!userId) {
       setError("No hay usuario");
       setProductosSistema([]);
+      setProductosInactivos([]);
       return [];
     }
 
     if (categoryIds.length === 0) {
       setError("El usuario no tiene categorías asignadas");
       setProductosSistema([]);
+      setProductosInactivos([]);
       return [];
     }
 
@@ -30,6 +33,7 @@ export const useProductosSistema = (userId, categorias = [], productosActuales =
     setError(null);
 
     try {
+      // Productos base del sistema
       const { data: productosBase, error: errorBase } = await supabase
         .from("products_base")
         .select(`
@@ -60,12 +64,28 @@ export const useProductosSistema = (userId, categorias = [], productosActuales =
       }));
 
       setProductosSistema(normalizados);
+
+      // Obtener productos INACTIVOS del usuario
+      const { data: inactivosData, error: errorInactivos } = await supabase
+        .from("user_products")
+        .select("base_id")
+        .eq("user_id", userId)
+        .eq("active", false);
+
+      if (errorInactivos) {
+        console.warn("Error al obtener productos inactivos:", errorInactivos);
+      }
+
+      const inactivosSet = new Set((inactivosData || []).map(p => p.base_id));
+      setProductosInactivos(Array.from(inactivosSet));
+
       return normalizados;
 
     } catch (err) {
       console.error("Error fetching productos sistema:", err);
       setError(err.message);
       setProductosSistema([]);
+      setProductosInactivos([]);
       return [];
     } finally {
       setLoading(false);
@@ -87,14 +107,35 @@ export const useProductosSistema = (userId, categorias = [], productosActuales =
     }
 
     try {
+      // Primero verificar cuáles productos YA existen en la base de datos
+      const baseIds = productos.map(p => p.id);
+      const { data: existentes, error: errorCheck } = await supabase
+        .from("user_products")
+        .select("base_id")
+        .eq("user_id", userId)
+        .in("base_id", baseIds);
+
+      if (errorCheck) throw errorCheck;
+
+      const existentesSet = new Set((existentes || []).map(e => e.base_id));
+      const nuevosProductos = productos.filter(p => !existentesSet.has(p.id));
+
+      if (nuevosProductos.length === 0) {
+        return { error: "Todos los productos seleccionados ya están agregados" };
+      }
+
+      if (nuevosProductos.length < productos.length) {
+        console.log(`⚠️ ${productos.length - nuevosProductos.length} productos ya existían, se agregarán ${nuevosProductos.length}`);
+      }
+
       // Preparar datos para bulk insert
       const precio_compra = datos.precio_compra ?? 0;
       const precio_venta = datos.precio_venta ?? 0;
       const stock = datos.stock ?? 0;
       const descripcion = datos.descripcion ?? null;
 
-      // Crear array de registros para insertar
-      const registros = productos.map(producto => ({
+      // Crear array de registros para insertar (solo los nuevos)
+      const registros = nuevosProductos.map(producto => ({
         user_id: userId,
         base_id: producto.id,
         precio_compra,
@@ -107,7 +148,7 @@ export const useProductosSistema = (userId, categorias = [], productosActuales =
       console.log("➕ Bulk insert:", registros.length, "productos");
 
       // UNA SOLA PETICIÓN para insertar todos
-      const { data: nuevosProductos, error: errorInsert } = await supabase
+      const { data: insertados, error: errorInsert } = await supabase
         .from("user_products")
         .insert(registros)
         .select(`
@@ -134,7 +175,7 @@ export const useProductosSistema = (userId, categorias = [], productosActuales =
       if (errorInsert) throw errorInsert;
 
       // Normalizar respuesta
-      const normalizados = nuevosProductos.map(p => ({
+      const normalizados = (insertados || []).map(p => ({
         ...p,
         tipo: "base",
         products_base: {
@@ -149,7 +190,7 @@ export const useProductosSistema = (userId, categorias = [], productosActuales =
       }));
 
       // Remover de la lista de disponibles
-      const idsAgregados = productos.map(p => p.id);
+      const idsAgregados = nuevosProductos.map(p => p.id);
       setProductosSistema(prev => prev.filter(p => !idsAgregados.includes(p.id)));
 
       // Agregar a la lista de asignados (actualización instantánea sin peticiones)
@@ -169,6 +210,7 @@ export const useProductosSistema = (userId, categorias = [], productosActuales =
 
   return {
     productosSistema,
+    productosInactivos,
     assignedProducts,
     loading,
     error,
