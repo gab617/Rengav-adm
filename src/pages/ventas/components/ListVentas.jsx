@@ -258,6 +258,7 @@ export function ListVentas({
               ventasFiltradas={ventasFiltradas}
               fechaSeleccionada={fechaSeleccionada}
               mesSeleccionado={mesSeleccionado}
+              printRef={panelRef}
             />
           </div>
         )}

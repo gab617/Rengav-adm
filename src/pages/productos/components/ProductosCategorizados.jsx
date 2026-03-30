@@ -6,31 +6,35 @@ export function ProductosCategorizados({ productosPorCategoria }) {
   const { preferencias, updatePreferencias } = useAppContext();
   const dark = preferencias?.theme === "dark";
 
-  // Detectar mobile (simple y efectivo)
-  const esMobile = window.innerWidth < 768;
+  const [esMobile, setEsMobile] = useState(window.innerWidth < 768);
 
-  // Vista inicial
-  const [vista, setVista] = useState("listado");
+  useEffect(() => {
+    const handleResize = () => setEsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  const [vista, setVista] = useState("mosaico");
   const [tamano, setTamano] = useState("normal");
 
-  // Sincronizar vista según preferencias / mobile
   useEffect(() => {
-    if (esMobile) {
-      setVista("listado");
-    } else if (preferencias?.view_products) {
+    if (preferencias?.view_products) {
       setVista(preferencias.view_products === "list" ? "listado" : "mosaico");
     }
   }, [preferencias]);
 
-  // Grid dinámico
   const gridCols =
     vista === "listado"
       ? "grid-cols-1"
       : tamano === "chico"
-      ? "grid-cols-6"
-      : tamano === "grande"
-      ? "grid-cols-3"
-      : "grid-cols-4";
+        ? esMobile
+          ? "grid-cols-4"
+          : "grid-cols-6"
+        : tamano === "grande"
+          ? "grid-cols-2 md:grid-cols-3"
+          : esMobile
+            ? "grid-cols-2 md:grid-cols-3 lg:grid-cols-4"
+            : "grid-cols-3 md:grid-cols-4";
 
   return (
     <div
@@ -40,90 +44,84 @@ export function ProductosCategorizados({ productosPorCategoria }) {
           : "bg-gray-50 text-gray-900 min-h-screen"
       }`}
     >
-      {/* === BOTONERA === */}
       <div
         className={`flex items-center gap-2 mb-4 p-2 rounded-lg sticky top-0 z-10 shadow transition-colors ${
           dark ? "bg-gray-800" : "bg-white"
         }`}
       >
-        {/* LISTADO (siempre disponible) */}
         <button
           onClick={() => {
-            setVista("listado");
-            updatePreferencias({ view_products: "list" });
+            setVista("mosaico");
+            updatePreferencias({ view_products: "mosaic" });
           }}
-          className={`p-2 rounded-lg flex items-center gap-1 transition-colors ${
-            vista === "listado"
-              ? "bg-blue-500 text-white"
+          className={`p-2 rounded-lg flex items-center gap-1 transition-all ${
+            vista === "mosaico"
+              ? "bg-blue-500 text-white shadow-lg shadow-blue-500/30"
               : dark
               ? "bg-gray-700 text-gray-300 hover:bg-gray-600"
               : "bg-gray-200 text-gray-700 hover:bg-gray-300"
           }`}
         >
-          📋 Listado
+          <span className="text-lg">🔳</span>
+          <span className="hidden sm:inline">Mosaico</span>
         </button>
 
-        {/* MOSAICO (solo tablet / desktop) */}
-        {!esMobile && (
+        <button
+          onClick={() => {
+            setVista("listado");
+            updatePreferencias({ view_products: "list" });
+          }}
+          className={`p-2 rounded-lg flex items-center gap-1 transition-all ${
+            vista === "listado"
+              ? "bg-blue-500 text-white shadow-lg shadow-blue-500/30"
+              : dark
+              ? "bg-gray-700 text-gray-300 hover:bg-gray-600"
+              : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+          }`}
+        >
+          <span className="text-lg">📋</span>
+          <span className="hidden sm:inline">Listado</span>
+        </button>
+
+        <div className="ml-auto flex gap-2">
           <button
-            onClick={() => {
-              setVista("mosaico");
-              updatePreferencias({ view_products: "mosaic" });
-            }}
-            className={`p-2 rounded-lg flex items-center gap-1 transition-colors ${
-              vista === "mosaico"
-                ? "bg-blue-500 text-white"
-                : dark
-                ? "bg-gray-700 text-gray-300 hover:bg-gray-600"
-                : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+            onClick={() =>
+              setTamano((prev) =>
+                prev === "grande"
+                  ? "normal"
+                  : prev === "normal"
+                  ? "chico"
+                  : "chico"
+              )
+            }
+            className={`p-2 rounded-lg transition-colors ${
+              dark
+                ? "bg-gray-700 hover:bg-gray-600"
+                : "bg-gray-200 hover:bg-gray-300"
             }`}
           >
-            🔳 Mosaico
+            ➖
           </button>
-        )}
 
-        {/* Tamaños (no mobile) */}
-        {!esMobile && vista === "mosaico" && (
-          <div className="ml-auto flex gap-2">
-            <button
-              onClick={() =>
-                setTamano((prev) =>
-                  prev === "grande"
-                    ? "normal"
-                    : prev === "normal"
-                    ? "chico"
-                    : "chico"
-                )
-              }
-              className={`p-2 rounded-lg transition-colors ${
-                dark
-                  ? "bg-gray-700 hover:bg-gray-600"
-                  : "bg-gray-200 hover:bg-gray-300"
-              }`}
-            >
-              ➖
-            </button>
-
-            <button
-              onClick={() =>
-                setTamano((prev) =>
-                  prev === "chico"
-                    ? "normal"
-                    : prev === "normal"
-                    ? "grande"
-                    : "grande"
-                )
-              }
-              className={`p-2 rounded-lg transition-colors ${
-                dark
-                  ? "bg-gray-700 hover:bg-gray-600"
-                  : "bg-gray-200 hover:bg-gray-300"
-              }`}
-            >
-              ➕
-            </button>
-          </div>
-        )}
+          <button
+            onClick={() =>
+              setTamano((prev) =>
+                prev === "chico"
+                  ? "normal"
+                  : prev === "normal"
+                  ? "grande"
+                  : "grande"
+              )
+            }
+            className={`p-2 rounded-lg transition-colors ${
+              dark
+                ? "bg-gray-700 hover:bg-gray-600"
+                : "bg-gray-200 hover:bg-gray-300"
+            }`}
+          >
+            ➕
+          </button>
+        </div>
       </div>
 
       {/* === CONTENIDO === */}

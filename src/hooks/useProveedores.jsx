@@ -1,48 +1,62 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../services/supabaseClient";
 
 export const useProveedores = ({ userId }) => {
   const [proveedores, setProveedores] = useState([]);
   const [pedidos, setPedidos] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // ============================
-  //      FETCH PROVEEDORES
-  // ============================
-  const fetchProveedores = async () => {
+  const fetchProveedores = useCallback(async () => {
+    if (!userId) return;
+    
     try {
-      const { data, error } = await supabase
-        .from("user_providers") // ← TABLA CORRECTA
+      setLoading(true);
+      setError(null);
+      
+      const { data, error: fetchError } = await supabase
+        .from("user_providers")
         .select("*")
         .eq("user_id", userId)
         .order("nombre", { ascending: true });
 
-      if (error) throw error;
+      if (fetchError) throw fetchError;
       setProveedores(data || []);
     } catch (err) {
       setError(err.message);
+      console.error("Error fetching proveedores:", err);
+    } finally {
+      setLoading(false);
     }
-  };
+  }, [userId]);
 
-  // ============================
-  //      CRUD PROVEEDORES
-  // ============================
-  const agregarProveedor = async (proveedor) => {
+  useEffect(() => {
+    fetchProveedores();
+  }, [fetchProveedores]);
+
+  const agregarProveedor = useCallback(async (proveedor) => {
     try {
-      const { error } = await supabase.from("user_providers").insert({
+      const { data, error: insertError } = await supabase.from("user_providers").insert({
         ...proveedor,
         user_id: userId,
-      });
+      }).select();
 
-      if (error) throw error;
-      fetchProveedores();
+      if (insertError) throw insertError;
+      
+      if (data && data.length > 0) {
+        setProveedores(prev => [...prev, data[0]].sort((a, b) => 
+          a.nombre.localeCompare(b.nombre, "es")
+        ));
+      }
+      
+      return { success: true };
     } catch (err) {
       setError(err.message);
+      return { success: false, error: err.message };
     }
-  };
+  }, [userId]);
 
-  // 🔥 ACTUALIZAR PROVEEDOR usando user_id para evitar romper RLS
-  const actualizarProveedor = async (id, proveedor) => {
+  const actualizarProveedor = useCallback(async (id, proveedor) => {
     try {
       const camposEditables = {
         nombre: proveedor.nombre,
@@ -52,45 +66,54 @@ export const useProveedores = ({ userId }) => {
         descripcion: proveedor.descripcion,
       };
 
-      const { error } = await supabase
+      const { data, error: updateError } = await supabase
         .from("user_providers")
         .update(camposEditables)
-        .eq("id", id);
+        .eq("id", id)
+        .eq("user_id", userId)
+        .select();
 
-      if (error) throw error;
-      fetchProveedores();
+      if (updateError) throw updateError;
+      
+      if (data && data.length > 0) {
+        setProveedores(prev => {
+          const filtered = prev.filter(p => p.id !== id);
+          return [...filtered, data[0]].sort((a, b) => 
+            a.nombre.localeCompare(b.nombre, "es")
+          );
+        });
+      }
+      
+      return { success: true };
     } catch (err) {
       setError(err.message);
+      return { success: false, error: err.message };
     }
-  };
+  }, [userId]);
 
-  // 🔥 ELIMINAR PROVEEDOR usando user_id para pasar RLS
-  const eliminarProveedor = async (id) => {
-    const confirmar = window.confirm(
-      "¿Seguro que deseas eliminar este proveedor?"
-    );
-    if (!confirmar) return;
-
+  const eliminarProveedor = useCallback(async (id) => {
     try {
-      const { error } = await supabase
+      const { data, error: deleteError } = await supabase
         .from("user_providers")
         .delete()
         .eq("id", id)
-        .eq("user_id", userId); // ⬅️ también obligatorio con RLS
+        .eq("user_id", userId)
+        .select();
 
-      if (error) throw error;
-      fetchProveedores();
+      if (deleteError) throw deleteError;
+      
+      if (data && data.length > 0) {
+        setProveedores(prev => prev.filter(p => p.id !== data[0].id));
+      }
+      
+      return { success: true };
     } catch (err) {
       setError(err.message);
+      return { success: false, error: err.message };
     }
-  };
+  }, [userId]);
 
-  // ============================
-  //      MANEJO PEDIDOS
-  // ============================
-
-  // ➤ Agregar o incrementar cantidad
-  const agregarPedido = (producto) => {
+  const agregarPedido = useCallback((producto) => {
     setPedidos((prev) => {
       const existe = prev.find((p) => p.id === producto.id);
 
@@ -102,24 +125,21 @@ export const useProveedores = ({ userId }) => {
 
       return [...prev, { ...producto, cantidad: 1 }];
     });
-  };
+  }, []);
 
-  // ➤ Restar (si queda 0 → eliminar)
-  const restarPedido = (id) => {
+  const restarPedido = useCallback((id) => {
     setPedidos((prev) =>
       prev
         .map((p) => (p.id === id ? { ...p, cantidad: p.cantidad - 1 } : p))
         .filter((p) => p.cantidad > 0)
     );
-  };
+  }, []);
 
-  // ➤ Eliminar
-  const eliminarPedido = (id) => {
+  const eliminarPedido = useCallback((id) => {
     setPedidos((prev) => prev.filter((p) => p.id !== id));
-  };
+  }, []);
 
-  // ➤ Input editable
-  const handleInputPedido = (id, cantidad) => {
+  const handleInputPedido = useCallback((id, cantidad) => {
     setPedidos((prev) =>
       prev.map((p) =>
         p.id === id
@@ -127,33 +147,26 @@ export const useProveedores = ({ userId }) => {
           : p
       )
     );
-  };
+  }, []);
 
-  // ➤ Validación al perder foco
-  const handleBlurPedido = (id, cantidad) => {
+  const handleBlurPedido = useCallback((id, cantidad) => {
     let cant = parseInt(cantidad, 10);
     if (isNaN(cant) || cant < 1) cant = 1;
 
     setPedidos((prev) =>
       prev.map((p) => (p.id === id ? { ...p, cantidad: cant } : p))
     );
-  };
+  }, []);
 
-  // ➤ Vaciar lista
-  const limpiarPedidos = () => setPedidos([]);
-
-  // ============================
-  //          INIT
-  // ============================
-  useEffect(() => {
-    if (userId) fetchProveedores();
-  }, [userId]);
+  const limpiarPedidos = useCallback(() => setPedidos([]), []);
 
   return {
     proveedores,
     pedidos,
+    loading,
     error,
-
+    
+    fetchProveedores,
     agregarProveedor,
     actualizarProveedor,
     eliminarProveedor,

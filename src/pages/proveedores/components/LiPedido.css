@@ -1,7 +1,2 @@
-.p-pedido{
-    border:1px solid;
-    padding: .2em;
-    justify-content: flex;
-    width: 100%;
-    
-}
+/* LiPedido.css - Estilos heredados del componente anterior, ya no necesarios */
+/* Los estilos ahora se manejan directamente con Tailwind en el componente */

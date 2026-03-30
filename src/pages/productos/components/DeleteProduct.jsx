@@ -1,55 +1,39 @@
 import React from "react";
 
 export function DeleteProduct({ handleDelete, setShowConfirmDelete }) {
-  const esMobile = window.innerWidth < 768;
-
-  if (esMobile) {
-    // ===== MOBILE → MODAL CENTRADO =====
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-        <div className="bg-white rounded-2xl shadow-2xl p-5 w-[90%] max-w-sm">
-          <p className="text-center text-red-600 font-semibold mb-4">
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      onClick={() => setShowConfirmDelete(false)}
+    >
+      <div
+        className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-5 w-[90%] max-w-sm"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="text-center mb-4">
+          <div className="text-5xl mb-2">⚠️</div>
+          <p className="text-red-600 dark:text-red-400 font-semibold">
             ¿Seguro que deseas eliminar este producto?
           </p>
-
-          <div className="flex justify-between gap-3">
-            <button
-              className="flex-1 px-3 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600"
-              onClick={handleDelete}
-            >
-              ✅ Sí, eliminar
-            </button>
-            <button
-              className="flex-1 px-3 py-2 bg-gray-400 text-white rounded-lg hover:bg-gray-500"
-              onClick={() => setShowConfirmDelete(false)}
-            >
-              ❌ Cancelar
-            </button>
-          </div>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            Esta acción no se puede deshacer
+          </p>
         </div>
-      </div>
-    );
-  }
 
-  // ===== DESKTOP → POPOVER ACTUAL =====
-  return (
-    <div className="absolute bottom-[2.5em] mt-2 bg-white border shadow-2xl p-3 w-64 z-10 rounded-2xl">
-      <p className="text-center text-red-600 font-semibold">
-        ¿Seguro que deseas eliminar este producto?
-      </p>
-      <div className="flex justify-between mt-2">
-        <button
-          className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600"
-          onClick={handleDelete}
-        >
-          ✅ Sí, eliminar
-        </button>
-        <button
-          className="px-3 py-1 bg-gray-400 text-white rounded hover:bg-gray-500"
-          onClick={() => setShowConfirmDelete(false)}
-        >
-          ❌ Cancelar
-        </button>
+        <div className="flex gap-2">
+          <button
+            className="flex-1 px-3 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg font-medium transition-colors"
+            onClick={handleDelete}
+          >
+            ✅ Eliminar
+          </button>
+          <button
+            className="flex-1 px-3 py-2 bg-gray-300 hover:bg-gray-400 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-800 dark:text-white rounded-lg font-medium transition-colors"
+            onClick={() => setShowConfirmDelete(false)}
+          >
+            Cancelar
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -18,6 +18,7 @@ export function Carrito() {
   const dark = preferencias?.theme === "dark";
 
   const [animatingItems, setAnimatingItems] = useState(new Set());
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     const newSet = new Set(carrito.map((p) => p.id_user_product));
@@ -25,12 +26,16 @@ export function Carrito() {
   }, [carrito]);
 
   const handleConfirmarCompra = async () => {
-    if (carrito.length === 0) return;
+    if (carrito.length === 0 || loading) return;
+
+    setLoading(true);
 
     const ventaExitosa = await crearVenta(
       carrito,
       actualizarProductosPostVenta,
     );
+
+    setLoading(false);
 
     if (ventaExitosa) {
       toast.success("✅ Venta realizada con éxito.", {
@@ -107,13 +112,28 @@ export function Carrito() {
       <div className="mt-2 flex flex-col gap-3 mb-2">
         <button
           onClick={handleConfirmarCompra}
-          className="bg-green-600 hover:bg-green-500 text-white py-2 rounded shadow-md transition-all hover:scale-105"
+          disabled={loading || carrito.length === 0}
+          className={`bg-green-600 text-white py-2 rounded shadow-md transition-all
+            ${loading ? "opacity-70 cursor-wait" : "hover:bg-green-500 hover:scale-105"}
+            disabled:opacity-50 disabled:cursor-not-allowed
+          `}
         >
-          ✅ Confirmar Compra
+          {loading ? (
+            <span className="flex items-center justify-center gap-2">
+              <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Procesando...
+            </span>
+          ) : (
+            "✅ Confirmar Compra"
+          )}
         </button>
         <button
           onClick={mostrarConfirmacionVaciarCarrito}
-          className="bg-red-600 hover:bg-red-500 text-white py-2 rounded shadow-md transition-all hover:scale-105"
+          disabled={loading}
+          className="bg-red-600 hover:bg-red-500 text-white py-2 rounded shadow-md transition-all hover:scale-105 disabled:opacity-50"
         >
           🧹 Vaciar Carrito
         </button>

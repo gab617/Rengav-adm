@@ -40,12 +40,16 @@ export function useProductFilters(
 
     const brandLabel = base.brand ?? base.brand_text ?? "";
 
+    const nombreBase = base.name ?? "";
+    const nombreCustom = prod.user_custom_products?.name ?? "";
+    const nombreCompleto = prod.tipo === "custom" ? nombreCustom : nombreBase;
+
     const cumpleNombre =
       !filtroNombre ||
-      base.name?.toLowerCase().includes(filtroNombre.toLowerCase());
+      nombreCompleto.toLowerCase().includes(filtroNombre.toLowerCase());
     const cumpleId =
       !filtroId ||
-      String(prod.id).toLowerCase().includes(filtroId.toLowerCase());
+      String(prod.id).includes(filtroId);
     const cumpleMarca =
       !filtroMarca ||
       brandLabel.toLowerCase().includes(filtroMarca.toLowerCase());

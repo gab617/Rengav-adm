@@ -20,6 +20,8 @@ export function LiProduct({
     eliminarProducto,
     agregarProductoCarrito,
     preferencias,
+    carrito,
+    actualizarStockEnCarrito,
   } = useAppContext();
 
   const dark = preferencias?.theme === "dark";
@@ -33,14 +35,35 @@ export function LiProduct({
   });
   const [pesoSeleccionado, setPesoSeleccionado] = useState(null);
 
+  useEffect(() => {
+    setEditedProduct({
+      ...prod,
+      nombre:
+        prod.tipo === "custom" ? prod.user_custom_products?.name : prod.nombre,
+    });
+    setIsEditing(false);
+    setShowConfirmDelete(false);
+  }, [prod.id]);
+
+  const esPeso = prod.products_base?.type_unit === "weight";
+  const enCarrito = carrito.some((item) => item.id === prod.id);
+  const cantidadEnCarrito = carrito
+    .filter((item) => item.id === prod.id)
+    .reduce((acc, item) => acc + (esPeso ? Number(item.cantidad) : 1), 0);
+
   const handleChange = (e) => {
-    setEditedProduct({ ...editedProduct, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    if (name === "stock") {
+      const numValue = Number(value);
+      if (numValue < 0) return;
+    }
+    setEditedProduct({ ...editedProduct, [name]: value });
   };
 
   const handleCancel = () => setIsEditing(false);
 
   const handleAgregarCarrito = () => {
-    if (prod.products_base?.type_unit === "weight") {
+    if (esPeso) {
       if (!pesoSeleccionado) {
         alert("Seleccioná un peso primero");
         return;
@@ -61,10 +84,12 @@ export function LiProduct({
 
   const handleSubmit = async () => {
     const payload = { ...editedProduct };
+    if (payload.stock < 0) payload.stock = 0;
     console.log(payload);
     delete payload.products_base;
     delete payload.id;
     await actualizarProducto(prod.id, payload);
+    actualizarStockEnCarrito([{ id_producto: prod.id, stock: Number(payload.stock) }]);
     setIsEditing(false);
   };
 
@@ -85,36 +110,64 @@ export function LiProduct({
         ? "scale-105 text-xl"
         : "text-base";
 
-  const vistaClass =
-    vista === "listado"
-      ? "flex items-center justify-between md:p-2 md:h-[60px] gap-2"
-      : "flex flex-col justify-between p-2 min-h-[110px]";
+  const enCarritoClass = enCarrito
+    ? dark
+      ? "border-yellow-500 shadow-yellow-500/30 shadow-lg"
+      : "border-yellow-400 shadow-yellow-400/50 shadow-lg"
+    : "";
 
-  useEffect(() => {
-    setEditedProduct({
-      ...prod,
-      nombre:
-        prod.tipo === "custom" ? prod.user_custom_products?.name : prod.nombre,
-    });
-  }, [prod]);
+  const sinStock = prod.stock <= 0;
+
+  const borderClass = sinStock
+    ? "border-red-500"
+    : enCarrito
+      ? "border-yellow-500"
+      : dark
+        ? "border-gray-600"
+        : "border-gray-400";
+
   return (
     <li
       key={prod.id}
-      className={`rounded-xl border-2 transition-all ${vistaClass} ${sizeClass} ${
-        dark ? "border-gray-300" : "border-gray-400"
-      }`}
+      className={`
+        group relative
+        rounded-xl border-2 transition-all duration-200
+        ${vista === "listado"
+          ? "flex items-center justify-between md:p-2 md:h-[60px] gap-2"
+          : "flex flex-col justify-between p-2 min-h-[110px]"
+        }
+        ${sizeClass}
+        ${borderClass}
+        ${enCarrito ? "ring-2 ring-yellow-500 ring-offset-2" : ""}
+        group-hover:shadow-lg
+      `}
       style={{
-        backgroundColor:
-          prod.stock <= 0
+        backgroundColor: sinStock
+          ? dark
+            ? "rgba(220, 38, 38, 0.2)"
+            : "rgba(254, 226, 226, 1)"
+          : enCarrito
             ? dark
-              ? "rgba(255,0,0,0.4)"
-              : "rgba(251,0,0,0.4)"
+              ? "rgba(250, 204, 21, 0.15)"
+              : "rgba(250, 204, 21, 0.1)"
             : dark
-              ? "#1f2937" // gray-800
+              ? "#1f2937"
               : "white",
         color: dark ? "white" : "black",
       }}
     >
+      {enCarrito && (
+        <div className="absolute -top-2 -right-2 bg-yellow-500 text-black text-xs font-bold px-2 py-0.5 rounded-full shadow-lg z-10">
+          {esPeso ? `${cantidadEnCarrito.toFixed(3)}kg` : `x${cantidadEnCarrito}`}
+        </div>
+      )}
+
+      {sinStock && (
+        <div className="absolute -top-2 -left-2 bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full shadow-lg z-10 animate-pulse">
+          SIN STOCK
+        </div>
+      )}
+
       {/* ================= VISTA LISTADO ================= */}
       {vista === "listado" ? (
         <div
@@ -122,19 +175,29 @@ export function LiProduct({
             dark ? "text-white" : "text-gray-900"
           }`}
         >
-          {/* INFO PRODUCTO */}
           <div className="flex flex-col md:flex-row w-full md:items-center gap-1 md:gap-2 overflow-hidden">
+            {enCarrito && (
+              <div className="absolute left-1 top-1/2 -translate-y-1/2">
+                <div className={`w-2 h-2 rounded-full ${dark ? "bg-yellow-500" : "bg-yellow-400"} animate-pulse`} />
+              </div>
+            )}
             <div
               className="hidden md:block w-6 h-6 rounded-md shrink-0"
               style={{ backgroundColor: color }}
             ></div>
 
             <div className="flex flex-col sm:flex-row sm:items-center w-full truncate">
-              <div className="flex gap-1 ">
-                <span className="font-semibold text-base md:text-xl truncate max-w-full">
+              <div className="flex gap-1 items-center">
+                <span className="font-semibold text-base md:text-xl truncate max-w-full flex items-center gap-1">
                   {prod.tipo === "custom"
                     ? prod.user_custom_products?.name
                     : prod.products_base?.name}
+                  {esPeso && (
+                    <span className="text-lg" title="Producto por peso">⚖️</span>
+                  )}
+                  {enCarrito && (
+                    <span className="text-green-500 text-sm">✓</span>
+                  )}
                 </span>
 
                 <div
@@ -165,7 +228,7 @@ export function LiProduct({
                   #️⃣​{`${prod.custom_id ? " C-" : ""}${prod.id}`}
                 </span>
 
-                {prod.products_base?.type_unit === "weight" && (
+                {esPeso && (
                   <Balanza
                     dark={dark}
                     onChange={(peso) => {
@@ -177,7 +240,6 @@ export function LiProduct({
             </div>
           </div>
 
-          {/* PRECIO + ACCIONES */}
           <div className="flex justify-between items-center w-full md:w-auto md:mt-0">
             <div className="flex justify-between items-center w-full md:w-auto md:mt-0">
               <div
@@ -187,7 +249,6 @@ export function LiProduct({
                     : "border-gray-300 bg-gray-50"
                 }`}
               >
-                {/* PRECIO DESTACADO */}
                 <span
                   className={`text-base md:text-xl font-bold tracking-tight ${
                     dark ? "text-green-400" : "text-green-900"
@@ -196,14 +257,12 @@ export function LiProduct({
                   ${precioFormateado}
                 </span>
 
-                {/* SEPARADOR */}
                 <span
                   className={`text-sm ${dark ? "text-gray-500" : "text-gray-400"}`}
                 >
                   |
                 </span>
 
-                {/* STOCK SECUNDARIO */}
                 <span
                   className={`text-sm md:text-base md:text-center font-medium ${
                     prod.stock <= 5
@@ -220,21 +279,21 @@ export function LiProduct({
 
             <div className="flex gap-1">
               <button
-                className="
+                className={`
                 px-2 py-1 md:px-[.3em] md:p-[.2em]
                 text-lg md:text-xl
-                bg-green-600 text-white
                 rounded
                 active:scale-90
-                active:bg-green-700
-                transition-transform
-                duration-200
-                hover:bg-green-200
-  "
+                transition-all duration-200
+                ${enCarrito
+                  ? "bg-yellow-500 hover:bg-yellow-400 text-black"
+                  : "bg-green-600 text-white hover:bg-green-500 active:bg-green-700"
+                }
+  `}
                 onClick={handleAgregarCarrito}
-                title="Agregar al carrito"
+                title={enCarrito ? "Agregar más" : "Agregar al carrito"}
               >
-                🛒
+                {enCarrito ? "➕" : "🛒"}
               </button>
 
               <button
@@ -256,65 +315,127 @@ export function LiProduct({
           </div>
         </div>
       ) : (
-        <>
-          {/* ================= VISTA MOSAICO ================= */}
-          <div className="w-full block max-h-[5em] overflow-y-auto">
-            <div
-              className={`flex flex-col justify-between border rounded-lg p-[0.1em] shadow-xl ${
-                dark ? "bg-gray-700 text-white" : "bg-white text-gray-900"
-              }`}
-            >
-              <strong className="block text-base">
-                {prod.tipo === "custom"
-                  ? prod.user_custom_products?.name
-                  : prod.products_base?.name}
-              </strong>
-              <hr />
-              <strong className="block text-base">
-                ${precioFormateado} •• Stock: {prod.stock} ••
-              </strong>
+        <div className="w-full flex flex-col">
+          <div className="flex flex-col items-start justify-between gap-2 mb-2">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className={`font-semibold text-sm truncate ${dark ? "text-white" : "text-gray-900"}`}>
+                  {prod.tipo === "custom"
+                    ? prod.user_custom_products?.name
+                    : prod.products_base?.name}
+                </span>
+                {esPeso && <span className="text-sm shrink-0">⚖️</span>}
+              </div>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className={`font-bold ${dark ? "text-green-400" : "text-green-700"}`}>
+                  ${precioFormateado}
+                </span>
+                <span className={`text-xs ${prod.stock <= 5 ? "text-red-500 font-bold" : dark ? "text-gray-400" : "text-gray-500"}`}>
+                  Stock: {prod.stock}
+                </span>
+              </div>
             </div>
-            <span className={dark ? "text-gray-300" : "text-gray-600"}>
-              {prod.descripcion}
-            </span>
-          </div>
-          <div className="flex justify-between items-center">
-            {/* Botonera */}
-            <div className="flex  flex-row gap-[0.15em] items-start">
+            <div className="flex gap-1 shrink-0">
               <button
-                className="cursor-pointer px-[.3em] p-[.2em] text-xl bg-green-600 text-white rounded hover:bg-green-400"
-                onClick={handleAgregarCarrito}
+                className={`w-9 h-9 rounded-lg flex items-center justify-center text-sm transition-all ${
+                  enCarrito
+                    ? "bg-yellow-500 hover:bg-yellow-400 text-black"
+                    : esPeso && !pesoSeleccionado
+                      ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                      : "bg-green-600 hover:bg-green-500 text-white"
+                }`}
+                onClick={() => {
+                  if (esPeso && pesoSeleccionado && pesoSeleccionado > 0) {
+                    agregarProductoCarrito(prod, color, { peso: pesoSeleccionado });
+                    setPesoSeleccionado(null);
+                  } else if (!esPeso) {
+                    handleAgregarCarrito();
+                  }
+                }}
+                disabled={esPeso && !pesoSeleccionado}
               >
-                🛒
+                {esPeso ? (
+                  pesoSeleccionado ? pesoSeleccionado.toFixed(2) : "⚖️"
+                ) : enCarrito ? "➕" : "🛒"}
               </button>
               <button
-                className="cursor-pointer px-[.3em] p-[.2em] text-xl bg-blue-600 text-white rounded hover:bg-blue-400"
+                className={`w-9 h-9 rounded-lg flex items-center justify-center text-sm ${
+                  dark ? "bg-blue-600 hover:bg-blue-500 text-white" : "bg-blue-500 hover:bg-blue-400 text-white"
+                }`}
                 onClick={() => setIsEditing(!isEditing)}
               >
                 ✏️
               </button>
               <button
-                className="cursor-pointer px-[.3em] p-[.2em] text-xl bg-red-600 text-white rounded hover:bg-red-400"
+                className={`w-9 h-9 rounded-lg flex items-center justify-center text-sm ${
+                  dark ? "bg-red-600 hover:bg-red-500 text-white" : "bg-red-500 hover:bg-red-400 text-white"
+                }`}
                 onClick={() => setShowConfirmDelete(true)}
               >
-                ❌
+                🗑️
               </button>
             </div>
-            <div
-              className={`border rounded-xl px-3 py-1 inline-block shadow-md ${
-                dark
-                  ? "bg-white/5 border-white/10 text-white"
-                  : "bg-gray-100/40 border-gray-600/40 text-gray-900"
-              }`}
-            >
-              <strong className="block text-base">
-                {prod.tipo === "custom"
-                  ? capitalizarMayus(prod.user_custom_products?.brand)
-                  : capitalizarMayus(prod.products_base?.brand)}
-              </strong>
-            </div>
           </div>
-        </>
+
+          {enCarrito && (
+            <div className={`text-xs font-medium mb-1.5 ${dark ? "text-yellow-400" : "text-yellow-700"}`}>
+              ✓ {esPeso ? `${cantidadEnCarrito.toFixed(3)}kg` : `x${cantidadEnCarrito} en carrito`}
+            </div>
+          )}
+
+          {esPeso && (
+            <div className={`flex  flex-col items-center gap-1.5 p-1 rounded-lg border text-base ${
+              dark ? "border-yellow-500/30 bg-yellow-500/10" : "border-yellow-200 bg-yellow-50"
+            }`}>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={pesoSeleccionado !== null ? Math.round(pesoSeleccionado * 1000) : ""}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/[^\d]/g, "");
+                  setPesoSeleccionado(val ? Number(val) / 1000 : null);
+                }}
+                placeholder="gr"
+                className={`w-14 text-center px-1.5 py-1 rounded font-medium ${
+                  dark ? "bg-gray-800 text-white border border-gray-600" : "bg-white text-gray-900 border border-gray-300"
+                }`}
+              />
+              <div className="flex gap-0.5 flex-1">
+                {[0.05, 0.1, 0.5, 1].map((val) => (
+                  <button
+                    key={val}
+                    onClick={() => {
+                      if (enCarrito) {
+                        agregarProductoCarrito(prod, color, { peso: val });
+                      } else {
+                        setPesoSeleccionado((prev) => (prev || 0) + val);
+                      }
+                    }}
+                    className={` flex-1 p-1 rounded text-center font-medium transition-colors ${
+                      dark ? "bg-gray-700 hover:bg-yellow-500/30" : "bg-white hover:bg-yellow-100 border border-gray-200"
+                    }`}
+                  >
+                    {val >= 1 ? "1k" : val * 1000 + "g"}
+                  </button>
+                ))}
+              </div>
+              {pesoSeleccionado && (
+                <button
+                  onClick={() => setPesoSeleccionado(null)}
+                  className={`w-6 h-6 rounded flex items-center justify-center ${
+                    dark ? "hover:bg-gray-600" : "hover:bg-gray-200"
+                  }`}
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          )}
+
+          <div className={`text-xs mt-1 ${dark ? "text-gray-500" : "text-gray-400"}`}>
+            {capitalizarMayus(prod.products_base?.brand || prod.products_base?.brand_text || "-")}
+          </div>
+        </div>
       )}
 
       {/* ================= MODALES ================= */}

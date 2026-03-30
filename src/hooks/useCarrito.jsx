@@ -4,30 +4,72 @@ import { toast } from "react-toastify";
 export function useCarrito() {
   const [carrito, setCarrito] = useState([]);
 
-  // Guardar carrito en localStorage
   useEffect(() => {
     localStorage.setItem("carrito", JSON.stringify(carrito));
   }, [carrito]);
 
-  // === AGREGAR AL CARRITO ===
-const agregarProductoCarrito = (producto, color, extra = {}) => {
-  if (producto.stock <= 0) return;
+  const stockEnCarrito = (productoId) => {
+    return carrito
+      .filter((item) => item.id === productoId)
+      .reduce((acc, item) => acc + Number(item.cantidad), 0);
+  };
 
-  setCarrito((prevCarrito) => {
-    const esPeso = producto.products_base?.type_unit === "weight";
+  const agregarProductoCarrito = (producto, color, extra = {}) => {
+    setCarrito((prevCarrito) => {
+      const esPeso = producto.products_base?.type_unit === "weight";
+      const stockOriginal = Number(producto.stock);
+      const stockReservado = stockEnCarrito(producto.id);
+      const stockDisponible = stockOriginal - stockReservado;
 
-    // ----- PRODUCTOS POR PESO
-    if (esPeso && extra.peso) {
+      if (esPeso && extra.peso) {
+        const pesoNuevo = Number(extra.peso);
+        const pesoEnCarrito = prevCarrito
+          .filter((item) => item.id === producto.id)
+          .reduce((acc, item) => acc + Number(item.cantidad), 0);
 
-      const pesoNuevo = Number(extra.peso);
+        const pesoTotal = pesoEnCarrito + pesoNuevo;
 
-      const pesoEnCarrito = prevCarrito
-        .filter((item) => item.id === producto.id)
-        .reduce((acc, item) => acc + Number(item.cantidad), 0);
+        if (pesoTotal > stockDisponible) {
+          toast.warning(`⚠️ Stock insuficiente. Disponible: ${stockDisponible.toFixed(3)} kg`);
+          return prevCarrito;
+        }
 
-      const totalSiAgrego = pesoEnCarrito + pesoNuevo;
+        const existente = prevCarrito.find((item) => item.id === producto.id);
 
-      if (totalSiAgrego > producto.stock) {
+        if (existente) {
+          return prevCarrito.map((item) =>
+            item.id === producto.id
+              ? { ...item, cantidad: pesoTotal }
+              : item
+          );
+        }
+
+        return [
+          ...prevCarrito,
+          {
+            ...producto,
+            cantidad: pesoNuevo,
+            color,
+          },
+        ];
+      }
+
+      const existente = prevCarrito.find((item) => item.id === producto.id);
+
+      if (existente) {
+        if (stockDisponible <= 0) {
+          toast.warning("⚠️ Stock insuficiente.");
+          return prevCarrito;
+        }
+
+        return prevCarrito.map((item) =>
+          item.id === producto.id
+            ? { ...item, cantidad: item.cantidad + 1 }
+            : item
+        );
+      }
+
+      if (stockDisponible <= 0) {
         toast.warning("⚠️ Stock insuficiente.");
         return prevCarrito;
       }
@@ -36,72 +78,60 @@ const agregarProductoCarrito = (producto, color, extra = {}) => {
         ...prevCarrito,
         {
           ...producto,
-          cantidad: pesoNuevo,
+          cantidad: 1,
           color,
         },
       ];
-    }
+    });
+  };
 
-    // ----- PRODUCTOS POR UNIDAD -----
-
-    const existente = prevCarrito.find(
-      (item) => item.id === producto.id
-    );
-
-    if (existente) {
-      if (existente.cantidad >= producto.stock) return prevCarrito;
-
-      return prevCarrito.map((item) =>
-        item.id === producto.id
-          ? { ...item, cantidad: item.cantidad + 1 }
-          : item
-      );
-    }
-
-    return [
-      ...prevCarrito,
-      {
-        ...producto,
-        cantidad: 1,
-        color,
-      },
-    ];
-  });
-};
-
-  // === ELIMINAR DEL CARRITO ===
   const eliminarProductoCarrito = (id_producto) => {
     setCarrito((prevCarrito) =>
-      prevCarrito.filter((item) => item.id !== id_producto) // ← ahora id
+      prevCarrito.filter((item) => item.id !== id_producto)
     );
   };
 
-  // === ACTUALIZAR CANTIDAD ===
   const actualizarCantidad = (id_producto, cantidad) => {
-    console.log("mas o menos",id_producto)
+    if (cantidad < 0) return;
+
+    setCarrito((prevCarrito) => {
+      const itemIndex = prevCarrito.findIndex((item) => item.id === id_producto);
+      if (itemIndex === -1) return prevCarrito;
+
+      const item = prevCarrito[itemIndex];
+      const stockOriginal = Number(item.stock);
+      const cantidadActual = item.cantidad;
+
+      const stockReservadoSinEsteItem = prevCarrito
+        .filter((i) => i.id === id_producto && i !== item)
+        .reduce((acc, i) => acc + Number(i.cantidad), 0);
+
+      const stockDisponible = stockOriginal - stockReservadoSinEsteItem;
+
+      if (cantidad > stockDisponible) return prevCarrito;
+
+      return prevCarrito.map((i) =>
+        i.id === id_producto ? { ...i, cantidad } : i
+      );
+    });
+  };
+
+  const limpiarCarrito = () => {
+    setCarrito([]);
+  };
+
+  const actualizarStockEnCarrito = (actualizaciones) => {
     setCarrito((prevCarrito) =>
       prevCarrito.map((item) => {
-        if (item.id === id_producto) {
-
-          // Si se reduce, permitir siempre
-          if (cantidad < item.cantidad) return { ...item, cantidad };
-
-          // Si se aumenta, verificar stock
-          if (cantidad <= item.stock) return { ...item, cantidad };
-
-          return item; // no cambiar si supera stock
+        const actualizacion = actualizaciones.find((a) => a.id_producto === item.id);
+        if (actualizacion) {
+          return { ...item, stock: actualizacion.stock };
         }
         return item;
       })
     );
   };
 
-  // === LIMPIAR CARRITO ===
-  const limpiarCarrito = () => {
-    setCarrito([]);
-  };
-
-  // === TOTAL ===
   const calcularTotal = () => {
     return carrito.reduce(
       (total, item) => total + item.precio_venta * item.cantidad,
@@ -116,5 +146,7 @@ const agregarProductoCarrito = (producto, color, extra = {}) => {
     actualizarCantidad,
     limpiarCarrito,
     calcularTotal,
+    stockEnCarrito,
+    actualizarStockEnCarrito,
   };
 }

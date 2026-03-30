@@ -1,7 +1,933 @@
-import React from 'react'
+import React, { useState, useEffect, useMemo } from "react";
+import { supabase } from "../../../services/supabaseClient";
+import { useAppContext } from "../../../contexto/Context";
 
 export function AssignProducts() {
+  const { preferencias } = useAppContext();
+  const dark = preferencias?.theme === "dark";
+
+  const [users, setUsers] = useState([]);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [products, setProducts] = useState([]);
+  const [userProducts, setUserProducts] = useState(new Set());
+  const [assignedProductsData, setAssignedProductsData] = useState([]);
+  const [userProductCounts, setUserProductCounts] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [selectedBrand, setSelectedBrand] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("");
+  const [selectedProducts, setSelectedProducts] = useState({});
+  const [selectedToDelete, setSelectedToDelete] = useState(new Set());
+  const [precioBase, setPrecioBase] = useState("");
+  const [asignando, setAsignando] = useState(false);
+  const [eliminando, setEliminando] = useState(false);
+  const [activeTab, setActiveTab] = useState("asignar");
+  const [lastAssigned, setLastAssigned] = useState([]);
+  const [notification, setNotification] = useState(null);
+  const [showBrandFilter, setShowBrandFilter] = useState(false);
+  const [showCategoryFilter, setShowCategoryFilter] = useState(false);
+
+  const showNotification = (msg, type = "success") => {
+    setNotification({ msg, type });
+    setTimeout(() => setNotification(null), 2500);
+  };
+
+  useEffect(() => {
+    async function load() {
+      setLoading(true);
+      const [usersRes, productsRes] = await Promise.all([
+        supabase.from("profiles").select("id, name").order("name"),
+        supabase
+          .from("products_base")
+          .select("id, name, brand_id, brands(name), categories(name)")
+          .order("name"),
+      ]);
+
+      const usersData = usersRes.data || [];
+      setUsers(usersData);
+      setProducts(productsRes.data || []);
+
+      const counts = {};
+      for (const user of usersData) {
+        const { count } = await supabase
+          .from("user_products")
+          .select("id", { count: "exact" })
+          .eq("user_id", user.id);
+        counts[user.id] = count || 0;
+      }
+      setUserProductCounts(counts);
+
+      setLoading(false);
+    }
+    load();
+  }, []);
+
+  const loadAssignedProducts = async () => {
+    if (!selectedUser) {
+      setUserProducts(new Set());
+      setAssignedProductsData([]);
+      setSelectedProducts({});
+      setSelectedToDelete(new Set());
+      return;
+    }
+
+    const currentUserId = selectedUser.id;
+
+    const { data } = await supabase
+      .from("user_products")
+      .select("base_id, precio_venta, active, id")
+      .eq("user_id", currentUserId);
+
+    if (selectedUser?.id !== currentUserId) return;
+
+    const ids = new Set();
+    const productData = [];
+    data?.forEach((up) => {
+      if (up.active !== false) {
+        const baseIdStr = String(up.base_id);
+        ids.add(baseIdStr);
+      }
+      productData.push({ 
+        base_id: String(up.base_id), 
+        precio_venta: up.precio_venta,
+        active: up.active !== false,
+        id: up.id
+      });
+    });
+
+    setUserProducts(ids);
+    setAssignedProductsData(productData);
+  };
+
+  useEffect(() => {
+    loadAssignedProducts();
+  }, [selectedUser]);
+
+  const reloadUserProducts = async () => {
+    if (!selectedUser) return;
+    
+    const currentUserId = selectedUser.id;
+    
+    await loadAssignedProducts();
+
+    const { count } = await supabase
+      .from("user_products")
+      .select("id", { count: "exact" })
+      .eq("user_id", currentUserId);
+      
+    setUserProductCounts((prev) => ({
+      ...prev,
+      [currentUserId]: count || 0,
+    }));
+  };
+
+  const uniqueBrands = useMemo(() => {
+    const brands = {};
+    products.forEach((p) => {
+      if (p.brand_id && p.brands?.name) {
+        brands[p.brand_id] = p.brands.name;
+      }
+    });
+    return Object.entries(brands).sort((a, b) => a[1].localeCompare(b[1]));
+  }, [products]);
+
+  const uniqueCategories = useMemo(() => {
+    const cats = {};
+    products.forEach((p) => {
+      if (p.categories?.name) {
+        cats[p.categories.name] = (cats[p.categories.name] || 0) + 1;
+      }
+    });
+    return Object.entries(cats).sort((a, b) => b[1] - a[1]);
+  }, [products]);
+
+  const productosFiltrados = useMemo(() => {
+    let disponibles = products.filter(
+      (p) => !userProducts.has(String(p.id))
+    );
+
+    if (selectedCategory) {
+      disponibles = disponibles.filter(
+        (p) => p.categories?.name === selectedCategory
+      );
+    }
+
+    if (selectedBrand) {
+      disponibles = disponibles.filter(
+        (p) => p.brand_id === parseInt(selectedBrand)
+      );
+    }
+
+    if (!search) return disponibles;
+
+    const lower = search.toLowerCase();
+    return disponibles.filter(
+      (p) =>
+        p.name.toLowerCase().includes(lower) ||
+        p.brands?.name?.toLowerCase().includes(lower)
+    );
+  }, [products, search, userProducts, selectedBrand, selectedCategory]);
+
+  const productosAsignadosFiltrados = useMemo(() => {
+    let filtrados = assignedProductsData.map((ap) => {
+      const baseProduct = products.find((p) => String(p.id) === ap.base_id);
+      return {
+        ...ap,
+        name: baseProduct?.name || "Producto desconocido",
+        brand: baseProduct?.brands?.name || "Sin marca",
+      };
+    });
+
+    if (!search) return filtrados;
+
+    const lower = search.toLowerCase();
+    return filtrados.filter(
+      (p) =>
+        p.name.toLowerCase().includes(lower) ||
+        p.brand.toLowerCase().includes(lower)
+    );
+  }, [assignedProductsData, products, search]);
+
+  const productosActivos = useMemo(
+    () => productosAsignadosFiltrados.filter((p) => p.active),
+    [productosAsignadosFiltrados]
+  );
+
+  const productosInactivos = useMemo(
+    () => productosAsignadosFiltrados.filter((p) => !p.active),
+    [productosAsignadosFiltrados]
+  );
+
+  const toggleProduct = (id) => {
+    if (selectedProducts[id]) {
+      const newSelected = { ...selectedProducts };
+      delete newSelected[id];
+      setSelectedProducts(newSelected);
+    } else {
+      setSelectedProducts((prev) => ({
+        ...prev,
+        [id]: { precio_venta: parseFloat(precioBase) || 0 },
+      }));
+    }
+  };
+
+  const toggleProductToDelete = (baseId) => {
+    setSelectedToDelete((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(baseId)) {
+        newSet.delete(baseId);
+      } else {
+        newSet.add(baseId);
+      }
+      return newSet;
+    });
+  };
+
+  const selectAllToDelete = () => {
+    setSelectedToDelete(new Set(assignedProductsData.map((ap) => ap.base_id)));
+  };
+
+  const deselectAllToDelete = () => setSelectedToDelete(new Set());
+
+  const updatePrecio = (id, value) => {
+    setSelectedProducts((prev) => ({
+      ...prev,
+      [id]: { precio_venta: parseFloat(value) || 0 },
+    }));
+  };
+
+  const applyBasePriceToAll = () => {
+    if (!precioBase) return;
+    const updated = {};
+    Object.keys(selectedProducts).forEach((id) => {
+      updated[id] = { precio_venta: parseFloat(precioBase) || 0 };
+    });
+    setSelectedProducts(updated);
+    showNotification(`Precio $${precioBase} aplicado a ${Object.keys(updated).length} productos`);
+  };
+
+  const selectAll = () => {
+    const all = {};
+    productosFiltrados.forEach((p) => {
+      all[p.id] = { precio_venta: parseFloat(precioBase) || 0 };
+    });
+    setSelectedProducts(all);
+  };
+
+  const deselectAll = () => setSelectedProducts({});
+
+  const selectFirst = (n = 10) => {
+    const first = {};
+    productosFiltrados.slice(0, n).forEach((p) => {
+      first[p.id] = { precio_venta: parseFloat(precioBase) || 0 };
+    });
+    setSelectedProducts(first);
+    showNotification(`${Math.min(n, productosFiltrados.length)} productos seleccionados`);
+  };
+
+  const selectLastAssigned = () => {
+    const toSelect = {};
+    lastAssigned.forEach((id) => {
+      if (!selectedProducts[id]) {
+        toSelect[id] = { precio_venta: parseFloat(precioBase) || 0 };
+      }
+    });
+    if (Object.keys(toSelect).length > 0) {
+      setSelectedProducts((prev) => ({ ...prev, ...toSelect }));
+      showNotification(`${Object.keys(toSelect).length} productos restaurados`);
+    } else {
+      showNotification("Ya están seleccionados o no hay últimos", "warning");
+    }
+  };
+
+  const handleAsignar = async () => {
+    if (!selectedUser || Object.keys(selectedProducts).length === 0) return;
+
+    const userId = selectedUser.id;
+    const userName = selectedUser.name;
+    const ids = Object.keys(selectedProducts);
+    const productsToInsert = ids.map((base_id) => ({
+      user_id: userId,
+      base_id,
+      precio_venta: selectedProducts[base_id]?.precio_venta || 0,
+      stock: 0,
+    }));
+
+    setAsignando(true);
+
+    try {
+      setLastAssigned(ids);
+
+      await supabase.from("user_products").insert(productsToInsert);
+
+      await reloadUserProducts();
+      setPrecioBase("");
+      setSelectedProducts({});
+      showNotification(`¡${ids.length} productos asignados a ${userName}!`, "success");
+    } catch (err) {
+      console.error(err);
+      if (err?.code === "23505") {
+        await reloadUserProducts();
+        showNotification("Algunos productos ya estaban asignados.", "warning");
+      } else {
+        showNotification("Error al asignar", "error");
+      }
+    } finally {
+      setAsignando(false);
+    }
+  };
+
+  const handleEliminar = async () => {
+    if (!selectedUser || selectedToDelete.size === 0) return;
+
+    const countToDelete = selectedToDelete.size;
+    const userId = selectedUser.id;
+
+    if (!confirm(`¿Desactivar ${countToDelete} productos?`)) return;
+
+    setEliminando(true);
+
+    try {
+      const updates = [];
+      for (const baseId of selectedToDelete) {
+        const product = productosActivos.find((p) => p.base_id === baseId);
+        if (product) {
+          updates.push(
+            supabase
+              .from("user_products")
+              .update({ active: false, stock: 0 })
+              .eq("id", product.id)
+          );
+        }
+      }
+
+      await Promise.all(updates);
+
+      await reloadUserProducts();
+      setSelectedToDelete(new Set());
+      showNotification(`${countToDelete} productos desactivados`, "success");
+    } catch (err) {
+      console.error(err);
+      showNotification("Error al desactivar", "error");
+    } finally {
+      setEliminando(false);
+    }
+  };
+
+  const handleReactivar = async (productId) => {
+    try {
+      await supabase
+        .from("user_products")
+        .update({ active: true })
+        .eq("id", productId);
+
+      await reloadUserProducts();
+      showNotification("Producto reactivado", "success");
+    } catch (err) {
+      console.error(err);
+      showNotification("Error al reactivar", "error");
+    }
+  };
+
+  const baseCard = dark
+    ? "bg-gray-800 border-gray-700"
+    : "bg-white border-gray-200";
+  const inputBg = dark ? "bg-gray-700 text-white" : "bg-gray-50";
+  const textPrimary = dark ? "text-white" : "text-gray-900";
+  const textSecondary = dark ? "text-gray-400" : "text-gray-500";
+  const borderColor = dark ? "border-gray-700" : "border-gray-200";
+
+  if (loading) {
+    return (
+      <div className={`flex items-center justify-center h-64 ${textSecondary}`}>
+        <div className="animate-pulse text-xl">Cargando centro de mando...</div>
+      </div>
+    );
+  }
+
   return (
-    <div>AssignProducts</div>
-  )
+    <div className={`min-h-screen pb-36 md:pb-4 ${dark ? "bg-gray-900" : "bg-gray-100"}`}>
+      {notification && (
+        <div
+          className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-xl shadow-lg text-white transform transition-all duration-300 ${
+            notification.type === "success"
+              ? "bg-green-500"
+              : notification.type === "warning"
+              ? "bg-yellow-500"
+              : "bg-red-500"
+          }`}
+        >
+          {notification.msg}
+        </div>
+      )}
+
+      <div className={`p-3 md:p-4 border-b ${dark ? "bg-gray-900 border-gray-800" : "bg-white border-gray-200"}`}>
+        <h1 className={`text-lg md:text-2xl font-bold ${textPrimary}`}>
+          ⚡ Asignaciones
+        </h1>
+
+        <div className="flex gap-2 md:gap-3 mt-3 md:mt-4 overflow-x-auto pb-2">
+          <div className={`px-3 md:px-4 py-2 rounded-xl ${dark ? "bg-gray-800" : "bg-white"} border ${baseCard} min-w-fit`}>
+            <div className={`text-xl md:text-2xl font-bold ${textPrimary}`}>{users.length}</div>
+            <div className={`text-xs ${textSecondary}`}>Usuarios</div>
+          </div>
+          <div className={`px-3 md:px-4 py-2 rounded-xl ${dark ? "bg-gray-800" : "bg-white"} border ${baseCard} min-w-fit`}>
+            <div className={`text-xl md:text-2xl font-bold ${textPrimary}`}>{products.length}</div>
+            <div className={`text-xs ${textSecondary}`}>Base</div>
+          </div>
+          <div className={`px-3 md:px-4 py-2 rounded-xl ${dark ? "bg-gray-800" : "bg-white"} border ${baseCard} min-w-fit`}>
+            <div className={`text-xl md:text-2xl font-bold text-blue-500`}>
+              {productosFiltrados.length}
+            </div>
+            <div className={`text-xs ${textSecondary}`}>Disponibles</div>
+          </div>
+          <div className={`px-4 py-2 rounded-xl ${dark ? "bg-gray-800" : "bg-white"} border ${baseCard} min-w-fit`}>
+            <div className={`text-2xl font-bold text-green-500`}>
+              {Object.keys(selectedProducts).length}
+            </div>
+            <div className={`text-xs ${textSecondary}`}>Seleccionar</div>
+          </div>
+          <div className={`px-4 py-2 rounded-xl ${dark ? "bg-gray-800" : "bg-white"} border ${baseCard} min-w-fit`}>
+            <div className={`text-2xl font-bold text-red-500`}>
+              {assignedProductsData.length}
+            </div>
+            <div className={`text-xs ${textSecondary}`}>Asignados</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col lg:flex-row">
+        <div className={`lg:w-72 w-full p-3 md:p-4 lg:border-r ${dark ? "border-gray-800 bg-gray-900" : "border-gray-200 bg-white"} border-b lg:border-b-0 max-h-48 lg:max-h-none overflow-y-auto`}>
+          <h2 className={`font-semibold mb-3 ${textPrimary}`}>👥 Usuarios</h2>
+
+          <div className="space-y-2 max-h-32 lg:max-h-96 overflow-y-auto">
+            {users.map((user) => {
+              const isSelected = selectedUser?.id === user.id;
+              const count = userProductCounts[user.id] || 0;
+
+              return (
+                <button
+                  key={user.id}
+                  onClick={() => {
+                    setSelectedUser(user);
+                    setActiveTab("asignar");
+                    setSearch("");
+                  }}
+                  className={`w-full p-2 md:p-3 rounded-xl border text-left transition-all ${
+                    isSelected
+                      ? "border-blue-500 bg-blue-500/10 ring-2 ring-blue-500"
+                      : `${baseCard} hover:border-blue-400`
+                  }`}
+                >
+                  <div className="flex justify-between items-center">
+                    <span className={`font-medium truncate text-sm ${textPrimary}`}>{user.name}</span>
+                    <span
+                      className={`text-xs px-1.5 md:px-2 py-0.5 md:py-1 rounded-full shrink-0 ${
+                        count > 0
+                          ? "bg-green-500/20 text-green-500"
+                          : dark
+                          ? "bg-gray-700 text-gray-400"
+                          : "bg-gray-100 text-gray-500"
+                      }`}
+                    >
+                      {count}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="flex-1 p-3 md:p-4 pb-20 lg:pb-4">
+          {!selectedUser ? (
+            <div className={`flex flex-col items-center justify-center h-48 lg:h-64 ${textSecondary}`}>
+              <div className="text-4xl md:text-6xl mb-3 md:mb-4">👆</div>
+              <p className="text-sm md:text-base">Selecciona un usuario</p>
+            </div>
+          ) : (
+            <>
+              <div className={`flex gap-1 md:gap-2 mb-3 md:mb-4 p-1 rounded-xl ${dark ? "bg-gray-800" : "bg-gray-100"}`}>
+                <button
+                  onClick={() => setActiveTab("asignar")}
+                  className={`flex-1 py-2 px-2 md:px-4 rounded-lg font-medium transition-all text-xs md:text-sm ${
+                    activeTab === "asignar"
+                      ? "bg-blue-500 text-white shadow"
+                      : `${textSecondary} hover:${textPrimary}`
+                  }`}
+                >
+                  ➕ Asignar ({productosFiltrados.length})
+                </button>
+                <button
+                  onClick={() => setActiveTab("asignados")}
+                  className={`flex-1 py-2 px-2 md:px-4 rounded-lg font-medium transition-all flex items-center justify-center gap-1 md:gap-2 text-xs md:text-sm ${
+                    activeTab === "asignados"
+                      ? "bg-red-500 text-white shadow"
+                      : `${textSecondary} hover:${textPrimary}`
+                  }`}
+                >
+                  📋 Asignados ({productosActivos.length})
+                  {selectedToDelete.size > 0 && (
+                    <span className="bg-white text-red-500 rounded-full w-4 h-4 md:w-5 md:h-5 text-xs flex items-center justify-center">
+                      {selectedToDelete.size}
+                    </span>
+                  )}
+                </button>
+              </div>
+
+              {activeTab === "asignar" ? (
+                <>
+                  <div className={`rounded-xl p-3 mb-4 ${baseCard} border`}>
+                    <div className="flex flex-wrap gap-2 items-center">
+                      <div className="flex-1 min-w-32">
+                        <input
+                          type="number"
+                          placeholder="$ Precio base"
+                          value={precioBase}
+                          onChange={(e) => setPrecioBase(e.target.value)}
+                          className={`w-full p-2 rounded-lg border ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
+                        />
+                      </div>
+                      <button
+                        onClick={applyBasePriceToAll}
+                        disabled={!precioBase || Object.keys(selectedProducts).length === 0}
+                        className="px-3 py-2 bg-purple-500 text-white rounded-lg text-sm disabled:opacity-40 hover:bg-purple-600 transition-colors"
+                      >
+                        Aplicar a {Object.keys(selectedProducts).length}
+                      </button>
+                      <button
+                        onClick={Object.keys(selectedProducts).length === productosFiltrados.length ? deselectAll : selectAll}
+                        className="px-3 py-2 bg-blue-500 text-white rounded-lg text-sm hover:bg-blue-600 transition-colors"
+                      >
+                        {Object.keys(selectedProducts).length === productosFiltrados.length ? "Deseleccionar" : "Todos"}
+                      </button>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      <button onClick={() => selectFirst(5)} className={`px-3 py-1 rounded-full text-xs ${dark ? "bg-gray-700 hover:bg-gray-600" : "bg-gray-200 hover:bg-gray-300"} ${textSecondary}`}>
+                        Primeros 5
+                      </button>
+                      <button onClick={() => selectFirst(10)} className={`px-3 py-1 rounded-full text-xs ${dark ? "bg-gray-700 hover:bg-gray-600" : "bg-gray-200 hover:bg-gray-300"} ${textSecondary}`}>
+                        Primeros 10
+                      </button>
+                      <button onClick={() => selectFirst(25)} className={`px-3 py-1 rounded-full text-xs ${dark ? "bg-gray-700 hover:bg-gray-600" : "bg-gray-200 hover:bg-gray-300"} ${textSecondary}`}>
+                        Primeros 25
+                      </button>
+                      {lastAssigned.length > 0 && (
+                        <button onClick={selectLastAssigned} className={`px-3 py-1 rounded-full text-xs bg-yellow-500/20 text-yellow-500 hover:bg-yellow-500/30`}>
+                          Restaurar ({lastAssigned.length})
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className={`rounded-xl p-3 mb-4 ${baseCard} border`}>
+                    {/* SEARCH */}
+                    <div className="relative mb-3">
+                      <input
+                        type="text"
+                        placeholder="Buscar productos..."
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        className={`w-full p-2.5 pl-10 rounded-lg border ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
+                      />
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
+                    </div>
+
+                    {/* ACTIVE FILTERS BADGES */}
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {selectedCategory && (
+                        <button
+                          onClick={() => setSelectedCategory("")}
+                          className="px-3 py-1 rounded-full text-xs bg-purple-500/20 text-purple-400 flex items-center gap-1 hover:bg-purple-500/30"
+                        >
+                          📁 {selectedCategory} ✕
+                        </button>
+                      )}
+                      {selectedBrand && (
+                        <button
+                          onClick={() => setSelectedBrand("")}
+                          className="px-3 py-1 rounded-full text-xs bg-blue-500/20 text-blue-400 flex items-center gap-1 hover:bg-blue-500/30"
+                        >
+                          🏷️ {uniqueBrands.find(([id]) => id === selectedBrand)?.[1]} ✕
+                        </button>
+                      )}
+                      {(selectedCategory || selectedBrand) && (
+                        <button
+                          onClick={() => { setSelectedCategory(""); setSelectedBrand(""); }}
+                          className={`px-3 py-1 rounded-full text-xs ${dark ? "bg-gray-700 text-gray-400" : "bg-gray-200 text-gray-500"} hover:opacity-70`}
+                        >
+                          Limpiar todo
+                        </button>
+                      )}
+                    </div>
+
+                    {/* TOGGLE FILTERS */}
+                    <div className="flex gap-2 mb-2">
+                      <button
+                        onClick={() => { setShowCategoryFilter(!showCategoryFilter); setShowBrandFilter(false); }}
+                        className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+                          showCategoryFilter || selectedCategory
+                            ? "bg-purple-500 text-white"
+                            : `${baseCard} ${textSecondary} hover:${textPrimary}`
+                        }`}
+                      >
+                        📁 Categorías {selectedCategory && <span className="bg-white/30 px-1.5 rounded text-xs">1</span>}
+                      </button>
+                      <button
+                        onClick={() => { setShowBrandFilter(!showBrandFilter); setShowCategoryFilter(false); }}
+                        className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+                          showBrandFilter || selectedBrand
+                            ? "bg-blue-500 text-white"
+                            : `${baseCard} ${textSecondary} hover:${textPrimary}`
+                        }`}
+                      >
+                        🏷️ Marcas {selectedBrand && <span className="bg-white/30 px-1.5 rounded text-xs">1</span>}
+                      </button>
+                    </div>
+
+                    {/* CATEGORY FILTER */}
+                    {showCategoryFilter && (
+                      <div className="mt-3 space-y-1 max-h-48 overflow-y-auto">
+                        <button
+                          onClick={() => { setSelectedCategory(""); setShowCategoryFilter(false); }}
+                          className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-all ${
+                            !selectedCategory ? "bg-purple-500 text-white" : `${dark ? "hover:bg-gray-700" : "hover:bg-gray-100"} ${textSecondary}`
+                          }`}
+                        >
+                          Todas ({products.length - userProducts.size})
+                        </button>
+                        {uniqueCategories.map(([name, count]) => {
+                          const availableCount = products.filter((p) => p.categories?.name === name && !userProducts.has(String(p.id))).length;
+                          return (
+                            <button
+                              key={name}
+                              onClick={() => { setSelectedCategory(name); setShowCategoryFilter(false); }}
+                              className={`w-full text-left px-3 py-2 rounded-lg text-sm flex justify-between items-center transition-all ${
+                                selectedCategory === name ? "bg-purple-500 text-white" : `${dark ? "hover:bg-gray-700" : "hover:bg-gray-100"} ${textSecondary}`
+                              }`}
+                            >
+                              <span>{name}</span>
+                              <span className={`text-xs ${selectedCategory === name ? "text-white/70" : ""}`}>{availableCount}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* BRAND FILTER */}
+                    {showBrandFilter && (
+                      <div className="mt-3 space-y-1 max-h-48 overflow-y-auto">
+                        <button
+                          onClick={() => { setSelectedBrand(""); setShowBrandFilter(false); }}
+                          className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-all ${
+                            !selectedBrand ? "bg-blue-500 text-white" : `${dark ? "hover:bg-gray-700" : "hover:bg-gray-100"} ${textSecondary}`
+                          }`}
+                        >
+                          Todas ({products.length - userProducts.size})
+                        </button>
+                        {uniqueBrands.map(([id, name]) => {
+                          const count = products.filter((p) => p.brand_id === parseInt(id) && !userProducts.has(String(p.id))).length;
+                          return (
+                            <button
+                              key={id}
+                              onClick={() => { setSelectedBrand(id); setShowBrandFilter(false); }}
+                              className={`w-full text-left px-3 py-2 rounded-lg text-sm flex justify-between items-center transition-all ${
+                                selectedBrand === id ? "bg-blue-500 text-white" : `${dark ? "hover:bg-gray-700" : "hover:bg-gray-100"} ${textSecondary}`
+                              }`}
+                            >
+                              <span>{name}</span>
+                              <span className={`text-xs ${selectedBrand === id ? "text-white/70" : ""}`}>{count}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {productosFiltrados.length === 0 ? (
+                    <div className={`text-center py-12 ${textSecondary}`}>
+                      <div className="text-5xl mb-4">✓</div>
+                      <p>No hay productos disponibles</p>
+                      {(selectedCategory || selectedBrand) && (
+                        <button
+                          onClick={() => { setSelectedCategory(""); setSelectedBrand(""); }}
+                          className="mt-3 text-blue-500 hover:underline"
+                        >
+                          Limpiar filtros
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between mb-3">
+                        <span className={`text-sm ${textSecondary}`}>
+                          {productosFiltrados.length} productos
+                        </span>
+                        <button
+                          onClick={() => productosFiltrados.length > 0 && selectAll()}
+                          disabled={productosFiltrados.length === 0}
+                          className={`text-xs ${textSecondary} hover:text-blue-400 disabled:opacity-50`}
+                        >
+                          Seleccionar todos
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                        {productosFiltrados.map((prod) => {
+                          const isSelected = !!selectedProducts[prod.id];
+                          return (
+                            <div
+                              key={prod.id}
+                              onClick={() => toggleProduct(prod.id)}
+                              className={`p-4 rounded-xl border cursor-pointer transition-all relative ${
+                                isSelected ? "border-blue-500 bg-blue-500/10 ring-2 ring-blue-500" : `${baseCard} hover:border-blue-400`
+                              }`}
+                            >
+                              {isSelected && (
+                                <div className="absolute top-2 right-2 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
+                                  <span className="text-white text-xs">✓</span>
+                                </div>
+                              )}
+                              <div className="flex justify-between items-start gap-2">
+                                <div className="flex-1 min-w-0 pr-6">
+                                  <p className={`font-medium truncate ${textPrimary}`}>{prod.name}</p>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    {prod.brands?.name && (
+                                      <span className={`text-xs px-2 py-0.5 rounded-full ${dark ? "bg-blue-500/20 text-blue-400" : "bg-blue-50 text-blue-600"}`}>
+                                        {prod.brands.name}
+                                      </span>
+                                    )}
+                                    {prod.categories?.name && (
+                                      <span className={`text-xs px-2 py-0.5 rounded-full ${dark ? "bg-purple-500/20 text-purple-400" : "bg-purple-50 text-purple-600"}`}>
+                                        {prod.categories.name}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                              {isSelected && (
+                                <div className="mt-3 pt-3 border-t border-blue-500/30">
+                                  <div className="flex items-center gap-2">
+                                    <span className={`text-xs ${textSecondary}`}>Precio:</span>
+                                    <input
+                                      type="number"
+                                      placeholder="$"
+                                      value={selectedProducts[prod.id]?.precio_venta || ""}
+                                      onChange={(e) => updatePrecio(prod.id, e.target.value)}
+                                      onClick={(e) => e.stopPropagation()}
+                                      className={`flex-1 p-2 rounded-lg border text-sm text-right ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+
+                  {Object.keys(selectedProducts).length > 0 && (
+                    <div className={`fixed bottom-0 left-0 right-0 p-4 ${dark ? "bg-gray-900 border-t border-gray-800" : "bg-white border-t border-gray-200"} shadow-2xl z-40`}>
+                      <div className="max-w-6xl mx-auto">
+                        <div className="flex items-center justify-between gap-4 mb-3">
+                          <div>
+                            <div className={`font-bold text-lg ${textPrimary}`}>
+                              {Object.keys(selectedProducts).length} productos
+                            </div>
+                            <div className={`text-sm ${textSecondary}`}>
+                              → {selectedUser.name}
+                            </div>
+                          </div>
+                          {precioBase && (
+                            <div className={`px-3 py-1 rounded-lg text-sm ${dark ? "bg-purple-500/20 text-purple-400" : "bg-purple-50 text-purple-600"}`}>
+                              Precio base: ${precioBase}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <button onClick={deselectAll} className={`sm:flex-1 px-4 py-2.5 rounded-xl border ${borderColor} ${textSecondary}`}>
+                            Cancelar
+                          </button>
+                          <button onClick={handleAsignar} disabled={asignando} className="sm:flex-1 px-6 py-2.5 bg-green-500 text-white rounded-xl font-semibold flex items-center justify-center gap-2 disabled:opacity-50 hover:bg-green-600 transition-colors">
+                            {asignando ? (
+                              <><span className="animate-spin">⟳</span> Asignando...</>
+                            ) : (
+                              <><span>✓</span> Asignar {Object.keys(selectedProducts).length} productos</>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className={`rounded-xl p-3 mb-4 ${baseCard} border`}>
+                    <div className="flex flex-wrap gap-2 items-center">
+                      <button onClick={selectAllToDelete} className="px-3 py-2 bg-red-500 text-white rounded-lg text-sm hover:bg-red-600 transition-colors">
+                        Seleccionar todos
+                      </button>
+                      <button onClick={deselectAllToDelete} className="px-3 py-2 bg-gray-500 text-white rounded-lg text-sm hover:bg-gray-600 transition-colors">
+                        Ninguno
+                      </button>
+                      <span className={`text-sm ${textSecondary}`}>
+                        {selectedToDelete.size} de {productosActivos.length} activos
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className={`rounded-xl p-3 mb-4 ${baseCard} border`}>
+                    <input
+                      type="text"
+                      placeholder="Buscar asignados..."
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      className={`w-full p-2 rounded-lg border ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
+                    />
+                  </div>
+
+                  {productosActivos.length === 0 && productosInactivos.length === 0 ? (
+                    <div className={`text-center py-12 ${textSecondary}`}>
+                      <div className="text-5xl mb-4">📦</div>
+                      <p>No hay productos asignados</p>
+                    </div>
+                  ) : (
+                    <>
+                      {productosActivos.length > 0 && (
+                        <div className="space-y-2">
+                          <h3 className={`text-sm font-semibold ${textSecondary}`}>
+                            ✓ Activos ({productosActivos.length})
+                          </h3>
+                          {productosActivos.map((prod) => {
+                            const isSelected = selectedToDelete.has(prod.base_id);
+                            return (
+                              <div
+                                key={prod.base_id}
+                                onClick={() => toggleProductToDelete(prod.base_id)}
+                                className={`p-4 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${
+                                  isSelected ? "border-red-500 bg-red-500/10 ring-2 ring-red-500" : `${baseCard} hover:border-red-400`
+                                }`}
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
+                                    isSelected ? "border-red-500 bg-red-500" : "border-gray-400"
+                                  }`}>
+                                    {isSelected && <span className="text-white text-xs">✓</span>}
+                                  </div>
+                                  <div>
+                                    <p className={`font-medium ${textPrimary}`}>{prod.name}</p>
+                                    <p className={`text-xs ${textSecondary}`}>{prod.brand}</p>
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <p className={`font-bold ${textPrimary}`}>${prod.precio_venta}</p>
+                                  <p className={`text-xs ${textSecondary}`}>ID: {prod.base_id}</p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {productosInactivos.length > 0 && (
+                        <div className="space-y-2 mt-4">
+                          <h3 className={`text-sm font-semibold text-red-500`}>
+                            ✗ Inactivos ({productosInactivos.length})
+                          </h3>
+                          {productosInactivos.map((prod) => (
+                            <div
+                              key={prod.base_id}
+                              className={`p-4 rounded-xl border flex items-center justify-between ${dark ? "bg-red-900/20 border-red-800" : "bg-red-50 border-red-200"}`}
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="w-6 h-6 rounded-full bg-red-500 flex items-center justify-center opacity-50">
+                                  <span className="text-white text-xs">✗</span>
+                                </div>
+                                <div>
+                                  <p className={`font-medium line-through opacity-60 ${textPrimary}`}>{prod.name}</p>
+                                  <p className={`text-xs opacity-60 ${textSecondary}`}>{prod.brand}</p>
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => handleReactivar(prod.id)}
+                                className="px-3 py-1 bg-green-500 text-white rounded-lg text-xs hover:bg-green-600 transition-colors"
+                              >
+                                ⟳ Reactivar
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {selectedToDelete.size > 0 && (
+                    <div className={`fixed bottom-16 md:bottom-0 left-0 right-0 p-3 md:p-4 ${dark ? "bg-gray-900 border-t border-gray-800" : "bg-white border-t border-gray-200"} shadow-2xl z-40`}>
+                      <div className="max-w-6xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <div>
+                          <div className={`font-bold text-base md:text-lg text-red-500`}>
+                            {selectedToDelete.size} para desactivar
+                          </div>
+                          <div className={`text-xs md:text-sm ${textSecondary}`}>{selectedUser.name}</div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={deselectAllToDelete} className={`px-3 md:px-4 py-2 rounded-xl border ${borderColor} ${textSecondary} text-sm`}>
+                            Cancelar
+                          </button>
+                          <button onClick={handleEliminar} disabled={eliminando} className="px-4 md:px-6 py-2 bg-red-500 text-white rounded-xl font-semibold flex items-center justify-center gap-2 disabled:opacity-50 hover:bg-red-600 transition-colors text-sm">
+                            {eliminando ? <><span className="animate-spin">⟳</span> Desact...</> : "🚫 Desactivar"}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
