@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Carrito } from "../carrito/Carrito";
 import { useAppContext } from "../../contexto/Context";
 import { CarritoMobile } from "../carrito/CarritoMobile";
@@ -10,8 +10,11 @@ export function CarritoDrawer() {
   const { preferencias, carrito, calcularTotal } = useAppContext();
   const dark = preferencias?.theme === "dark";
   const drawerRef = useRef(null);
+  const overlayRef = useRef(null);
   const startX = useRef(0);
   const currentX = useRef(0);
+  const isDragging = useRef(false);
+  const drawerClicked = useRef(false);
 
   useEffect(() => {
     if (carrito.length > 0) {
@@ -33,27 +36,84 @@ export function CarritoDrawer() {
     };
   }, [open]);
 
+  const handleOverlayClick = useCallback((e) => {
+    if (drawerClicked.current) {
+      drawerClicked.current = false;
+      return;
+    }
+    if (!drawerRef.current?.contains(e.target)) {
+      setOpen(false);
+    }
+  }, []);
+
   const handleTouchStart = (e) => {
     startX.current = e.touches[0].clientX;
+    isDragging.current = false;
+    drawerClicked.current = false;
   };
 
   const handleTouchMove = (e) => {
     currentX.current = e.touches[0].clientX;
     const diff = startX.current - currentX.current;
-    if (diff > 0 && diff < 100) {
+    if (diff > 10) {
+      isDragging.current = true;
+      drawerClicked.current = true;
+    }
+    if (diff > 0 && diff < 100 && isDragging.current) {
       e.target.closest("div").style.transform = `translateX(-${diff}px)`;
     }
   };
 
   const handleTouchEnd = (e) => {
     const diff = startX.current - currentX.current;
-    if (diff > 80) {
+    if (diff > 80 && isDragging.current) {
       setOpen(false);
     }
     if (drawerRef.current) {
       drawerRef.current.style.transform = "";
     }
+    isDragging.current = false;
   };
+
+  const handleDrawerClick = useCallback((e) => {
+    if (isDragging.current) {
+      e.preventDefault();
+      e.stopPropagation();
+      drawerClicked.current = false;
+      return;
+    }
+    drawerClicked.current = true;
+    e.stopPropagation();
+  }, []);
+
+  const handleDrawerMouseDown = useCallback((e) => {
+    if (e.button !== 0) return;
+    startX.current = e.clientX;
+    drawerClicked.current = false;
+  }, []);
+
+  const handleDrawerMouseMove = useCallback((e) => {
+    if (e.buttons !== 1) return;
+    const diff = startX.current - e.clientX;
+    if (diff > 10) {
+      isDragging.current = true;
+      drawerClicked.current = true;
+    }
+    if (diff > 0 && diff < 100 && isDragging.current) {
+      drawerRef.current.style.transform = `translateX(-${diff}px)`;
+    }
+  }, []);
+
+  const handleDrawerMouseUp = useCallback((e) => {
+    const diff = startX.current - e.clientX;
+    if (diff > 80 && isDragging.current) {
+      setOpen(false);
+    }
+    if (drawerRef.current) {
+      drawerRef.current.style.transform = "";
+    }
+    isDragging.current = false;
+  }, []);
 
   const totalFormateado = calcularTotal()
     .toFixed(2)
@@ -89,11 +149,10 @@ export function CarritoDrawer() {
         </button>
       )}
 
-
-
       {/* OVERLAY */}
       <div
-        onClick={() => setOpen(false)}
+        ref={overlayRef}
+        onClick={handleOverlayClick}
         className={`fixed inset-0 bg-black/50 backdrop-blur-sm z-10 transition-opacity duration-300
           ${open ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}
           lg:hidden
@@ -106,13 +165,18 @@ export function CarritoDrawer() {
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
+        onMouseDown={handleDrawerMouseDown}
+        onMouseMove={handleDrawerMouseMove}
+        onMouseUp={handleDrawerMouseUp}
+        onClick={handleDrawerClick}
+        onMouseLeave={() => { isDragging.current = false; }}
         className={`fixed top-0 right-0 h-full z-20
           shadow-2xl transition-transform duration-300 ease-out
           ${open ? "translate-x-0" : "translate-x-full"}
           lg:hidden
           ${dark ? "bg-gray-800 text-white" : "bg-white text-gray-800"}
         `}
-        style={{ width: "85vw", maxWidth: "400px" }}
+        style={{ width: "85vw", maxWidth: "400px", touchAction: "pan-y" }}
       >
         {/* HEADER FIJO */}
         <div className={`
@@ -179,8 +243,9 @@ export function CarritoDrawer() {
         position="top-center"
         autoClose={3000}
         newestOnTop
-        closeOnClick
+        closeOnClick={false}
         draggable
+        pauseOnHover
       />
       
       <style>{`

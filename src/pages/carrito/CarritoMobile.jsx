@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useAppContext } from "../../contexto/Context";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -19,6 +19,11 @@ export function CarritoMobile({ onClose }) {
 
   const [animatingItems] = useState(() => new Set());
   const [loading, setLoading] = useState(false);
+
+  const stopProp = useCallback((e) => {
+    e.stopPropagation();
+    e.preventDefault();
+  }, []);
 
   const handleConfirmarCompra = async () => {
     if (carrito.length === 0 || loading) return;
@@ -93,7 +98,7 @@ export function CarritoMobile({ onClose }) {
   };
 
   return (
-    <div className="p-4 pb-24">
+    <div className="p-4 pb-24" onClick={(e) => e.stopPropagation()}>
       {/* HEADER RESUMEN */}
       <div className={`
         mb-4 p-4 rounded-xl
@@ -110,9 +115,12 @@ export function CarritoMobile({ onClose }) {
       </div>
 
       {/* BOTONES DE ACCIÓN */}
-      <div className="flex gap-2 mb-4">
+      <div className="flex gap-2 mb-4" onClick={(e) => e.stopPropagation()}>
         <button
-          onClick={handleConfirmarCompra}
+          onClick={(e) => {
+            e.stopPropagation();
+            handleConfirmarCompra();
+          }}
           disabled={loading || carrito.length === 0}
           className={`
             flex-1 py-3 rounded-xl font-bold
@@ -139,7 +147,10 @@ export function CarritoMobile({ onClose }) {
           )}
         </button>
         <button
-          onClick={mostrarConfirmacionVaciarCarrito}
+          onClick={(e) => {
+            e.stopPropagation();
+            mostrarConfirmacionVaciarCarrito();
+          }}
           className={`
             px-4 py-3 rounded-xl
             transition-all hover:scale-[1.02]
@@ -206,7 +217,7 @@ export function CarritoMobile({ onClose }) {
                 </span>
               </div>
 
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center justify-between gap-3" onClick={(e) => e.stopPropagation()}>
                 {!esP && (
                   <div className={`
                     flex items-center gap-2 rounded-lg
@@ -222,7 +233,10 @@ export function CarritoMobile({ onClose }) {
                           : "hover:bg-gray-300 text-gray-700"
                         }
                       `}
-                      onClick={() => actualizarCantidad(producto.id, producto.cantidad - 1)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        actualizarCantidad(producto.id, producto.cantidad - 1);
+                      }}
                       disabled={producto.cantidad <= 1}
                     >
                       −
@@ -242,7 +256,8 @@ export function CarritoMobile({ onClose }) {
                           : "hover:bg-gray-300 text-gray-700"
                         }
                       `}
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation();
                         if (producto.cantidad < producto.stock) {
                           actualizarCantidad(producto.id, producto.cantidad + 1);
                         } else {
@@ -272,7 +287,10 @@ export function CarritoMobile({ onClose }) {
                       : "bg-red-100 hover:bg-red-200 text-red-600"
                     }
                   `}
-                  onClick={() => eliminarProductoCarrito(producto.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    eliminarProductoCarrito(producto.id);
+                  }}
                 >
                   🗑️
                 </button>
