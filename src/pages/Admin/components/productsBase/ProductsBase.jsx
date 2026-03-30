@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback } from "react";
+import React, { useMemo, useState } from "react";
 import { useAdminProductsBase } from "../../hooksAdmin/useAdminProductsBase";
 import { useAdminCategories } from "../../hooksAdmin/useAdminCategories";
 import { useAdminBrands } from "../../hooksAdmin/useAdminBrands";
@@ -14,48 +14,34 @@ export function ProductsBase() {
   const { getBrandsByCategory, createBrand, linkBrandToCategory } = useAdminBrands();
 
   const [name, setName] = useState("");
-  const [nameSearch, setNameSearch] = useState("");
-  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [suggestions, setSuggestions] = useState([]);
   const [categoryId, setCategoryId] = useState("");
   const [subcategoryId, setSubcategoryId] = useState("");
   const [brandId, setBrandId] = useState("");
   const [newBrandName, setNewBrandName] = useState("");
   const [showForm, setShowForm] = useState(false);
 
-  // Autocomplete suggestions based on name search
-  const suggestions = useMemo(() => {
-    if (!nameSearch || nameSearch.length < 2) return [];
-    const lower = nameSearch.toLowerCase();
-    return products
-      .filter(p => p.name?.toLowerCase().includes(lower))
-      .slice(0, 8);
-  }, [nameSearch, products]);
-
-  // Handle name change with autocomplete
-  const handleNameChange = useCallback((value) => {
+  // Simple search on change
+  const handleNameChange = (value) => {
     setName(value);
-    setNameSearch(value);
-    setShowSuggestions(true);
-  }, []);
-
-  // Select a suggestion
-  const handleSelectSuggestion = useCallback((product) => {
-    setName(product.name);
-    setNameSearch("");
-    setShowSuggestions(false);
-    // Auto-fill category and brand if available
-    if (product.categories?.id && !categoryId) {
-      setCategoryId(product.categories.id.toString());
+    if (value.length >= 2) {
+      const lower = value.toLowerCase();
+      const found = products
+        .filter(p => p.name?.toLowerCase().includes(lower))
+        .slice(0, 5)
+        .map(p => ({ id: p.id, name: p.name, brand: p.brands?.name, cat: p.categories?.name }));
+      setSuggestions(found);
+    } else {
+      setSuggestions([]);
     }
-    if (product.brands?.id && !brandId) {
-      setBrandId(product.brands.id.toString());
-    }
-  }, [categoryId, brandId]);
+  };
 
-  // Close suggestions when clicking outside
-  const handleBlur = useCallback(() => {
-    setTimeout(() => setShowSuggestions(false), 200);
-  }, []);
+  const selectSuggestion = (prod) => {
+    setName(prod.name);
+    setSuggestions([]);
+    if (prod.cat && !categoryId) setCategoryId(categories.find(c => c.name === prod.cat)?.id?.toString() || "");
+    if (prod.brand && !brandId) setBrandId(products.find(p => p.brands?.name === prod.brand)?.brands?.id?.toString() || "");
+  };
 
   const filteredSubcategories = useMemo(() => {
     if (!categoryId) return [];
@@ -89,7 +75,7 @@ export function ProductsBase() {
         brand_id: brandId ? Number(brandId) : null,
       });
       setName("");
-      setNameSearch("");
+      setSuggestions([]);
       setCategoryId("");
       setSubcategoryId("");
       setBrandId("");
@@ -157,68 +143,33 @@ export function ProductsBase() {
         >
           <h2 className={`font-semibold text-lg ${textPrimary}`}>➕ Agregar Producto Base</h2>
 
-          {/* NAME INPUT WITH AUTOCOMPLETE */}
+          {/* NAME INPUT */}
           <div className="relative">
-            <label className={`block text-xs font-medium mb-1.5 ${textSecondary}`}>
-              Nombre del producto
-            </label>
+            <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>Nombre del producto</label>
             <input
               type="text"
               placeholder="Escribí para buscar duplicados..."
-              className={`w-full px-3 py-3 rounded-lg border text-sm ${inputBg}`}
+              className={`w-full px-3 py-2.5 rounded-lg border text-sm ${inputBg}`}
               value={name}
               onChange={(e) => handleNameChange(e.target.value)}
-              onFocus={() => setShowSuggestions(true)}
-              onBlur={handleBlur}
+              onBlur={() => setTimeout(() => setSuggestions([]), 150)}
               required
             />
             
-            {/* AUTOCOMPLETE SUGGESTIONS */}
-            {showSuggestions && suggestions.length > 0 && (
-              <div className={`absolute z-50 w-full mt-1 rounded-lg border shadow-xl overflow-hidden ${dark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}>
-                <div className={`px-3 py-2 text-xs font-medium ${textSecondary} border-b ${dark ? "border-gray-700" : "border-gray-100"}`}>
-                  ⚠️ Productos existentes con nombre similar:
-                </div>
-                {suggestions.map((prod) => (
+            {/* SUGGESTIONS */}
+            {suggestions.length > 0 && (
+              <div className={`absolute z-50 w-full mt-1 rounded-lg border shadow-lg ${dark ? "bg-gray-700 border-gray-600" : "bg-white border-gray-200"}`}>
+                {suggestions.map((s) => (
                   <button
-                    key={prod.id}
+                    key={s.id}
                     type="button"
-                    onClick={() => handleSelectSuggestion(prod)}
-                    className={`w-full px-3 py-2.5 text-left text-sm flex items-start gap-3 transition-colors ${dark ? "hover:bg-gray-700" : "hover:bg-gray-50"}`}
+                    onClick={() => selectSuggestion(s)}
+                    className={`w-full px-3 py-2 text-left text-sm flex justify-between items-center ${dark ? "hover:bg-gray-600" : "hover:bg-gray-50"} ${textPrimary}`}
                   >
-                    <div className="flex-1 min-w-0">
-                      <p className={`font-medium truncate ${textPrimary}`}>{prod.name}</p>
-                      <div className="flex flex-wrap gap-1.5 mt-1">
-                        {prod.brands?.name && (
-                          <span className={`text-xs px-2 py-0.5 rounded-full ${dark ? "bg-blue-500/20 text-blue-400" : "bg-blue-50 text-blue-600"}`}>
-                            🏷️ {prod.brands.name}
-                          </span>
-                        )}
-                        {prod.categories?.name && (
-                          <span className={`text-xs px-2 py-0.5 rounded-full ${dark ? "bg-purple-500/20 text-purple-400" : "bg-purple-50 text-purple-600"}`}>
-                            📁 {prod.categories.name}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <span className={`text-xs ${textSecondary} shrink-0`}>#{prod.id}</span>
+                    <span>{s.name}</span>
+                    <span className={`text-xs ${textSecondary}`}>{s.brand || ""} {s.brand && s.cat ? "•" : ""} {s.cat || ""}</span>
                   </button>
                 ))}
-                <div className={`px-3 py-2 text-xs ${textSecondary} border-t ${dark ? "border-gray-700" : "border-gray-100"}`}>
-                  Hacé click en un producto para autocompletar
-                </div>
-              </div>
-            )}
-            
-            {/* NO SUGGESTIONS MESSAGE */}
-            {showSuggestions && nameSearch.length >= 2 && suggestions.length === 0 && (
-              <div className={`absolute z-50 w-full mt-1 rounded-lg border shadow-xl p-3 text-center ${dark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}>
-                <p className={`text-sm ${textSecondary}`}>
-                  ✅ No hay productos con nombre similar
-                </p>
-                <p className={`text-xs ${textSecondary} mt-1`}>
-                  Podés continuar creando el nuevo producto
-                </p>
               </div>
             )}
           </div>

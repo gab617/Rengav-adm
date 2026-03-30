@@ -2,7 +2,7 @@ import React, { useState, useMemo } from "react";
 import { useAppContext } from "../../../contexto/Context";
 
 export function UlCustomProducts({ customProducts }) {
-  const { categorias, subcategorias, preferencias, updatePreferencias } = useAppContext();
+  const { categorias, subcategorias, preferencias } = useAppContext();
   const dark = preferencias?.theme === "dark";
 
   const [viewType, setViewType] = useState(
@@ -12,8 +12,21 @@ export function UlCustomProducts({ customProducts }) {
   const [search, setSearch] = useState("");
   const [categoriaActiva, setCategoriaActiva] = useState("todas");
   const [subcategoriaActiva, setSubcategoriaActiva] = useState("todas");
+  const [marcaActiva, setMarcaActiva] = useState("");
   const [expandedAll, setExpandedAll] = useState(false);
   const [expandedItems, setExpandedItems] = useState({});
+
+  // Marcas únicas con contadores
+  const marcasDisponibles = useMemo(() => {
+    const mapa = {};
+    (customProducts || []).forEach(p => {
+      const brand = p.products_base?.brand || p.products_base?.brand_text || "Sin marca";
+      mapa[brand] = (mapa[brand] || 0) + 1;
+    });
+    return Object.entries(mapa)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [customProducts]);
 
   // Subcategorías de la categoría seleccionada
   const subcategoriasDeCategoria = useMemo(() => {
@@ -43,8 +56,15 @@ export function UlCustomProducts({ customProducts }) {
       result = result.filter((p) => p.products_base?.subcategory_id === subcategoriaActiva);
     }
 
+    if (marcaActiva) {
+      result = result.filter((p) => {
+        const brand = p.products_base?.brand || p.products_base?.brand_text || "Sin marca";
+        return brand === marcaActiva;
+      });
+    }
+
     return result;
-  }, [customProducts, search, categoriaActiva, subcategoriaActiva]);
+  }, [customProducts, search, categoriaActiva, subcategoriaActiva, marcaActiva]);
 
   // Agrupar por categoría
   const productosPorCategoria = useMemo(() => {
@@ -95,21 +115,16 @@ export function UlCustomProducts({ customProducts }) {
     setSubcategoriaActiva("todas");
   };
 
-  const toggleExpandedAll = () => {
-    if (expandedAll) {
-      setExpandedAll(false);
-      setExpandedItems({});
-    } else {
-      const all = {};
-      filteredProducts.forEach((p) => (all[p.id] = true));
-      setExpandedItems(all);
-      setExpandedAll(true);
-    }
-  };
-
   const toggleOne = (id) => {
     if (expandedAll) return;
     setExpandedItems((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const clearFilters = () => {
+    setSearch("");
+    setCategoriaActiva("todas");
+    setSubcategoriaActiva("todas");
+    setMarcaActiva("");
   };
 
   // Estilos
@@ -119,6 +134,8 @@ export function UlCustomProducts({ customProducts }) {
   const bgItem = dark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200";
   const inputBg = dark ? "bg-gray-600 text-white" : "bg-gray-50 text-gray-900";
   const borderColor = dark ? "border-gray-600" : "border-gray-200";
+
+  const hasFilters = search || categoriaActiva !== "todas" || subcategoriaActiva !== "todas" || marcaActiva;
 
   if (!customProducts || customProducts.length === 0) {
     return (
@@ -130,122 +147,119 @@ export function UlCustomProducts({ customProducts }) {
   }
 
   return (
-    <div className="space-y-3">
-      {/* HEADER CON CONTROLES */}
-      <div className={`p-3 rounded-xl ${bgCard}`}>
-        {/* Búsqueda */}
-        <div className="relative mb-3">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2">🔍</span>
-          <input
-            type="text"
-            placeholder="Buscar productos..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className={`w-full pl-9 pr-9 py-2.5 rounded-xl border ${inputBg} text-sm`}
-          />
-          {search && (
-            <button
-              onClick={() => setSearch("")}
-              className={`absolute right-3 top-1/2 -translate-y-1/2 ${textSecondary}`}
-            >
-              ✕
-            </button>
-          )}
-        </div>
+    <div className="space-y-2">
+      {/* BÚSQUEDA */}
+      <div className="relative">
+        <span className="absolute left-3 top-1/2 -translate-y-1/2">🔍</span>
+        <input
+          type="text"
+          placeholder="Buscar productos..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className={`w-full pl-9 pr-9 py-2.5 rounded-xl border ${inputBg} text-sm`}
+        />
+        {search && (
+          <button
+            onClick={() => setSearch("")}
+            className={`absolute right-3 top-1/2 -translate-y-1/2 ${textSecondary}`}
+          >
+            ✕
+          </button>
+        )}
+      </div>
 
-        {/* Vista + Expandir */}
-        <div className="flex items-center justify-between">
-          <div className="flex gap-1">
-            <button
-              onClick={() => {
-                setViewType("list");
-                updatePreferencias({ view_custom_products: "list" });
-              }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                viewType === "list"
-                  ? dark ? "bg-blue-500/30 text-blue-400" : "bg-blue-100 text-blue-600"
-                  : `${textSecondary}`
-              }`}
-            >
-              📋 Lista
-            </button>
-            <button
-              onClick={() => {
-                setViewType("grid");
-                updatePreferencias({ view_custom_products: "grid" });
-              }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                viewType === "grid"
-                  ? dark ? "bg-blue-500/30 text-blue-400" : "bg-blue-100 text-blue-600"
-                  : `${textSecondary}`
-              }`}
-            >
-              ⊞ Mosaico
-            </button>
+      {/* BARRAS DE FILTRO */}
+      {/* MARCAS */}
+      {marcasDisponibles.length > 0 && (
+        <div className="space-y-1">
+          <div className={`flex items-center justify-between ${textSecondary}`}>
+            <span className="text-xs font-medium">🏷️ MARCAS</span>
+            {marcaActiva && (
+              <button onClick={() => setMarcaActiva("")} className="text-xs text-blue-500 hover:underline">
+                Limpiar
+              </button>
+            )}
           </div>
-          <button
-            onClick={toggleExpandedAll}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-              dark ? "bg-purple-500/20 text-purple-400" : "bg-purple-100 text-purple-600"
-            }`}
-          >
-            {expandedAll ? "⊟ Colapsar" : "⊞ Expandir"}
-          </button>
-        </div>
-      </div>
-
-      {/* CATEGORÍAS COMO TABS */}
-      <div className={`overflow-x-auto pb-1 ${bgCard} rounded-xl`}>
-        <div className="flex gap-1.5 p-2 min-w-max">
-          <button
-            onClick={() => handleSelectCategoria("todas")}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap ${
-              categoriaActiva === "todas"
-                ? "bg-blue-500 text-white"
-                : dark ? "bg-gray-600 text-gray-300" : "bg-gray-100 text-gray-600"
-            }`}
-          >
-            Todas ({conteoPorCategoria.todas})
-          </button>
-          {categoriasConProductos.map((cat) => (
+          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
             <button
-              key={cat.id}
-              onClick={() => handleSelectCategoria(cat.id)}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap ${
-                categoriaActiva === cat.id
-                  ? "text-white"
-                  : dark ? "bg-gray-600 text-gray-300" : "bg-gray-100 text-gray-600"
+              onClick={() => setMarcaActiva("")}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap shrink-0 transition-all ${
+                !marcaActiva
+                  ? dark ? "bg-gray-600 text-white" : "bg-gray-800 text-white"
+                  : dark ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-600"
               }`}
-              style={categoriaActiva === cat.id ? { backgroundColor: cat.color } : {}}
             >
-              {cat.nombre} ({conteoPorCategoria[cat.id] || 0})
+              Todas
             </button>
-          ))}
+            {marcasDisponibles.map((m) => (
+              <button
+                key={m.name}
+                onClick={() => setMarcaActiva(marcaActiva === m.name ? "" : m.name)}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap shrink-0 transition-all ${
+                  marcaActiva === m.name
+                    ? "bg-blue-500 text-white shadow"
+                    : dark
+                      ? "bg-blue-500/20 text-blue-400"
+                      : "bg-blue-50 text-blue-600"
+                }`}
+              >
+                {m.name} ({m.count})
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* CATEGORÍAS */}
+      {categoriasConProductos.length > 0 && (
+        <div className="space-y-1">
+          <div className={`flex items-center justify-between ${textSecondary}`}>
+            <span className="text-xs font-medium">📁 CATEGORÍAS</span>
+            {categoriaActiva !== "todas" && (
+              <button onClick={() => { setCategoriaActiva("todas"); setSubcategoriaActiva("todas"); }} className="text-xs text-purple-500 hover:underline">
+                Limpiar
+              </button>
+            )}
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+            {categoriasConProductos.map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => handleSelectCategoria(cat.id)}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap shrink-0 transition-all ${
+                  categoriaActiva === cat.id
+                    ? "text-white shadow"
+                    : dark ? "bg-gray-600 text-gray-300" : "bg-gray-100 text-gray-600"
+                }`}
+                style={categoriaActiva === cat.id ? { backgroundColor: cat.color } : {}}
+              >
+                {cat.nombre} ({conteoPorCategoria[cat.id] || 0})
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* SUBCATEGORÍAS */}
       {categoriaActiva !== "todas" && subcategoriasDeCategoria.length > 0 && (
-        <div className={`overflow-x-auto pb-1 ${dark ? "bg-gray-800/50" : "bg-gray-50"} rounded-xl`}>
-          <div className="flex gap-1 p-1.5 min-w-max">
-            <button
-              onClick={() => setSubcategoriaActiva("todas")}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition-all whitespace-nowrap ${
-                subcategoriaActiva === "todas"
-                  ? "bg-blue-500 text-white"
-                  : dark ? "bg-gray-600 text-gray-400" : "bg-white text-gray-500"
-              }`}
-            >
-              Todas ({conteoPorSubcategoria.todas})
-            </button>
+        <div className="space-y-1">
+          <div className={`flex items-center justify-between ${textSecondary}`}>
+            <span className="text-xs font-medium">📂 SUBCATEGORÍAS</span>
+            {subcategoriaActiva !== "todas" && (
+              <button onClick={() => setSubcategoriaActiva("todas")} className="text-xs text-green-500 hover:underline">
+                Limpiar
+              </button>
+            )}
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
             {subcategoriasDeCategoria.map((sub) => (
               <button
                 key={sub.id}
-                onClick={() => setSubcategoriaActiva(sub.id)}
-                className={`px-3 py-1 rounded-full text-xs font-medium transition-all whitespace-nowrap ${
+                onClick={() => setSubcategoriaActiva(sub.id === subcategoriaActiva ? "todas" : sub.id)}
+                className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap shrink-0 transition-all ${
                   subcategoriaActiva === sub.id
-                    ? "bg-blue-500 text-white"
-                    : dark ? "bg-gray-600 text-gray-400" : "bg-white text-gray-500"
+                    ? "bg-green-500 text-white shadow"
+                    : dark ? "bg-green-500/20 text-green-400" : "bg-green-50 text-green-600"
                 }`}
               >
                 {sub.nombre} ({conteoPorSubcategoria[sub.id] || 0})
@@ -255,15 +269,33 @@ export function UlCustomProducts({ customProducts }) {
         </div>
       )}
 
-      {/* RESULTADOS */}
-      <div className={`p-3 rounded-xl ${bgCard} text-sm ${textSecondary}`}>
-        {filteredProducts.length} producto{filteredProducts.length !== 1 ? "s" : ""}
-        {categoriaActiva !== "todas" && (
-          <span> de {categorias.find((c) => c.id === categoriaActiva)?.nombre}</span>
-        )}
-        {subcategoriaActiva !== "todas" && (
-          <span> › {subcategorias.find((s) => s.id === subcategoriaActiva)?.nombre}</span>
-        )}
+      {/* HEADER CON VISTA + RESULTADOS */}
+      <div className={`p-3 rounded-xl ${bgCard} flex items-center justify-between`}>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setViewType("list")}
+            className={`p-2 rounded-lg transition-all ${viewType === "list" ? (dark ? "bg-blue-500/30 text-blue-400" : "bg-blue-100 text-blue-600") : textSecondary}`}
+          >
+            📋
+          </button>
+          <button
+            onClick={() => setViewType("grid")}
+            className={`p-2 rounded-lg transition-all ${viewType === "grid" ? (dark ? "bg-blue-500/30 text-blue-400" : "bg-blue-100 text-blue-600") : textSecondary}`}
+          >
+            ⊞
+          </button>
+          {hasFilters && (
+            <button
+              onClick={clearFilters}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium ${dark ? "bg-red-500/20 text-red-400" : "bg-red-50 text-red-600"}`}
+            >
+              ✕ Limpiar
+            </button>
+          )}
+        </div>
+        <div className={`text-sm ${textSecondary}`}>
+          {filteredProducts.length} producto{filteredProducts.length !== 1 ? "s" : ""}
+        </div>
       </div>
 
       {/* LISTA POR CATEGORÍAS */}

@@ -17,16 +17,12 @@ export function ListPedido() {
 
   const dark = preferencias?.theme === "dark";
   const [esMobile, setEsMobile] = useState(window.innerWidth < 768);
-  const [filtrosExpandidos, setFiltrosExpandidos] = useState(!esMobile);
   const [categoriaActiva, setCategoriaActiva] = useState("todas");
   const [subcategoriaActiva, setSubcategoriaActiva] = useState("todas");
 
   useEffect(() => {
     const handleResize = () => {
       setEsMobile(window.innerWidth < 768);
-      if (window.innerWidth >= 768) {
-        setFiltrosExpandidos(true);
-      }
     };
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
@@ -40,6 +36,7 @@ export function ListPedido() {
     setSoloCustom,
     productosFiltrados,
     productosCustomFiltrados,
+    marcasDisponibles,
   } = useProductFilters(products, categorias, subcategorias, unifiedBrands);
 
   const productosBase = filtros.soloCustom
@@ -195,153 +192,83 @@ export function ListPedido() {
   const categoriaSeleccionada = categorias.find((c) => c.id === categoriaActiva);
 
   return (
-    <div className={`flex flex-col gap-3 ${dark ? "text-white" : "text-gray-900"}`}>
-      {/* HEADER CON BÚSQUEDA */}
-      <div className={`p-3 rounded-2xl ${bgCard} border ${borderColor}`}>
-        <div className="flex items-center justify-between mb-2">
-          <div>
-            <h2 className="text-base font-bold">📦 Productos</h2>
-            <p className={`text-xs ${textSecondary}`}>
-              {productosFiltradosFinal.length} productos
-              {pedidos.length > 0 && (
-                <span className="text-green-400 ml-1">• {pedidos.length} en pedido</span>
-              )}
-            </p>
-          </div>
+    <div className={`flex flex-col gap-2 ${dark ? "text-white" : "text-gray-900"}`}>
+      {/* BÚSQUEDA */}
+      <div className="relative">
+        <span className="absolute left-3 top-1/2 -translate-y-1/2">🔍</span>
+        <input
+          type="text"
+          placeholder="Buscar productos..."
+          className={`w-full pl-10 pr-10 py-3 rounded-xl border ${inputBg} text-sm`}
+          value={filtros.filtroNombre}
+          onChange={(e) => setFiltroNombre(e.target.value)}
+        />
+        {filtros.filtroNombre && (
           <button
-            onClick={() => setFiltrosExpandidos(!filtrosExpandidos)}
-            className={`p-2 rounded-xl transition-all text-sm ${
-              filtrosExpandidos
-                ? dark ? "bg-blue-500/20 text-blue-400" : "bg-blue-100 text-blue-600"
-                : dark ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-600"
-            }`}
+            onClick={() => setFiltroNombre("")}
+            className={`absolute right-3 top-1/2 -translate-y-1/2 ${textSecondary}`}
           >
-            {filtrosExpandidos ? "▲" : "⚙️ Filtros"}
+            ✕
           </button>
-        </div>
-
-        {/* BÚSQUEDA */}
-        <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2">🔍</span>
-          <input
-            type="text"
-            placeholder="Buscar..."
-            className={`w-full pl-9 pr-9 py-2.5 rounded-xl border ${inputBg} text-sm`}
-            value={filtros.filtroNombre}
-            onChange={(e) => setFiltroNombre(e.target.value)}
-          />
-          {filtros.filtroNombre && (
-            <button
-              onClick={() => setFiltroNombre("")}
-              className={`absolute right-3 top-1/2 -translate-y-1/2 ${textSecondary}`}
-            >
-              ✕
-            </button>
-          )}
-        </div>
+        )}
       </div>
 
-      {/* FILTROS EXPANDIBLES */}
-      {filtrosExpandidos && (
-        <div className={`p-3 rounded-2xl ${bgCard} border ${borderColor} space-y-2`}>
-          <div className="flex flex-col sm:flex-row gap-2">
-            <div className="relative flex-1">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm">🏷️</span>
-              <input
-                type="text"
-                placeholder="Marca..."
-                className={`w-full pl-9 pr-3 py-2 rounded-xl border ${inputBg} text-sm`}
-                value={filtros.filtroMarca}
-                onChange={(e) => setFiltroMarca(e.target.value)}
-              />
-            </div>
-            <div className="relative flex-1">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm">📦</span>
-              <input
-                type="number"
-                placeholder="Stock máx..."
-                className={`w-full pl-9 pr-3 py-2 rounded-xl border ${inputBg} text-sm`}
-                value={filtros.filtroStock}
-                onChange={(e) => setFiltroStock(e.target.value)}
-              />
-            </div>
-          </div>
+      {/* CATEGORÍAS - BARRA HORIZONTAL */}
+      {categorias.length > 0 && (
+        <div className="space-y-1">
           <div className="flex items-center justify-between">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={filtros.soloCustom}
-                onChange={(e) => setSoloCustom(e.target.checked)}
-                className="w-4 h-4 rounded accent-purple-500"
-              />
-              <span className={`text-xs ${textSecondary}`}>Solo custom</span>
-            </label>
-            {tieneFiltrosActivos && (
-              <button
-                onClick={limpiarFiltros}
-                className={`px-2 py-1 rounded-lg text-xs font-medium ${
-                  dark ? "bg-red-500/20 text-red-400" : "bg-red-100 text-red-600"
-                }`}
+            <span className={`text-xs font-medium ${textSecondary}`}>📁 CATEGORÍAS</span>
+            {categoriaActiva !== "todas" && (
+              <button 
+                onClick={() => { setCategoriaActiva("todas"); setSubcategoriaActiva("todas"); }} 
+                className="text-xs text-purple-500 hover:underline"
               >
                 Limpiar
               </button>
             )}
           </div>
+          <div className="flex gap-1.5 overflow-x-auto pb-2 scrollbar-hide">
+            {categorias.map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => handleSelectCategoria(cat.id)}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap shrink-0 transition-all ${
+                  categoriaActiva === cat.id
+                    ? "text-white shadow"
+                    : dark ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-600"
+                }`}
+                style={categoriaActiva === cat.id ? { backgroundColor: cat.color } : {}}
+              >
+                {cat.nombre} ({conteoPorCategoria[cat.id] || 0})
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
-      {/* CATEGORÍAS */}
-      <div className={`overflow-x-auto pb-1 ${bgCard} rounded-xl`}>
-        <div className="flex gap-1.5 p-2 min-w-max">
-          <button
-            onClick={() => handleSelectCategoria("todas")}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap ${
-              categoriaActiva === "todas"
-                ? "bg-blue-500 text-white shadow"
-                : dark ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-600"
-            }`}
-          >
-            Todas ({conteoPorCategoria.todas})
-          </button>
-          {categorias.map((cat) => (
-            <button
-              key={cat.id}
-              onClick={() => handleSelectCategoria(cat.id)}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap ${
-                categoriaActiva === cat.id
-                  ? "text-white shadow"
-                  : dark ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-600"
-              }`}
-              style={categoriaActiva === cat.id ? { backgroundColor: cat.color } : {}}
-            >
-              {cat.nombre} ({conteoPorCategoria[cat.id] || 0})
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* SUBCATEGORÍAS */}
+      {/* SUBCATEGORÍAS - BARRA HORIZONTAL */}
       {categoriaActiva !== "todas" && subcategoriasDeCategoria.length > 0 && (
-        <div className={`overflow-x-auto pb-1 ${dark ? "bg-gray-800/50" : "bg-gray-50"} rounded-xl`}>
-          <div className="flex gap-1 p-1.5 min-w-max">
-            <button
-              onClick={() => setSubcategoriaActiva("todas")}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition-all whitespace-nowrap ${
-                subcategoriaActiva === "todas"
-                  ? "bg-blue-500 text-white"
-                  : dark ? "bg-gray-700 text-gray-400" : "bg-white text-gray-500"
-              }`}
-            >
-              Todas ({conteoPorSubcategoria.todas})
-            </button>
+        <div className="space-y-1">
+          <div className="flex items-center justify-between">
+            <span className={`text-xs font-medium ${textSecondary}`}>📂 SUBCATEGORÍAS</span>
+            {subcategoriaActiva !== "todas" && (
+              <button 
+                onClick={() => setSubcategoriaActiva("todas")} 
+                className="text-xs text-green-500 hover:underline"
+              >
+                Limpiar
+              </button>
+            )}
+          </div>
+          <div className="flex gap-1.5 overflow-x-auto pb-2 scrollbar-hide">
             {subcategoriasDeCategoria.map((sub) => (
               <button
                 key={sub.id}
-                onClick={() => setSubcategoriaActiva(sub.id)}
-                className={`px-3 py-1 rounded-full text-xs font-medium transition-all whitespace-nowrap ${
+                onClick={() => setSubcategoriaActiva(subcategoriaActiva === sub.id ? "todas" : sub.id)}
+                className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap shrink-0 transition-all ${
                   subcategoriaActiva === sub.id
-                    ? "bg-blue-500 text-white"
-                    : dark ? "bg-gray-700 text-gray-400" : "bg-white text-gray-500"
+                    ? "bg-green-500 text-white shadow"
+                    : dark ? "bg-green-500/20 text-green-400" : "bg-green-50 text-green-600"
                 }`}
               >
                 {sub.nombre} ({conteoPorSubcategoria[sub.id] || 0})
@@ -351,8 +278,81 @@ export function ListPedido() {
         </div>
       )}
 
+      {/* FILTROS RÁPIDOS */}
+      <div className={`p-3 rounded-xl ${bgCard} border ${borderColor}`}>
+        <div className="flex items-center justify-between mb-2">
+          <span className={`text-xs font-medium ${textSecondary}`}>⚡ FILTROS</span>
+          {tieneFiltrosActivos && (
+            <button 
+              onClick={limpiarFiltros} 
+              className="text-xs text-red-500 hover:underline"
+            >
+              ✕ Limpiar todo
+            </button>
+          )}
+        </div>
+        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+          {/* MARCA SELECT */}
+          <select
+            value={filtros.filtroMarca}
+            onChange={(e) => setFiltroMarca(e.target.value)}
+            className={`px-3 py-2 rounded-lg border text-xs ${inputBg} shrink-0`}
+          >
+            <option value="">🏷️ Marca</option>
+            {marcasDisponibles?.map((m) => (
+              <option key={m.key || m.label} value={m.label}>{m.label}</option>
+            ))}
+          </select>
+
+          {/* MARCA INPUT */}
+          <input
+            type="text"
+            placeholder="O escribí..."
+            value={filtros.filtroMarca}
+            onChange={(e) => setFiltroMarca(e.target.value)}
+            className={`px-3 py-2 rounded-lg border text-xs ${inputBg} w-24 shrink-0`}
+          />
+
+          {/* STOCK */}
+          <div className="relative shrink-0">
+            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs opacity-50">⚠️</span>
+            <input
+              type="number"
+              placeholder="Stock ≤"
+              value={filtros.filtroStock}
+              onChange={(e) => setFiltroStock(e.target.value)}
+              className={`w-20 pl-6 pr-2 py-2 rounded-lg border text-xs ${inputBg}`}
+            />
+          </div>
+
+          {/* TIPO */}
+          <button
+            onClick={() => setSoloCustom(!filtros.soloCustom)}
+            className={`px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap shrink-0 transition-all ${
+              filtros.soloCustom
+                ? "bg-purple-500 text-white"
+                : dark ? "border border-gray-600 text-gray-300" : "border border-gray-200 text-gray-600"
+            }`}
+          >
+            ✨ {filtros.soloCustom ? "Custom" : "Todos"}
+          </button>
+        </div>
+      </div>
+
+      {/* HEADER RESULTADOS */}
+      <div className={`p-2 rounded-xl ${bgCard} border ${borderColor} flex items-center justify-between`}>
+        <span className={`text-sm ${textSecondary}`}>
+          {productosFiltradosFinal.length} productos
+        </span>
+        {pedidos.length > 0 && (
+          <span className="text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-400">
+            🛒 {pedidos.length} en pedido
+          </span>
+        )}
+      </div>
+
       {/* LISTA */}
-      <div className="space-y-3">
+      <div className="space-y-2">
         {productosFiltradosFinal.length === 0 ? (
           <div className={`p-6 text-center rounded-2xl ${bgCard}`}>
             <span className="text-4xl mb-2 block">📭</span>

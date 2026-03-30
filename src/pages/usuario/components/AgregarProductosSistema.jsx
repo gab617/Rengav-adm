@@ -3,7 +3,7 @@ import { useAppContext } from "../../../contexto/Context";
 import { useAuth } from "../../../contexto/AuthContext";
 import { useProductosSistema } from "../../../hooksSB/useProductosSistema";
 
-export function AgregarProductosSistema({ onClose, onProductoAgregado }) {
+export function AgregarProductosSistema({ onClose }) {
   const { user } = useAuth();
   const { preferencias, categorias, subcategorias, products, agregarProductoBase } = useAppContext();
   const dark = preferencias?.theme === "dark";
@@ -14,7 +14,6 @@ export function AgregarProductosSistema({ onClose, onProductoAgregado }) {
     productosSistema,
     assignedProducts,
     loading,
-    error,
     fetchProductosSistema,
     agregarProductosBulk,
   } = useProductosSistema(user?.id, categorias, products);
@@ -101,6 +100,7 @@ export function AgregarProductosSistema({ onClose, onProductoAgregado }) {
   const [search, setSearch] = useState("");
   const [categoriaActiva, setCategoriaActiva] = useState("todas");
   const [subcategoriaActiva, setSubcategoriaActiva] = useState("todas");
+  const [soloDisponibles, setSoloDisponibles] = useState(false);
   
   // Selección múltiple
   const [selectedProducts, setSelectedProducts] = useState([]);
@@ -120,9 +120,15 @@ export function AgregarProductosSistema({ onClose, onProductoAgregado }) {
     return subcategorias.filter(s => s.id_categoria === categoriaActiva);
   }, [categoriaActiva, subcategorias]);
 
-  // Filtrar productos según la pestaña activa
+  // Filtrar productos según la pestaña activa y toggle
   const productosFiltrados = useMemo(() => {
-    const source = activeTab === "disponibles" ? productosDisponibles : productosAsignados;
+    let source;
+
+    if (soloDisponibles) {
+      source = productosDisponibles.filter(p => !p.infoUsuario);
+    } else {
+      source = activeTab === "disponibles" ? productosDisponibles : productosAsignados;
+    }
 
     let result = source;
 
@@ -143,7 +149,7 @@ export function AgregarProductosSistema({ onClose, onProductoAgregado }) {
     }
 
     return result;
-  }, [activeTab, productosDisponibles, productosAsignados, search, categoriaActiva, subcategoriaActiva]);
+  }, [activeTab, productosDisponibles, productosAsignados, soloDisponibles, search, categoriaActiva, subcategoriaActiva]);
 
   // Contadores por categoría
   const conteoPorCategoria = useMemo(() => {
@@ -187,12 +193,16 @@ export function AgregarProductosSistema({ onClose, onProductoAgregado }) {
     });
   };
 
-  // Toggle seleccionar todos
+  // Toggle seleccionar todos (solo disponibles cuando el filtro está activo)
   const toggleSelectAll = () => {
-    if (selectedProducts.length === productosDisponibles.length) {
+    const source = soloDisponibles 
+      ? productosDisponibles.filter(p => !p.infoUsuario)
+      : productosDisponibles;
+    
+    if (selectedProducts.length === source.length) {
       setSelectedProducts([]);
     } else {
-      setSelectedProducts([...productosDisponibles]);
+      setSelectedProducts([...source]);
     }
   };
 
@@ -326,6 +336,29 @@ export function AgregarProductosSistema({ onClose, onProductoAgregado }) {
               </span>
             </button>
           </div>
+        </div>
+
+        {/* TOGGLE SOLO DISPONIBLES */}
+        <div className={`px-4 py-2 border-b ${borderColor} flex items-center justify-between`}>
+          <span className={`text-xs ${textSecondary}`}>
+            {productosAsignados.length} ya asignados
+          </span>
+          <button
+            onClick={() => {
+              setSoloDisponibles(!soloDisponibles);
+              setActiveTab("disponibles");
+              setSelectedProducts([]);
+            }}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-2 ${
+              soloDisponibles
+                ? "bg-green-500 text-white"
+                : dark
+                  ? "bg-gray-700 text-gray-300"
+                  : "bg-gray-100 text-gray-600"
+            }`}
+          >
+            {soloDisponibles ? "✓" : "○"} Solo disponibles
+          </button>
         </div>
 
         {/* BARRA DE ACCIÓN */}

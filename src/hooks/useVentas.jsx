@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import dayjs from "dayjs";
 import isBetween from "dayjs/plugin/isBetween";
 import weekOfYear from "dayjs/plugin/weekOfYear";
@@ -19,13 +19,60 @@ export const useVentas = ({ userId }) => {
   const [mesSeleccionado, setMesSeleccionado] = useState(
     dayjs().format("YYYY-MM")
   );
+  const [rangoFechas, setRangoFechas] = useState({
+    desde: dayjs().startOf("day").toISOString(),
+    hasta: dayjs().endOf("day").toISOString(),
+  });
+
+  // Cache local de ventas por rango
+  const [ventasCache, setVentasCache] = useState({});
+
+  // Calcular rango según filtro
+  const calcularRango = useCallback((filtroValue, fecha, mes) => {
+    const hoy = dayjs();
+    
+    switch (filtroValue) {
+      case "dia":
+        return {
+          desde: dayjs(fecha).startOf("day").toISOString(),
+          hasta: dayjs(fecha).endOf("day").toISOString(),
+        };
+      case "semana":
+        return {
+          desde: hoy.startOf("week").toISOString(),
+          hasta: hoy.endOf("week").toISOString(),
+        };
+      case "mes":
+        return {
+          desde: dayjs(mes + "-01").startOf("day").toISOString(),
+          hasta: dayjs(mes + "-01").endOf("month").toISOString(),
+        };
+      case "personalizado":
+        return rangoFechas;
+      default:
+        return {
+          desde: dayjs().startOf("day").toISOString(),
+          hasta: dayjs().endOf("day").toISOString(),
+        };
+    }
+  }, [rangoFechas]);
 
   // -----------------------------------------------------
-  // FETCH VENTAS + DETALLES
+  // FETCH VENTAS + DETALLES (con filtro server-side)
   // -----------------------------------------------------
-  const fetchVentas = async () => {
+  const fetchVentas = useCallback(async (rango = null) => {
     setLoadingVentas(true);
     try {
+      const { desde, hasta } = rango || calcularRango(filtro, fechaSeleccionada, mesSeleccionado);
+      const cacheKey = `${desde}-${hasta}`;
+
+      // Verificar cache
+      if (ventasCache[cacheKey]) {
+        setVentas(ventasCache[cacheKey]);
+        setLoadingVentas(false);
+        return ventasCache[cacheKey];
+      }
+
       const { data: sales, error: errSales } = await supabase
         .from("user_sales")
         .select(
@@ -44,19 +91,84 @@ export const useVentas = ({ userId }) => {
         `
         )
         .eq("user_id", userId)
+        .gte("fecha", desde)
+        .lte("fecha", hasta)
         .order("fecha", { ascending: false });
 
       if (errSales) throw errSales;
 
-      setVentas(sales ?? []);
-      return sales;
+      const ventasData = sales ?? [];
+      
+      // Guardar en cache
+      setVentasCache(prev => ({ ...prev, [cacheKey]: ventasData }));
+      setVentas(ventasData);
+      return ventasData;
     } catch (err) {
       console.log(err);
       setError(err.message);
     } finally {
       setLoadingVentas(false);
     }
-  };
+  }, [userId, filtro, fechaSeleccionada, mesSeleccionado, rangoFechas, calcularRango, ventasCache]);
+
+  // Refetch cuando cambia el filtro
+  useEffect(() => {
+    if (userId) {
+      fetchVentas();
+    }
+  }, [userId, filtro, fechaSeleccionada, mesSeleccionado, rangoFechas]);
+
+  // Cambiar filtro rápido
+  const cambiarFiltroRapido = useCallback((tipo) => {
+    const hoy = dayjs();
+    
+    switch (tipo) {
+      case "hoy":
+        setFiltro("dia");
+        setFechaSeleccionada(hoy.format("YYYY-MM-DD"));
+        setRangoFechas({
+          desde: hoy.startOf("day").toISOString(),
+          hasta: hoy.endOf("day").toISOString(),
+        });
+        break;
+      case "semana":
+        setFiltro("semana");
+        setRangoFechas({
+          desde: hoy.startOf("week").toISOString(),
+          hasta: hoy.endOf("week").toISOString(),
+        });
+        break;
+      case "mes":
+        setFiltro("mes");
+        setMesSeleccionado(hoy.format("YYYY-MM"));
+        setRangoFechas({
+          desde: hoy.startOf("month").toISOString(),
+          hasta: hoy.endOf("month").toISOString(),
+        });
+        break;
+      case "mesPasado": {
+        setFiltro("mes");
+        const mesPasado = hoy.subtract(1, "month");
+        setMesSeleccionado(mesPasado.format("YYYY-MM"));
+        setRangoFechas({
+          desde: mesPasado.startOf("month").toISOString(),
+          hasta: mesPasado.endOf("month").toISOString(),
+        });
+        break;
+      }
+      default:
+        break;
+    }
+  }, []);
+
+  // Setear rango personalizado
+  const setRangoPersonalizado = useCallback((desde, hasta) => {
+    setFiltro("personalizado");
+    setRangoFechas({
+      desde: dayjs(desde).startOf("day").toISOString(),
+      hasta: dayjs(hasta).endOf("day").toISOString(),
+    });
+  }, []);
 
   // -----------------------------------------------------
   // CREAR VENTA + DETALLES + ACTUALIZAR STOCK
@@ -350,13 +462,6 @@ export const useVentas = ({ userId }) => {
     return ventasFiltradas;
   }, [ventasFiltradas, filtro]);
 
-  // -----------------------------------------------------
-  // INIT
-  // -----------------------------------------------------
-  useEffect(() => {
-    if (userId) fetchVentas();
-  }, [userId]);
-
   return {
     ventas,
     ventasFiltradas,
@@ -373,13 +478,17 @@ export const useVentas = ({ userId }) => {
     filtro,
     fechaSeleccionada,
     mesSeleccionado,
+    rangoFechas,
     handleFiltro: (f, d, m) => {
       setFiltro(f);
       if (d) setFechaSeleccionada(d);
       if (m) setMesSeleccionado(m);
     },
+    cambiarFiltroRapido,
+    setRangoPersonalizado,
     setFechaSeleccionada,
     setMesSeleccionado,
+    setRangoFechas,
     fetchVentas,
   };
 };

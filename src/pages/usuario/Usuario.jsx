@@ -55,9 +55,23 @@ export function Usuario() {
 
   return (
     <div className={`min-h-screen ${bgMain} transition-colors duration-300`}>
+
       {/* HEADER */}
       <div className={`p-4 md:p-6 ${bgCard} border-b ${borderColor}`}>
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-4xl  mx-auto">
+                        {isAdmin && (
+                <button
+                  onClick={() => navigate("/admin")}
+                  className={`px-3 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${
+                    dark
+                      ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
+                      : "bg-red-100 text-red-600 hover:bg-red-200"
+                  }`}
+                  title="Panel de Administrador"
+                >
+                  ⚙️ Admin
+                </button>
+              )}
           {/* TOP ROW */}
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -71,19 +85,6 @@ export function Usuario() {
 
             <div className="flex items-center gap-2">
               {/* ADMIN PANEL - Solo para admins */}
-              {isAdmin && (
-                <button
-                  onClick={() => navigate("/admin")}
-                  className={`px-3 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${
-                    dark
-                      ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
-                      : "bg-red-100 text-red-600 hover:bg-red-200"
-                  }`}
-                  title="Panel de Administrador"
-                >
-                  ⚙️ Admin
-                </button>
-              )}
 
               {/* TUTORIAL RÁPIDO */}
               <button

@@ -6,6 +6,7 @@ export function PanelVentas({
   ventasFiltradas,
   fechaSeleccionada,
   mesSeleccionado,
+  rangoFechas,
 }) {
   const { preferencias } = useAppContext();
   const dark = preferencias?.theme === "dark";
@@ -71,6 +72,15 @@ export function PanelVentas({
       maximumFractionDigits: 0,
     });
 
+  const formatearFecha = (fechaStr) => {
+    if (!fechaStr) return "";
+    return new Date(fechaStr).toLocaleDateString("es-AR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+  };
+
   const obtenerFechaTitulo = () => {
     if (filtro === "dia") {
       return new Date(fechaSeleccionada).toLocaleDateString("es-AR", {
@@ -81,12 +91,18 @@ export function PanelVentas({
       });
     }
     if (filtro === "semana") {
+      if (ventasProcesadas.length > 0) {
+        const fechas = ventasProcesadas.map((v) => new Date(v.fecha));
+        const minFecha = new Date(Math.min(...fechas));
+        const maxFecha = new Date(Math.max(...fechas));
+        return `${formatearFecha(minFecha)} - ${formatearFecha(maxFecha)}`;
+      }
       const hoy = new Date();
       const primerDia = new Date(hoy);
       primerDia.setDate(hoy.getDate() - hoy.getDay());
       const ultimoDia = new Date(primerDia);
       ultimoDia.setDate(primerDia.getDate() + 6);
-      return `${primerDia.toLocaleDateString("es-AR")} - ${ultimoDia.toLocaleDateString("es-AR")}`;
+      return `${formatearFecha(primerDia)} - ${formatearFecha(ultimoDia)}`;
     }
     if (filtro === "mes") {
       const [year, month] = mesSeleccionado.split("-");
@@ -95,18 +111,38 @@ export function PanelVentas({
         month: "long",
       });
     }
+    if (filtro === "personalizado" && rangoFechas) {
+      return `${formatearFecha(rangoFechas.desde)} - ${formatearFecha(rangoFechas.hasta)}`;
+    }
     return "";
   };
 
-  const esMobile = window.innerWidth < 768;
+  const obtenerRangoSubtitulo = () => {
+    if (filtro === "semana" && ventasProcesadas.length > 0) {
+      const fechas = ventasProcesadas.map((v) => new Date(v.fecha));
+      const minFecha = new Date(Math.min(...fechas));
+      const maxFecha = new Date(Math.max(...fechas));
+      return `Semana del ${formatearFecha(minFecha)} al ${formatearFecha(maxFecha)}`;
+    }
+    return null;
+  };
+
+  const rangoSubtitulo = obtenerRangoSubtitulo();
 
   return (
     <div className={`p-4 ${bgPanel(dark)} print-panel`}>
       {/* ENCABEZADO */}
       <div className="text-center mb-6 border-b-2 border-gray-300 pb-4">
         <h1 className="text-2xl font-bold mb-1">Reporte de Ventas</h1>
-        <p className="text-lg capitalize">{obtenerFechaTitulo()}</p>
-        <p className="text-sm opacity-70 mt-1">Generado: {new Date().toLocaleString("es-AR")}</p>
+        <p className={`text-lg capitalize font-medium ${dark ? "text-blue-400" : "text-blue-600"}`}>
+          {obtenerFechaTitulo()}
+        </p>
+        {filtro === "personalizado" && rangoFechas && (
+          <p className="text-sm opacity-70 mt-1">
+            ({ventasProcesadas.length} venta{ventasProcesadas.length !== 1 ? "s" : ""} en este rango)
+          </p>
+        )}
+        <p className="text-xs opacity-50 mt-2">Generado: {new Date().toLocaleString("es-AR")}</p>
       </div>
 
       {/* RESUMEN PRINCIPAL */}

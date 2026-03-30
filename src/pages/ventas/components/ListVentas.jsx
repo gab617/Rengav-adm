@@ -25,6 +25,14 @@ export function ListVentas({
   eliminarTodo,
   eliminarVenta,
   loadingVentas,
+  filtro,
+  fechaSeleccionada,
+  mesSeleccionado,
+  rangoFechas,
+  cambiarFiltroRapido,
+  setRangoPersonalizado,
+  setFechaSeleccionada,
+  setMesSeleccionado,
 }) {
   const { preferencias } = useAppContext();
   const dark = preferencias?.theme === "dark";
@@ -34,14 +42,9 @@ export function ListVentas({
   const [ventaActiva, setVentaActiva] = useState(null);
   const [mostrarDetalles, setMostrarDetalles] = useState(false);
   const [openPanel, setOpenPanel] = useState(false);
-
-  const [filtro, setFiltro] = useState("dia");
-  const [fechaSeleccionada, setFechaSeleccionada] = useState(
-    dayjs().format("YYYY-MM-DD"),
-  );
-  const [mesSeleccionado, setMesSeleccionado] = useState(
-    dayjs().format("YYYY-MM"),
-  );
+  const [showCustomRange, setShowCustomRange] = useState(false);
+  const [customDesde, setCustomDesde] = useState(dayjs().startOf("month").format("YYYY-MM-DD"));
+  const [customHasta, setCustomHasta] = useState(dayjs().format("YYYY-MM-DD"));
 
   const toggleVenta = (id) => setVentaActiva(ventaActiva === id ? null : id);
   const toggleMostrarDetalles = () => setMostrarDetalles(!mostrarDetalles);
@@ -67,129 +70,170 @@ export function ListVentas({
   };
 
   const ventasFiltradas = useMemo(() => {
-    const hoy = dayjs();
-    let filtradas = ventas.filter((venta) => {
-      const fechaVenta = dayjs(venta.fecha);
-      if (filtro === "dia") return fechaVenta.isSame(fechaSeleccionada, "day");
-      if (filtro === "mes") return fechaVenta.isSame(mesSeleccionado, "month");
-      if (filtro === "semana")
-        return fechaVenta.isBetween(
-          hoy.startOf("week"),
-          hoy.endOf("week"),
-          null,
-          "[]",
-        );
-      return true;
-    });
-
-    if (filtro === "semana") return groupByDay(filtradas);
-    if (filtro === "mes") return groupByWeek(filtradas);
-    return filtradas;
-  }, [ventas, filtro, fechaSeleccionada, mesSeleccionado]);
+    if (filtro === "semana") return groupByDay(ventas);
+    if (filtro === "mes") return groupByWeek(ventas);
+    return ventas;
+  }, [ventas, filtro]);
 
   const handlePrintPanel = useReactToPrint({ contentRef: panelRef });
+
+  const handleCustomRange = () => {
+    setRangoPersonalizado(customDesde, customHasta);
+    setShowCustomRange(false);
+  };
 
   useEffect(() => {
     setVentaActiva(null);
     setMostrarDetalles(false);
   }, [ventas]);
 
+  const bgCard = dark ? "bg-gray-800" : "bg-white";
+  const textSecondary = dark ? "text-gray-400" : "text-gray-500";
+  const borderColor = dark ? "border-gray-700" : "border-gray-200";
+
+  const botonesFiltro = [
+    { id: "hoy", label: "Hoy", filtro: "dia" },
+    { id: "semana", label: "Esta semana", filtro: "semana" },
+    { id: "mes", label: "Este mes", filtro: "mes" },
+    { id: "mesPasado", label: "Mes pasado", filtro: "mes" },
+    { id: "personalizado", label: "Personalizado", filtro: "personalizado" },
+  ];
+
   if (loadingVentas) {
     return (
-      <div
-        className={`flex justify-center items-center h-64 ${
-          dark ? "text-gray-200" : "text-gray-600"
-        }`}
-      >
-        <p className="text-lg font-semibold">Cargando ventas...</p>
+      <div className={`flex justify-center items-center h-64 ${textSecondary}`}>
+        <div className="text-center">
+          <div className="animate-spin text-4xl mb-2">⏳</div>
+          <p className="text-lg font-semibold">Cargando ventas...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div
-      className={`${
-        dark ? "text-gray-200" : "text-gray-900"
-      } transition-colors duration-300`}
-    >
-      <div className="mb-4">
-        <label className="mr-2 font-semibold">Filtrar por:</label>
-        <select
-          value={filtro}
-          onChange={(e) => setFiltro(e.target.value)}
-          className={`border p-2 rounded-lg ${
-            dark
-              ? "bg-gray-800 text-gray-200 border-gray-600"
-              : "bg-white text-gray-900"
-          }`}
-        >
-          <option value="dia">Día</option>
-          <option value="semana">Semana</option>
-          <option value="mes">Mes</option>
-        </select>
+    <div className={`transition-colors duration-300`}>
+      {/* FILTROS RÁPIDOS */}
+      <div className={`p-3 sm:p-4 rounded-2xl ${bgCard} border ${borderColor} mb-4`}>
+        {/* Header */}
+        <div className="flex items-center justify-between mb-3">
+          <span className={`text-xs sm:text-sm font-medium ${textSecondary}`}>📅 PERÍODO</span>
+          <span className={`text-xs sm:text-sm ${textSecondary}`}>
+            {ventas.length} venta{ventas.length !== 1 ? "s" : ""}
+          </span>
+        </div>
+        
+        {/* BOTONES DE FILTRO - Responsive Grid */}
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 mb-3">
+          {botonesFiltro.map((btn) => (
+            <button
+              key={btn.id}
+              onClick={() => {
+                if (btn.id === "personalizado") {
+                  setShowCustomRange(!showCustomRange);
+                } else {
+                  cambiarFiltroRapido(btn.id);
+                  setShowCustomRange(false);
+                }
+              }}
+              className={`px-2 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all ${
+                (filtro === btn.filtro && btn.id !== "personalizado") || 
+                (btn.id === "personalizado" && filtro === "personalizado")
+                  ? "bg-blue-500 text-white shadow-md"
+                  : dark
+                    ? "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              {btn.label}
+            </button>
+          ))}
+        </div>
+
+        {/* SELECTOR ESPECÍFICO SEGÚN FILTRO + RANGO PERSONALIZADO */}
+        <div className={`p-3 rounded-xl ${dark ? "bg-gray-700/30" : "bg-gray-50"}`}>
+          {filtro === "dia" && (
+            <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
+              <span className={`text-xs ${textSecondary} sm:shrink-0`}>📌 Día:</span>
+              <input
+                type="date"
+                value={fechaSeleccionada}
+                onChange={(e) => setFechaSeleccionada(e.target.value)}
+                className={`flex-1 w-full px-3 py-2 rounded-lg border text-sm ${dark ? "bg-gray-600 border-gray-500 text-white" : "bg-white border-gray-300"}`}
+              />
+            </div>
+          )}
+          
+          {filtro === "mes" && (
+            <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
+              <span className={`text-xs ${textSecondary} sm:shrink-0`}>📌 Mes:</span>
+              <input
+                type="month"
+                value={mesSeleccionado}
+                onChange={(e) => setMesSeleccionado(e.target.value)}
+                className={`flex-1 w-full px-3 py-2 rounded-lg border text-sm ${dark ? "bg-gray-600 border-gray-500 text-white" : "bg-white border-gray-300"}`}
+              />
+            </div>
+          )}
+
+          {filtro === "semana" && (
+            <div className="flex items-center gap-2">
+              <span className={`text-xs ${textSecondary}`}>📌 Mostrando ventas de la semana actual</span>
+            </div>
+          )}
+
+          {filtro === "personalizado" && (
+            <div className="flex flex-col sm:flex-row gap-2 items-end">
+              <div className="flex-1 w-full">
+                <label className={`block text-xs ${textSecondary} mb-1`}>Desde</label>
+                <input
+                  type="date"
+                  value={customDesde}
+                  onChange={(e) => setCustomDesde(e.target.value)}
+                  className={`w-full px-3 py-2 rounded-lg border text-sm ${dark ? "bg-gray-600 border-gray-500 text-white" : "bg-white border-gray-300"}`}
+                />
+              </div>
+              <div className="flex-1 w-full">
+                <label className={`block text-xs ${textSecondary} mb-1`}>Hasta</label>
+                <input
+                  type="date"
+                  value={customHasta}
+                  onChange={(e) => setCustomHasta(e.target.value)}
+                  className={`w-full px-3 py-2 rounded-lg border text-sm ${dark ? "bg-gray-600 border-gray-500 text-white" : "bg-white border-gray-300"}`}
+                />
+              </div>
+              <button
+                onClick={handleCustomRange}
+                className="px-4 py-2 bg-blue-500 text-white rounded-lg text-sm font-medium hover:bg-blue-600 transition-colors w-full sm:w-auto"
+              >
+                Aplicar
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
-      {filtro === "dia" && (
-        <div className="mb-4">
-          <label htmlFor="fecha" className="mr-2 font-semibold">
-            Selecciona un día:
-          </label>
-          <input
-            id="fecha"
-            type="date"
-            value={fechaSeleccionada}
-            onChange={(e) => setFechaSeleccionada(e.target.value)}
-            className={`border p-2 rounded-lg ${
-              dark
-                ? "bg-gray-800 text-gray-200 border-gray-600"
-                : "bg-white text-gray-900"
-            }`}
-          />
-        </div>
-      )}
-
-      {filtro === "mes" && (
-        <div className="mb-4">
-          <label htmlFor="mes" className="mr-2 font-semibold">
-            Selecciona un mes:
-          </label>
-          <input
-            id="mes"
-            type="month"
-            value={mesSeleccionado}
-            onChange={(e) => setMesSeleccionado(e.target.value)}
-            className={`border p-2 rounded-lg ${
-              dark
-                ? "bg-gray-800 text-gray-200 border-gray-600"
-                : "bg-white text-gray-900"
-            }`}
-          />
-        </div>
-      )}
-
-      <div className="flex flex-wrap items-center gap-4 mb-4">
+      {/* ACCIONES */}
+      <div className="flex flex-wrap gap-2 mb-4">
         <button
           onClick={toggleMostrarDetalles}
-          className={`px-5 py-2 font-semibold rounded-lg shadow transition-colors duration-200 ${
-            dark
-              ? "bg-blue-700 hover:bg-blue-600 text-white"
-              : "bg-blue-600 hover:bg-blue-700 text-white"
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+            mostrarDetalles
+              ? dark ? "bg-purple-500/20 text-purple-400" : "bg-purple-100 text-purple-600"
+              : dark ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-600"
           }`}
         >
-          {mostrarDetalles
-            ? "🔽 Ocultar todos los detalles"
-            : "🔼 Mostrar todos los detalles"}
+          {mostrarDetalles ? "🔽" : "🔼"} {mostrarDetalles ? "Ocultar" : "Ver"} detalles
         </button>
-        <button
-          onClick={handlePrintPanel}
-          className={`px-5 py-2 font-semibold rounded-lg shadow transition-colors duration-200 ${
-            dark
-              ? "bg-teal-700 hover:bg-teal-600 text-white"
-              : "bg-teal-600 hover:bg-teal-700 text-white"
-          }`}
-        >
-          CREAR PDF / IMPRIMIR INFORME
-        </button>
+        {!esMobile && (
+          <button
+            onClick={handlePrintPanel}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+              dark ? "bg-teal-500/20 text-teal-400" : "bg-teal-50 text-teal-600"
+            }`}
+          >
+            🖨️ Imprimir
+          </button>
+        )}
       </div>
 
       <ConsolaAdmin
@@ -199,18 +243,15 @@ export function ListVentas({
         fetchVentas={fetchVentas}
       />
 
-      <div className="flex">
-        <div className="w-[80%]">
+      <div className="flex flex-col lg:flex-row gap-4">
+        <div className="flex-1">
           {Object.keys(ventasFiltradas).length === 0 ? (
-            <p
-              className={`text-center ${
-                dark ? "text-gray-400" : "text-gray-500"
-              }`}
-            >
-              No hay ventas registradas.
-            </p>
+            <div className={`p-8 text-center rounded-2xl ${bgCard}`}>
+              <span className="text-4xl mb-2 block">📭</span>
+              <p className={textSecondary}>No hay ventas en este período</p>
+            </div>
           ) : (
-            <div className="text-lg">
+            <div className="text-sm">
               {filtro === "semana" ? (
                 <FiltroPorSemana
                   dark={dark}
@@ -222,8 +263,8 @@ export function ListVentas({
               ) : filtro === "mes" ? (
                 Object.keys(ventasFiltradas).map((semana) => (
                   <div key={semana} className="mb-4">
-                    <h3 className="font-semibold text-lg">{`Semana ${semana}`}</h3>
-                    <ul className="w-[80%] lg:w-[88%] grid grid-cols-2 md:grid-cols-4 sm:grid-cols-3 lg:grid-cols-7 xl:grid-cols-8 gap-1">
+                    <h3 className="font-semibold text-sm mb-2">Semana {semana}</h3>
+                    <ul className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-1">
                       {ventasFiltradas[semana].map((venta, index) => (
                         <LiVenta
                           key={index}
@@ -250,53 +291,47 @@ export function ListVentas({
             </div>
           )}
         </div>
+        
         {!esMobile && (
-          <div className="ml-4" ref={panelRef}>
+          <div className="lg:w-80 shrink-0" ref={panelRef}>
             <PanelVentas
               filtro={filtro}
               ventas={ventas}
               ventasFiltradas={ventasFiltradas}
               fechaSeleccionada={fechaSeleccionada}
               mesSeleccionado={mesSeleccionado}
+              rangoFechas={rangoFechas}
               printRef={panelRef}
             />
           </div>
         )}
       </div>
+      
       {/* MOBILE PANEL */}
       {esMobile && (
         <button
           onClick={() => setOpenPanel(true)}
-          className="
-      fixed bottom-4 right-4 z-30
-      w-14 h-14 rounded-full shadow-xl
-      flex items-center justify-center
-      bg-blue-600 text-white text-xl
-    "
+          className="fixed bottom-20 right-4 z-30 w-14 h-14 rounded-full shadow-xl bg-blue-600 text-white text-xl flex items-center justify-center"
         >
           📊
         </button>
       )}
       {esMobile && openPanel && (
-        <div className="fixed inset-0 z-40 bg-black/50 flex items-center justify-center">
+        <div className="fixed inset-0 z-40 bg-black/50 flex items-end justify-center">
           <div
-            className={`w-[98%] max-h-[95%] overflow-y-auto rounded-2xl p-1 shadow-2xl ${
-              dark ? "bg-gray-900 text-white" : "bg-white text-gray-900"
-            }`}
+            className={`w-full max-h-[85vh] overflow-y-auto rounded-t-3xl p-4 ${dark ? "bg-gray-900" : "bg-white"}`}
           >
             <div className="flex justify-between items-center mb-3">
-              <h2 className="text-xl font-bold">Resumen de ventas</h2>
-              <button onClick={() => setOpenPanel(false)} className="text-xl">
-                ❌
-              </button>
+              <h2 className="text-xl font-bold">Resumen</h2>
+              <button onClick={() => setOpenPanel(false)} className="text-2xl">❌</button>
             </div>
-
             <PanelVentas
               filtro={filtro}
               ventas={ventas}
               ventasFiltradas={ventasFiltradas}
               fechaSeleccionada={fechaSeleccionada}
               mesSeleccionado={mesSeleccionado}
+              rangoFechas={rangoFechas}
             />
           </div>
         </div>

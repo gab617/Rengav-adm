@@ -38,7 +38,7 @@ export function useProductFilters(
     const base = prod.products_base;
     if (!base) return false;
 
-    const brandLabel = base.brand ?? base.brand_text ?? "";
+    const brandLabel = base.brand || base.brand_text || "";
 
     const nombreBase = base.name ?? "";
     const nombreCustom = prod.user_custom_products?.name ?? "";
@@ -52,7 +52,8 @@ export function useProductFilters(
       String(prod.id).includes(filtroId);
     const cumpleMarca =
       !filtroMarca ||
-      brandLabel.toLowerCase().includes(filtroMarca.toLowerCase());
+      filtroMarca === "Sin marca" && brandLabel === "" ||
+      brandLabel !== "" && brandLabel.toLowerCase().includes(filtroMarca.toLowerCase());
 
     const cumpleCategoria =
       filtroCategorias.length === 0 ||
@@ -103,9 +104,15 @@ export function useProductFilters(
   ]);
 
   const marcasDisponibles = useMemo(() => {
-    const marcas = unifiedBrands.map((b) => b?.label).filter(Boolean);
-    return [...new Set(marcas)].sort((a, b) => a.localeCompare(b));
-  }, [unifiedBrands]);
+    const mapa = {};
+    products.forEach((p) => {
+      const brand = p.products_base?.brand || p.products_base?.brand_text || "Sin marca";
+      mapa[brand] = (mapa[brand] || 0) + 1;
+    });
+    return Object.entries(mapa)
+      .map(([label, count]) => ({ label, count, key: label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [products]);
 
   const resetFiltros = () => {
     setFiltroNombre("");
