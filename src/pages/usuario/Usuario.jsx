@@ -10,9 +10,10 @@ import { AgregarProductosSistema } from "./components/AgregarProductosSistema";
 
 export function Usuario() {
   const { logout, user } = useAuth();
-  const { products, customProducts, preferencias, inactiveProducts } = useAppContext();
+  const { products, customProducts, preferencias, inactiveProducts, profile } = useAppContext();
   const navigate = useNavigate();
   const dark = preferencias?.theme === "dark";
+  const isAdmin = profile?.role === "admin";
 
   const [activeTab, setActiveTab] = useState("productos");
   const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -69,6 +70,21 @@ export function Usuario() {
             </div>
 
             <div className="flex items-center gap-2">
+              {/* ADMIN PANEL - Solo para admins */}
+              {isAdmin && (
+                <button
+                  onClick={() => navigate("/admin")}
+                  className={`px-3 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${
+                    dark
+                      ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
+                      : "bg-red-100 text-red-600 hover:bg-red-200"
+                  }`}
+                  title="Panel de Administrador"
+                >
+                  ⚙️ Admin
+                </button>
+              )}
+
               {/* TUTORIAL RÁPIDO */}
               <button
                 onClick={() => setShowTutorial(true)}
