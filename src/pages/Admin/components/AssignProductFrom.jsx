@@ -63,8 +63,15 @@ export function AssignProductForm({ userId, userProducts, onAssigned }) {
   }, [products, filters, assignedBaseIds]);
 
   /* ========================
-     Helpers
-  ======================== */
+      Helpers
+   ======================== */
+  
+  // Verificar si hay productos con ganancia negativa seleccionados
+  const selectedWithNegativeProfit = useMemo(() => {
+    return Object.entries(selected)
+      .filter(([, v]) => v.checked && v.precioCompra && v.precioVenta)
+      .filter(([, v]) => parseFloat(v.precioVenta) < parseFloat(v.precioCompra));
+  }, [selected]);
 
   function toggleProduct(id, checked) {
     setSelected((s) => ({
@@ -190,9 +197,15 @@ export function AssignProductForm({ userId, userProducts, onAssigned }) {
           <tbody>
             {filteredProducts.map((p) => {
               const row = selected[p.id] || {};
+              const precioCompra = parseFloat(row.precioCompra) || 0;
+              const precioVenta = parseFloat(row.precioVenta) || 0;
+              const ventaMenorQueCompra = precioVenta > 0 && precioCompra > precioVenta;
 
               return (
-                <tr key={p.id} className="border-t">
+                <tr 
+                  key={p.id} 
+                  className={`border-t ${ventaMenorQueCompra ? "bg-red-50" : ""}`}
+                >
                   <td className="text-center">
                     <input
                       type="checkbox"
@@ -201,7 +214,10 @@ export function AssignProductForm({ userId, userProducts, onAssigned }) {
                     />
                   </td>
 
-                  <td>{p.name}</td>
+                  <td className={ventaMenorQueCompra ? "text-red-600 font-medium" : ""}>
+                    {p.name}
+                    {ventaMenorQueCompra && <span className="ml-1">⚠️</span>}
+                  </td>
                   <td>{p.brands?.name}</td>
 
                   <td>
@@ -212,6 +228,7 @@ export function AssignProductForm({ userId, userProducts, onAssigned }) {
                       onChange={(e) =>
                         updateField(p.id, "precioCompra", e.target.value)
                       }
+                      className={`w-full p-1 border rounded ${ventaMenorQueCompra ? "border-red-400 bg-red-100" : ""}`}
                     />
                   </td>
 
@@ -223,6 +240,7 @@ export function AssignProductForm({ userId, userProducts, onAssigned }) {
                       onChange={(e) =>
                         updateField(p.id, "precioVenta", e.target.value)
                       }
+                      className={`w-full p-1 border rounded ${ventaMenorQueCompra ? "border-red-400 bg-red-100" : ""}`}
                     />
                   </td>
 
@@ -244,14 +262,38 @@ export function AssignProductForm({ userId, userProducts, onAssigned }) {
       </div>
 
       {/* ========================
+          Advertencia de ganancia negativa
+      ======================== */}
+      {selectedWithNegativeProfit.length > 0 && (
+        <div className="p-3 border-2 border-red-400 bg-red-50 rounded-lg">
+          <div className="flex items-start gap-2">
+            <span className="text-xl">⚠️</span>
+            <div>
+              <p className="font-semibold text-sm text-red-600">
+                {selectedWithNegativeProfit.length} producto(s) con ganancia negativa
+              </p>
+              <p className="text-xs text-red-500 mt-1">
+                El precio de venta es menor al de compra. 
+                Ajustá los valores antes de asignar.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================
           Guardar
       ======================== */}
       <button
         onClick={() => handleSave()}
-        disabled={saving}
-        className="px-4 py-2 bg-blue-600 text-white rounded"
+        disabled={saving || selectedWithNegativeProfit.length > 0}
+        className={`px-4 py-2 rounded ${
+          selectedWithNegativeProfit.length > 0
+            ? "bg-gray-400 text-gray-600 cursor-not-allowed"
+            : "bg-blue-600 text-white hover:bg-blue-700"
+        }`}
       >
-        {saving ? "Guardando..." : "Asignar seleccionados"}
+        {saving ? "Guardando..." : selectedWithNegativeProfit.length > 0 ? "⚠️ Corregir precios" : "Asignar seleccionados"}
       </button>
 
       {/* ========================

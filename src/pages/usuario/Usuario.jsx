@@ -6,6 +6,7 @@ import { useAppContext } from "../../contexto/Context";
 import { UlCustomProducts } from "./components/UlCustomProducts";
 import { Config } from "./components/Config";
 import { InactiveProductsViewer } from "./components/InactiveProductsViewer";
+import { AgregarProductosSistema } from "./components/AgregarProductosSistema";
 
 export function Usuario() {
   const { logout, user } = useAuth();
@@ -16,6 +17,7 @@ export function Usuario() {
   const [activeTab, setActiveTab] = useState("productos");
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
+  const [showAgregarSistema, setShowAgregarSistema] = useState(false);
   const [esMobile, setEsMobile] = useState(window.innerWidth < 768);
 
   useEffect(() => {
@@ -164,9 +166,21 @@ export function Usuario() {
           <div className="space-y-4">
             {/* FORMULARIO */}
             <div className={`p-4 rounded-2xl ${bgCard} border ${borderColor}`}>
-              <h2 className={`text-lg font-bold mb-3 ${textPrimary}`}>
-                ➕ Crear Producto Personalizado
-              </h2>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className={`text-lg font-bold ${textPrimary}`}>
+                  ➕ Crear Producto
+                </h2>
+                <button
+                  onClick={() => setShowAgregarSistema(true)}
+                  className={`px-3 py-1.5 rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${
+                    dark
+                      ? "bg-green-500/20 text-green-400 hover:bg-green-500/30"
+                      : "bg-green-100 text-green-600 hover:bg-green-200"
+                  }`}
+                >
+                  📦 Del sistema
+                </button>
+              </div>
               <FormCustomProduct userId={user?.id} />
             </div>
 
@@ -242,6 +256,17 @@ export function Usuario() {
       {/* TUTORIAL MODAL */}
       {showTutorial && (
         <TutorialModal dark={dark} onClose={() => setShowTutorial(false)} />
+      )}
+
+      {/* AGREGAR PRODUCTOS DEL SISTEMA */}
+      {showAgregarSistema && (
+        <AgregarProductosSistema
+          onClose={() => setShowAgregarSistema(false)}
+          onProductoAgregado={(producto) => {
+            // El hook useProducts ya actualiza el estado automáticamente
+            setShowAgregarSistema(false);
+          }}
+        />
       )}
     </div>
   );

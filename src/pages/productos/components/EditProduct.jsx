@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { useAppContext } from "../../../contexto/Context";
 
 export function EditProduct({
@@ -10,6 +10,11 @@ export function EditProduct({
   const { preferencias } = useAppContext();
   const dark = preferencias?.theme === "dark";
 
+  const precioVenta = parseFloat(editedProduct.precio_venta) || 0;
+  const precioCompra = parseFloat(editedProduct.precio_compra) || 0;
+  const ganancia = precioVenta - precioCompra;
+  const ventaMenorQueCompra = precioVenta > 0 && precioCompra > 0 && precioCompra > precioVenta;
+
   const bg = dark ? "bg-gray-800 text-gray-200" : "bg-white text-gray-900";
   const inputBg = dark
     ? "bg-gray-700 text-gray-200 border-gray-600 focus:ring-2 focus:ring-blue-500 focus:outline-none"
@@ -17,9 +22,13 @@ export function EditProduct({
   const inputDisabledBg = dark
     ? "bg-gray-600 text-gray-400 cursor-not-allowed"
     : "bg-gray-200 text-gray-600 cursor-not-allowed";
-  const btnSave = dark
-    ? "bg-green-600 hover:bg-green-500 text-white"
-    : "bg-green-500 hover:bg-green-600 text-white";
+  const btnSave = ventaMenorQueCompra
+    ? dark
+      ? "bg-gray-600 text-gray-400 cursor-not-allowed"
+      : "bg-gray-300 text-gray-500 cursor-not-allowed"
+    : dark
+      ? "bg-green-600 hover:bg-green-500 text-white"
+      : "bg-green-500 hover:bg-green-600 text-white";
   const btnCancel = dark
     ? "bg-red-700 hover:bg-red-600 text-white"
     : "bg-red-600 hover:bg-red-500 text-white";
@@ -89,6 +98,36 @@ export function EditProduct({
           </div>
         </div>
 
+        {ventaMenorQueCompra && (
+          <div className={`mt-3 p-3 rounded-xl border-2 ${
+            dark ? "bg-red-900/30 border-red-500" : "bg-red-50 border-red-400"
+          }`}>
+            <div className="flex items-start gap-2">
+              <span className="text-xl">⚠️</span>
+              <div>
+                <p className={`font-semibold text-sm ${dark ? "text-red-400" : "text-red-600"}`}>
+                  Ganancia negativa
+                </p>
+                <p className={`text-xs mt-1 ${dark ? "text-red-300" : "text-red-500"}`}>
+                  El precio de venta (${precioVenta.toLocaleString()}) es menor al de compra (${precioCompra.toLocaleString()}).
+                  <br />
+                  <span className="font-medium">Ganancia por unidad: -${Math.abs(ganancia).toLocaleString()}</span>
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!ventaMenorQueCompra && precioVenta > 0 && precioCompra > 0 && (
+          <div className={`mt-3 p-2 rounded-lg text-center ${
+            dark ? "bg-green-900/30" : "bg-green-50"
+          }`}>
+            <p className={`text-sm font-medium ${dark ? "text-green-400" : "text-green-600"}`}>
+              ✓ Ganancia: ${ganancia.toLocaleString()} por unidad
+            </p>
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-3 mt-3">
           <div>
             <label className="block text-sm font-semibold mb-1">Stock</label>
@@ -125,8 +164,9 @@ export function EditProduct({
           <button
             className={`flex-1 py-2 rounded-lg font-medium transition-colors ${btnSave}`}
             onClick={handleSubmit}
+            disabled={ventaMenorQueCompra}
           >
-            💾 Guardar
+            {ventaMenorQueCompra ? "⚠️ Corregir precios" : "💾 Guardar"}
           </button>
 
           <button

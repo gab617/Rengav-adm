@@ -439,6 +439,11 @@ export const useProducts = (
     );
   };
 
+  // Agregar producto base al estado (cuando se agrega desde productos del sistema)
+  const agregarProductoBase = (productoNormalizado) => {
+    setProducts((prev) => [...prev, productoNormalizado]);
+  };
+
   useEffect(() => {
     if (loadingBrands) return;
 
@@ -458,6 +463,7 @@ export const useProducts = (
     eliminarProducto,
     buscarProductoPorId,
     actualizarProductosPostVenta,
+    agregarProductoBase,
     refetch: fetchProductos,
   };
 };

@@ -1,65 +1,99 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import { useAppContext } from "../../../contexto/Context";
 
 export function UlCustomProducts({ customProducts }) {
-  const { categorias, preferencias, updatePreferencias } = useAppContext();
+  const { categorias, subcategorias, preferencias, updatePreferencias } = useAppContext();
   const dark = preferencias?.theme === "dark";
 
-  // === Vista ===
   const [viewType, setViewType] = useState(
     preferencias?.view_custom_products === "list" ? "list" : "grid"
   );
 
-  useEffect(() => {
-    if (preferencias?.view_custom_products) {
-      setViewType(preferencias.view_custom_products);
-    }
-  }, [preferencias]);
-
-  // === NUEVO: estado general expandible ===
-  const [showSection, setShowSection] = useState(false);
-
-  const toggleSection = () => {
-    const newState = !showSection;
-    setShowSection(newState);
-
-    // Guardar en preferencias
-
-    // Si se colapsa → se pliegan categorías internas
-    if (!newState) {
-      setExpandedAll(false);
-      setExpandedItems({});
-    }
-  };
-
-  // === Buscador ===
   const [search, setSearch] = useState("");
-
-  const filteredProducts = useMemo(() => {
-    if (!search.trim()) return customProducts;
-
-    const term = search.toLowerCase();
-
-    return customProducts.filter((p) => {
-      const name = p.user_custom_products?.name?.toLowerCase() || "";
-      const desc = p.descripcion?.toLowerCase() || "";
-      const prov = p.proveedor_nombre?.toLowerCase() || "";
-
-      return name.includes(term) || desc.includes(term) || prov.includes(term);
-    });
-  }, [search, customProducts]);
-
-  // === Agrupar por categoría ===
-  const productosPorCategoria = filteredProducts.reduce((acc, prod) => {
-    const catId = prod.products_base.category_id ?? "Sin categoría";
-    if (!acc[catId]) acc[catId] = [];
-    acc[catId].push(prod);
-    return acc;
-  }, {});
-
-  // === Expansiones internas ===
+  const [categoriaActiva, setCategoriaActiva] = useState("todas");
+  const [subcategoriaActiva, setSubcategoriaActiva] = useState("todas");
   const [expandedAll, setExpandedAll] = useState(false);
   const [expandedItems, setExpandedItems] = useState({});
+
+  // Subcategorías de la categoría seleccionada
+  const subcategoriasDeCategoria = useMemo(() => {
+    if (categoriaActiva === "todas") return [];
+    return subcategorias.filter((s) => s.id_categoria === categoriaActiva);
+  }, [categoriaActiva, subcategorias]);
+
+  // Filtrar productos
+  const filteredProducts = useMemo(() => {
+    let result = customProducts || [];
+
+    if (search.trim()) {
+      const term = search.toLowerCase();
+      result = result.filter((p) => {
+        const name = p.user_custom_products?.name?.toLowerCase() || "";
+        const desc = p.descripcion?.toLowerCase() || "";
+        const prov = p.proveedor_nombre?.toLowerCase() || "";
+        return name.includes(term) || desc.includes(term) || prov.includes(term);
+      });
+    }
+
+    if (categoriaActiva !== "todas") {
+      result = result.filter((p) => p.products_base?.category_id === categoriaActiva);
+    }
+
+    if (subcategoriaActiva !== "todas" && subcategoriaActiva !== null) {
+      result = result.filter((p) => p.products_base?.subcategory_id === subcategoriaActiva);
+    }
+
+    return result;
+  }, [customProducts, search, categoriaActiva, subcategoriaActiva]);
+
+  // Agrupar por categoría
+  const productosPorCategoria = useMemo(() => {
+    const grupos = {};
+    filteredProducts.forEach((prod) => {
+      const catId = prod.products_base?.category_id ?? "sin-categoria";
+      if (!grupos[catId]) grupos[catId] = [];
+      grupos[catId].push(prod);
+    });
+    return grupos;
+  }, [filteredProducts]);
+
+  // Contadores por categoría
+  const conteoPorCategoria = useMemo(() => {
+    const counts = { todas: (customProducts || []).length };
+    (customProducts || []).forEach((p) => {
+      const catId = p.products_base?.category_id;
+      if (catId) {
+        counts[catId] = (counts[catId] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [customProducts]);
+
+  // Contadores por subcategoría
+  const conteoPorSubcategoria = useMemo(() => {
+    if (categoriaActiva === "todas") return {};
+    const counts = { todas: conteoPorCategoria[categoriaActiva] || 0 };
+    (customProducts || [])
+      .filter((p) => p.products_base?.category_id === categoriaActiva)
+      .forEach((p) => {
+        const subId = p.products_base?.subcategory_id;
+        if (subId) {
+          counts[subId] = (counts[subId] || 0) + 1;
+        }
+      });
+    return counts;
+  }, [customProducts, categoriaActiva, conteoPorCategoria]);
+
+  // Categorías que tienen productos
+  const categoriasConProductos = useMemo(() => {
+    const catIds = new Set((customProducts || []).map((p) => p.products_base?.category_id).filter(Boolean));
+    return categorias.filter((c) => catIds.has(c.id));
+  }, [categorias, customProducts]);
+
+  const handleSelectCategoria = (catId) => {
+    setCategoriaActiva(catId);
+    setSubcategoriaActiva("todas");
+  };
 
   const toggleExpandedAll = () => {
     if (expandedAll) {
@@ -75,316 +109,281 @@ export function UlCustomProducts({ customProducts }) {
 
   const toggleOne = (id) => {
     if (expandedAll) return;
-
-    setExpandedItems((prev) => ({
-      ...prev,
-      [id]: !prev[id],
-    }));
+    setExpandedItems((prev) => ({ ...prev, [id]: !prev[id] }));
   };
+
+  // Estilos
+  const textPrimary = dark ? "text-white" : "text-gray-900";
+  const textSecondary = dark ? "text-gray-400" : "text-gray-500";
+  const bgCard = dark ? "bg-gray-700" : "bg-white";
+  const bgItem = dark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200";
+  const inputBg = dark ? "bg-gray-600 text-white" : "bg-gray-50 text-gray-900";
+  const borderColor = dark ? "border-gray-600" : "border-gray-200";
 
   if (!customProducts || customProducts.length === 0) {
     return (
-      <p className={dark ? "text-gray-400" : "text-gray-500"}>
-        No hay productos personalizados creados.
-      </p>
+      <div className={`text-center py-8 ${textSecondary}`}>
+        <span className="text-4xl mb-2 block">📦</span>
+        <p>No hay productos personalizados creados</p>
+      </div>
     );
   }
 
-  // === Estilos ===
-  const btnBase =
-    "px-3 py-1 rounded-lg font-medium transition-all duration-200";
-  const btnActive = dark
-    ? "bg-blue-600 text-white shadow"
-    : "bg-blue-500 text-white shadow";
-  const btnInactive = dark
-    ? "bg-gray-700 text-gray-300 hover:bg-gray-600"
-    : "bg-gray-200 text-gray-700 hover:bg-gray-300";
-
-  const btnToggle = dark
-    ? "bg-purple-600 hover:bg-purple-700 text-white"
-    : "bg-purple-500 hover:bg-purple-600 text-white";
-
-  const liBg = dark
-    ? "bg-gray-800 border-gray-700 text-gray-200"
-    : "bg-white border-gray-200 text-gray-900";
-
-  const liShadow = dark
-    ? "shadow-md hover:shadow-lg"
-    : "shadow-sm hover:shadow-md";
-
   return (
-    <div className="w-full">
-      {/* ====== Barra superior ====== */}
-      <div className="flex flex-wrap justify-between items-center mb-4 gap-2">
-        {/* Vista */}
-        <div className="flex gap-2">
-          <button
-            className={`${btnBase} ${
-              viewType === "list" ? btnActive : btnInactive
-            }`}
-            onClick={() => {
-              setViewType("list");
-              updatePreferencias({ view_custom_products: "list" });
-            }}
-          >
-            Lista
-          </button>
-
-          <button
-            className={`${btnBase} ${
-              viewType === "grid" ? btnActive : btnInactive
-            }`}
-            onClick={() => {
-              setViewType("grid");
-              updatePreferencias({ view_custom_products: "grid" });
-            }}
-          >
-            Mosaico
-          </button>
+    <div className="space-y-3">
+      {/* HEADER CON CONTROLES */}
+      <div className={`p-3 rounded-xl ${bgCard}`}>
+        {/* Búsqueda */}
+        <div className="relative mb-3">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2">🔍</span>
+          <input
+            type="text"
+            placeholder="Buscar productos..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className={`w-full pl-9 pr-9 py-2.5 rounded-xl border ${inputBg} text-sm`}
+          />
+          {search && (
+            <button
+              onClick={() => setSearch("")}
+              className={`absolute right-3 top-1/2 -translate-y-1/2 ${textSecondary}`}
+            >
+              ✕
+            </button>
+          )}
         </div>
 
-        {/* Expandir todos */}
-        <button
-          className={`${btnBase} ${btnToggle}`}
-          onClick={toggleExpandedAll}
-        >
-          {expandedAll ? "Colapsar todos" : "Expandir todos"}
-        </button>
-      </div>
-
-      {/* ======================= Sección expandible general ======================= */}
-      <div className="w-full mb-2">
-        <button
-          onClick={toggleSection}
-          className="flex justify-between items-center w-full py-2 px-3 rounded-lg 
-            bg-gradient-to-r from-purple-500/20 to-transparent
-            hover:from-purple-500/30 transition-all duration-300 select-none"
-        >
-          <h1
-            className={`text-xl font-semibold ${
-              dark ? "text-gray-200" : "text-gray-900"
+        {/* Vista + Expandir */}
+        <div className="flex items-center justify-between">
+          <div className="flex gap-1">
+            <button
+              onClick={() => {
+                setViewType("list");
+                updatePreferencias({ view_custom_products: "list" });
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                viewType === "list"
+                  ? dark ? "bg-blue-500/30 text-blue-400" : "bg-blue-100 text-blue-600"
+                  : `${textSecondary}`
+              }`}
+            >
+              📋 Lista
+            </button>
+            <button
+              onClick={() => {
+                setViewType("grid");
+                updatePreferencias({ view_custom_products: "grid" });
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                viewType === "grid"
+                  ? dark ? "bg-blue-500/30 text-blue-400" : "bg-blue-100 text-blue-600"
+                  : `${textSecondary}`
+              }`}
+            >
+              ⊞ Mosaico
+            </button>
+          </div>
+          <button
+            onClick={toggleExpandedAll}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              dark ? "bg-purple-500/20 text-purple-400" : "bg-purple-100 text-purple-600"
             }`}
           >
-            Productos creados ({customProducts.length})
-          </h1>
+            {expandedAll ? "⊟ Colapsar" : "⊞ Expandir"}
+          </button>
+        </div>
+      </div>
 
-          <span
-            className={`transition-transform duration-300 ${
-              showSection ? "rotate-180" : ""
+      {/* CATEGORÍAS COMO TABS */}
+      <div className={`overflow-x-auto pb-1 ${bgCard} rounded-xl`}>
+        <div className="flex gap-1.5 p-2 min-w-max">
+          <button
+            onClick={() => handleSelectCategoria("todas")}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap ${
+              categoriaActiva === "todas"
+                ? "bg-blue-500 text-white"
+                : dark ? "bg-gray-600 text-gray-300" : "bg-gray-100 text-gray-600"
             }`}
           >
-            ⌄
-          </span>
-        </button>
+            Todas ({conteoPorCategoria.todas})
+          </button>
+          {categoriasConProductos.map((cat) => (
+            <button
+              key={cat.id}
+              onClick={() => handleSelectCategoria(cat.id)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap ${
+                categoriaActiva === cat.id
+                  ? "text-white"
+                  : dark ? "bg-gray-600 text-gray-300" : "bg-gray-100 text-gray-600"
+              }`}
+              style={categoriaActiva === cat.id ? { backgroundColor: cat.color } : {}}
+            >
+              {cat.nombre} ({conteoPorCategoria[cat.id] || 0})
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Barra de búsqueda */}
-      <div
-        className={`transition-all duration-500 overflow-hidden ${
-          showSection ? "max-h-[200px] opacity-100" : "max-h-0 opacity-0"
-        }`}
-      >
-        <input
-          type="text"
-          placeholder="Buscar productos..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className={`
-            mt-2 w-full px-3 py-2 rounded-lg border
-            ${
-              dark
-                ? "bg-gray-800 text-gray-200 border-gray-700"
-                : "bg-white border-gray-300"
-            }
-          `}
-        />
-      </div>
-
-      {/* Contenido de la sección */}
-      <div
-        className={`transition-all duration-500 overflow-hidden ${
-          showSection ? "max-h-[5000px] opacity-100" : "max-h-0 opacity-0"
-        }`}
-      >
-        {/* ======================= LISTADO POR CATEGORÍAS ======================= */}
-        {Object.entries(productosPorCategoria).map(([catId, productos]) => {
-          const catName =
-            categorias.find((c) => c.id === Number(catId))?.nombre ||
-            "Sin categoría";
-
-          return (
-            <div key={catId} className="mb-4">
-              {/* Título Categoría */}
-              <h2
-                className={`text-lg font-bold mb-2 ${
-                  dark ? "text-blue-300" : "text-blue-700"
+      {/* SUBCATEGORÍAS */}
+      {categoriaActiva !== "todas" && subcategoriasDeCategoria.length > 0 && (
+        <div className={`overflow-x-auto pb-1 ${dark ? "bg-gray-800/50" : "bg-gray-50"} rounded-xl`}>
+          <div className="flex gap-1 p-1.5 min-w-max">
+            <button
+              onClick={() => setSubcategoriaActiva("todas")}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition-all whitespace-nowrap ${
+                subcategoriaActiva === "todas"
+                  ? "bg-blue-500 text-white"
+                  : dark ? "bg-gray-600 text-gray-400" : "bg-white text-gray-500"
+              }`}
+            >
+              Todas ({conteoPorSubcategoria.todas})
+            </button>
+            {subcategoriasDeCategoria.map((sub) => (
+              <button
+                key={sub.id}
+                onClick={() => setSubcategoriaActiva(sub.id)}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-all whitespace-nowrap ${
+                  subcategoriaActiva === sub.id
+                    ? "bg-blue-500 text-white"
+                    : dark ? "bg-gray-600 text-gray-400" : "bg-white text-gray-500"
                 }`}
               >
-                {catName}
-              </h2>
+                {sub.nombre} ({conteoPorSubcategoria[sub.id] || 0})
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
-              {/* Lista */}
-              <ul
-                className={`${
+      {/* RESULTADOS */}
+      <div className={`p-3 rounded-xl ${bgCard} text-sm ${textSecondary}`}>
+        {filteredProducts.length} producto{filteredProducts.length !== 1 ? "s" : ""}
+        {categoriaActiva !== "todas" && (
+          <span> de {categorias.find((c) => c.id === categoriaActiva)?.nombre}</span>
+        )}
+        {subcategoriaActiva !== "todas" && (
+          <span> › {subcategorias.find((s) => s.id === subcategoriaActiva)?.nombre}</span>
+        )}
+      </div>
+
+      {/* LISTA POR CATEGORÍAS */}
+      {Object.entries(productosPorCategoria).length === 0 ? (
+        <div className={`p-6 text-center rounded-xl ${bgCard}`}>
+          <span className="text-4xl mb-2 block">📭</span>
+          <p className={textSecondary}>Sin resultados</p>
+        </div>
+      ) : (
+        Object.entries(productosPorCategoria).map(([catId, productos]) => {
+          const cat = categorias.find((c) => c.id === Number(catId));
+          const catNombre = cat?.nombre || "Sin categoría";
+          const catColor = cat?.color || "#666";
+
+          return (
+            <div key={catId} className={`p-3 rounded-xl ${bgCard} border ${borderColor}`}>
+              {/* HEADER CATEGORÍA */}
+              <h3
+                className="text-sm font-bold text-white px-3 py-1.5 rounded-lg mb-3 inline-block"
+                style={{ backgroundColor: catColor }}
+              >
+                {catNombre}
+              </h3>
+
+              {/* PRODUCTOS */}
+              <div
+                className={
                   viewType === "grid"
-                    ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1"
-                    : "space-y-1"
-                }`}
+                    ? "grid grid-cols-1 sm:grid-cols-2 gap-2"
+                    : "space-y-2"
+                }
               >
                 {productos.map((prod) => {
                   const isExpanded = expandedAll || expandedItems[prod.id];
+                  const subcat = subcategorias.find((s) => s.id === prod.products_base?.subcategory_id);
 
                   return (
-                    <li
+                    <div
                       key={prod.id}
-                      className={`rounded-xl p-1 flex flex-col gap-3 border-3 ${liBg} ${liShadow} transition-all duration-300 hover:scale-[1.01]`}
+                      className={`rounded-xl border p-3 transition-all ${
+                        isExpanded ? "border-blue-500/50 shadow-lg" : bgItem
+                      }`}
                     >
-                      {/* Header item */}
+                      {/* HEADER */}
                       <div
-                        className="flex justify-between items-center cursor-pointer select-none"
+                        className="flex items-center justify-between cursor-pointer"
                         onClick={() => toggleOne(prod.id)}
                       >
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-semibold text-lg">
-                            {prod.user_custom_products?.name}
-                          </h3>
-                          <span
-                            className={`text-[11px] px-2 py-0.5 rounded-full ${
-                              dark
-                                ? "bg-gray-700 text-gray-300"
-                                : "bg-gray-200 text-gray-700"
-                            }`}
-                          >
-                            Creado
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <span className={`text-lg ${isExpanded ? "rotate-90 transition-transform" : ""}`}>
+                            ▶
                           </span>
-                          <span
-                            className={`text-[11px] px-2 py-0.5 rounded-full ${
-                              dark
-                                ? "bg-gray-700 text-gray-300"
-                                : "bg-gray-200 text-gray-700"
-                            }`}
-                          >
-                            {prod.products_base?.brand ??
-                              prod.products_base?.brand_text ??
-                              "Sin marca"}
+                          <h4 className={`font-semibold truncate ${textPrimary}`}>
+                            {prod.user_custom_products?.name}
+                          </h4>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {subcat && (
+                            <span className={`text-xs px-1.5 py-0.5 rounded ${
+                              dark ? "bg-gray-600/50 text-gray-400" : "bg-gray-100 text-gray-500"
+                            }`}>
+                              {subcat.nombre}
+                            </span>
+                          )}
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${
+                            dark ? "bg-gray-600 text-gray-300" : "bg-gray-100 text-gray-600"
+                          }`}>
+                            {prod.products_base?.brand || prod.products_base?.brand_text || "Sin marca"}
                           </span>
                         </div>
-
-                        <span
-                          className={`transition-transform duration-300 ${
-                            isExpanded ? "rotate-180" : ""
-                          }`}
-                        >
-                          ⌄
-                        </span>
                       </div>
 
-                      {/* Detalles */}
-                      <div
-                        className={`overflow-hidden transition-all duration-300 ${
-                          isExpanded ? "max-h-[1000px] mt-2" : "max-h-0"
-                        }`}
-                      >
-                        <div
-                          className={`border grid grid-cols-3 gap-1 text-base p-[.5em] rounded-lg ${
-                            dark ? "bg-gray-800/40" : "bg-gray-50"
-                          }`}
-                        >
-                          <div className="flex flex-col">
-                            <span
-                              className={
-                                dark ? "text-gray-300" : "text-gray-700"
-                              }
-                            >
-                              Precio compra
-                            </span>
-                            <span
-                              className={`font-semibold ${
-                                dark ? "text-gray-300" : "text-gray-700"
-                              }`}
-                            >
-                              ${prod.precio_compra}
-                            </span>
+                      {/* DETALLES */}
+                      {isExpanded && (
+                        <div className={`mt-3 pt-3 border-t ${borderColor}`}>
+                          {/* PRECIOS Y STOCK */}
+                          <div className="grid grid-cols-3 gap-2 mb-3">
+                            <div className={`p-2 rounded-lg ${dark ? "bg-gray-600/50" : "bg-gray-50"}`}>
+                              <p className={`text-xs ${textSecondary}`}>Compra</p>
+                              <p className={`font-bold ${textPrimary}`}>
+                                ${parseFloat(prod.precio_compra || 0).toLocaleString()}
+                              </p>
+                            </div>
+                            <div className={`p-2 rounded-lg ${dark ? "bg-gray-600/50" : "bg-gray-50"}`}>
+                              <p className={`text-xs ${textSecondary}`}>Venta</p>
+                              <p className={`font-bold text-green-500`}>
+                                ${parseFloat(prod.precio_venta || 0).toLocaleString()}
+                              </p>
+                            </div>
+                            <div className={`p-2 rounded-lg ${dark ? "bg-gray-600/50" : "bg-gray-50"}`}>
+                              <p className={`text-xs ${textSecondary}`}>Stock</p>
+                              <p className={`font-bold ${textPrimary}`}>
+                                {prod.stock ?? 0}
+                              </p>
+                            </div>
                           </div>
 
-                          <div className="flex flex-col">
-                            <span
-                              className={
-                                dark ? "text-gray-100" : "text-gray-900"
-                              }
-                            >
-                              Precio venta
-                            </span>
-                            <span
-                              className={`font-semibold ${
-                                dark ? "text-gray-300" : "text-gray-700"
-                              }`}
-                            >
-                              ${prod.precio_venta}
-                            </span>
-                          </div>
+                          {/* PROVEEDOR */}
+                          {prod.proveedor_nombre && (
+                            <div className={`text-xs ${textSecondary} mb-2`}>
+                              📦 Proveedor: <span className={textPrimary}>{prod.proveedor_nombre}</span>
+                            </div>
+                          )}
 
-                          <div className="flex flex-col">
-                            <span
-                              className={
-                                dark ? "text-gray-300" : "text-gray-700"
-                              }
-                            >
-                              Stock
-                            </span>
-                            <span
-                              className={`font-semibold ${
-                                dark ? "text-gray-300" : "text-gray-700"
-                              }`}
-                            >
-                              {prod.stock}
-                            </span>
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={
-                                dark ? "text-gray-200" : "text-gray-900"
-                              }
-                            >
-                              Proveedor
-                            </span>
-                            <span
-                              className={`font-semibold ${
-                                dark ? "text-gray-100" : "text-gray-900"
-                              }`}
-                            >
-                              {prod.proveedor_nombre}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Descripción */}
-                        <div
-                          className={`mt-3 pt-2 border-t ${
-                            dark
-                              ? "border-gray-700 text-gray-400"
-                              : "border-gray-200 text-gray-600"
-                          }`}
-                        >
-                          <div className="max-h-[2.5em] min-h-[2.5em] overflow-y-auto pr-1">
-                            <p className="leading-snug whitespace-pre-line">
-                              {prod.descripcion
-                                ? prod.descripcion.charAt(0).toUpperCase() +
-                                  prod.descripcion.slice(1)
-                                : "Sin descripción"}
+                          {/* DESCRIPCIÓN */}
+                          <div className={`text-xs ${textSecondary}`}>
+                            <p className={`line-clamp-2 ${textPrimary}`}>
+                              {prod.descripcion || "Sin descripción"}
                             </p>
                           </div>
                         </div>
-                      </div>
-                    </li>
+                      )}
+                    </div>
                   );
                 })}
-              </ul>
+              </div>
             </div>
           );
-        })}
-      </div>
+        })
+      )}
     </div>
   );
 }

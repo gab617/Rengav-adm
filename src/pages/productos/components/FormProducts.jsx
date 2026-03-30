@@ -2,7 +2,9 @@ import React, { useState } from "react";
 import { useAppContext } from "../../../contexto/Context";
 
 export function FormProducts() {
-  const { agregarProducto } = useAppContext(); // Llamamos al hook para agregar el producto
+  const { agregarProducto, preferencias } = useAppContext();
+  const dark = preferencias?.theme === "dark";
+  
   const [formData, setFormData] = useState({
     nombre: "",
     descripcion: "",
@@ -13,7 +15,12 @@ export function FormProducts() {
     id_subcategoria: "",
   });
   const [error, setError] = useState("");
-  const [isFormVisible, setIsFormVisible] = useState(false); // Estado para controlar la visibilidad del formulario
+  const [isFormVisible, setIsFormVisible] = useState(false);
+
+  const precioVenta = parseFloat(formData.precio_venta) || 0;
+  const precioCompra = parseFloat(formData.precio_compra) || 0;
+  const ganancia = precioVenta - precioCompra;
+  const ventaMenorQueCompra = precioVenta > 0 && precioCompra > 0 && precioCompra > precioVenta;
 
   const categorias = [
     { id: 1, nombre: "Almacén", subcategorias: [1, 2, 3, 4, 5] },
@@ -43,7 +50,11 @@ export function FormProducts() {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    console.log("SE QUIERE AGREGAR");
+
+    if (ventaMenorQueCompra) {
+      setError("El precio de venta no puede ser menor al precio de compra.");
+      return;
+    }
 
     // Validación de formulario, excluyendo descripción de ser obligatoria
     if (
@@ -57,35 +68,27 @@ export function FormProducts() {
       return;
     }
 
-    console.log("FormData antes de enviar:", formData); // Verifica que los datos estén correctos
-
-    // Crear una copia del formData y convertir id_subcategoria a null si es una cadena vacía
     const dataToSend = {
       ...formData,
       id_subcategoria:
         formData.id_subcategoria === "" ? null : formData.id_subcategoria,
     };
 
-    console.log("Data a enviar:", dataToSend); // Verifica que los datos sean correctos antes de enviarlos
-
-    // Verificar si agregarProducto es la función esperada
     if (typeof agregarProducto === "function") {
-      agregarProducto(dataToSend)
+      agregarProducto(dataToSend);
     } else {
-      console.error(
-        "La función agregarProducto no está definida correctamente."
-      );
+      console.error("La función agregarProducto no está definida correctamente.");
     }
 
     // Limpiar formulario
     setFormData({
       nombre: "",
-      descripcion: "", // Permitir que esté vacío
+      descripcion: "",
       precio_compra: "",
       precio_venta: "",
       stock: "",
       id_categoria: "",
-      id_subcategoria: "", // Mantener vacío en el formulario
+      id_subcategoria: "",
     });
     setError("");
   };
@@ -153,7 +156,11 @@ export function FormProducts() {
                 name="precio_compra"
                 value={formData.precio_compra}
                 onChange={handleChange}
-                className="w-full p-2 mt-1 border border-gray-300 rounded-md"
+                className={`w-full p-2 mt-1 border rounded-md ${
+                  ventaMenorQueCompra 
+                    ? "border-red-500 bg-red-50 focus:ring-red-500" 
+                    : "border-gray-300 focus:ring-blue-500"
+                }`}
                 placeholder="Precio de compra"
                 required
               />
@@ -173,11 +180,43 @@ export function FormProducts() {
                 name="precio_venta"
                 value={formData.precio_venta}
                 onChange={handleChange}
-                className="w-full p-2 mt-1 border border-gray-300 rounded-md"
+                className={`w-full p-2 mt-1 border rounded-md ${
+                  ventaMenorQueCompra 
+                    ? "border-red-500 bg-red-50 focus:ring-red-500" 
+                    : "border-gray-300 focus:ring-blue-500"
+                }`}
                 placeholder="Precio de venta"
                 required
               />
             </div>
+
+            {/* Advertencia de ganancia negativa */}
+            {ventaMenorQueCompra && (
+              <div className="mb-4 p-3 rounded-lg bg-red-50 border-2 border-red-400 col-span-2">
+                <div className="flex items-start gap-2">
+                  <span className="text-xl">⚠️</span>
+                  <div>
+                    <p className="font-semibold text-sm text-red-600">
+                      Ganancia negativa
+                    </p>
+                    <p className="text-xs text-red-500 mt-1">
+                      El precio de venta (${precioVenta.toLocaleString()}) es menor al de compra (${precioCompra.toLocaleString()}).
+                      <br />
+                      <span className="font-medium">Ganancia por unidad: -${Math.abs(ganancia).toLocaleString()}</span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Indicador de ganancia positiva */}
+            {!ventaMenorQueCompra && precioVenta > 0 && precioCompra > 0 && (
+              <div className="mb-4 p-2 rounded-lg bg-green-50 text-center col-span-2">
+                <p className="text-sm font-medium text-green-600">
+                  ✓ Ganancia: ${ganancia.toLocaleString()} por unidad
+                </p>
+              </div>
+            )}
 
             {/* Stock */}
             <div className="mb-4">
@@ -277,9 +316,14 @@ export function FormProducts() {
             <div className="text-center items-center flex">
               <button
                 type="submit"
-                className="mb-6 px-6 py-2 bg-blue-500 text-white font-semibold rounded-md hover:bg-blue-600"
+                disabled={ventaMenorQueCompra}
+                className={`mb-6 px-6 py-2 font-semibold rounded-md transition-colors ${
+                  ventaMenorQueCompra
+                    ? "bg-gray-400 text-gray-600 cursor-not-allowed"
+                    : "bg-blue-500 text-white hover:bg-blue-600"
+                }`}
               >
-                Agregar Producto
+                {ventaMenorQueCompra ? "⚠️ Corregir precios" : "Agregar Producto"}
               </button>
             </div>
           </form>
