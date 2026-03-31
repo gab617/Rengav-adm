@@ -4,12 +4,18 @@ import { useAdminCategories } from "../../hooksAdmin/useAdminCategories";
 import { useAdminBrands } from "../../hooksAdmin/useAdminBrands";
 import { ProductList } from "./components/ProductList";
 import { useAppContext } from "../../../../contexto/Context";
+import { useAdminData } from "../../../../hooks/useAdminData";
 
 export function ProductsBase() {
   const { preferencias, subcategorias } = useAppContext();
   const dark = preferencias?.theme === "dark";
+  const { invalidateProductsBase } = useAdminData();
 
-  const { products, loading, creating, createProductBase } = useAdminProductsBase();
+  const handleProductCreated = async () => {
+    await invalidateProductsBase();
+  };
+
+  const { products, loading, creating, createProductBase } = useAdminProductsBase(handleProductCreated);
   const { categories, getSubcategoriesByCategory } = useAdminCategories();
   const { getBrandsByCategory, createBrand, linkBrandToCategory } = useAdminBrands();
 

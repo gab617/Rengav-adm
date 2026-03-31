@@ -1,18 +1,28 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { supabase } from "../../../services/supabaseClient";
 import { useAppContext } from "../../../contexto/Context";
+import { useAdminData } from "../../../hooks/useAdminData";
 
 export function AssignProducts() {
   const { preferencias } = useAppContext();
   const dark = preferencias?.theme === "dark";
+  const { 
+    users: cachedUsers, 
+    productsBase: cachedProducts, 
+    systemCategories: cachedSystemCats,
+    productCounts: cachedCounts,
+    isLoaded,
+    loadInitialData,
+    invalidateUserProducts
+  } = useAdminData();
 
-  const [users, setUsers] = useState([]);
+  const [users, setUsers] = useState(cachedUsers);
   const [selectedUser, setSelectedUser] = useState(null);
-  const [products, setProducts] = useState([]);
+  const [products, setProducts] = useState(cachedProducts);
   const [userProducts, setUserProducts] = useState(new Set());
   const [assignedProductsData, setAssignedProductsData] = useState([]);
-  const [userProductCounts, setUserProductCounts] = useState({});
-  const [loading, setLoading] = useState(true);
+  const [userProductCounts, setUserProductCounts] = useState(cachedCounts);
+  const [loading, setLoading] = useState(!isLoaded);
   const [search, setSearch] = useState("");
   const [selectedBrand, setSelectedBrand] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
@@ -22,10 +32,10 @@ export function AssignProducts() {
   const [asignando, setAsignando] = useState(false);
   const [eliminando, setEliminando] = useState(false);
   const [activeTab, setActiveTab] = useState("asignar");
-  const [lastAssigned, setLastAssigned] = useState([]);
   const [notification, setNotification] = useState(null);
   const [showBrandFilter, setShowBrandFilter] = useState(false);
   const [showCategoryFilter, setShowCategoryFilter] = useState(false);
+  const [userCategories, setUserCategories] = useState([]);
 
   const showNotification = (msg, type = "success") => {
     setNotification({ msg, type });
@@ -34,33 +44,27 @@ export function AssignProducts() {
 
   useEffect(() => {
     async function load() {
-      setLoading(true);
-      const [usersRes, productsRes] = await Promise.all([
-        supabase.from("profiles").select("id, name").order("name"),
-        supabase
-          .from("products_base")
-          .select("id, name, brand_id, brands(name), categories(name)")
-          .order("name"),
-      ]);
-
-      const usersData = usersRes.data || [];
-      setUsers(usersData);
-      setProducts(productsRes.data || []);
-
-      const counts = {};
-      for (const user of usersData) {
-        const { count } = await supabase
-          .from("user_products")
-          .select("id", { count: "exact" })
-          .eq("user_id", user.id);
-        counts[user.id] = count || 0;
+      if (!isLoaded) {
+        setLoading(true);
+        await loadInitialData();
       }
-      setUserProductCounts(counts);
-
+      
+      // Sincronizar con datos del cache
+      setUsers(cachedUsers);
+      setProducts(cachedProducts);
+      setUserProductCounts(cachedCounts);
+      
       setLoading(false);
     }
     load();
   }, []);
+
+  // Actualizar productos cuando el cache cambie (ej: se agregó un nuevo producto)
+  useEffect(() => {
+    if (isLoaded && cachedProducts.length > 0) {
+      setProducts(cachedProducts);
+    }
+  }, [cachedProducts, isLoaded]);
 
   const loadAssignedProducts = async () => {
     if (!selectedUser) {
@@ -80,15 +84,16 @@ export function AssignProducts() {
 
     if (selectedUser?.id !== currentUserId) return;
 
-    const ids = new Set();
+const ids = new Set();
     const productData = [];
     data?.forEach((up) => {
-      if (up.active !== false) {
-        const baseIdStr = String(up.base_id);
-        ids.add(baseIdStr);
-      }
+      if (!up.base_id) return;
+      
+      const baseIdStr = String(up.base_id);
+      ids.add(baseIdStr);
+      
       productData.push({ 
-        base_id: String(up.base_id), 
+        base_id: baseIdStr, 
         precio_venta: up.precio_venta,
         active: up.active !== false,
         id: up.id
@@ -101,7 +106,38 @@ export function AssignProducts() {
 
   useEffect(() => {
     loadAssignedProducts();
-  }, [selectedUser]);
+  }, [selectedUser, userCategories]);
+
+  // Cargar categorías del usuario seleccionado Y el conteo de productos
+  useEffect(() => {
+    if (!selectedUser?.id) {
+      setUserCategories([]);
+      return;
+    }
+    
+    async function loadUserData() {
+      const [userCatsRes, countRes] = await Promise.all([
+        supabase
+          .from("user_categories")
+          .select("category_id")
+          .eq("user_id", selectedUser.id)
+          .eq("active", true),
+        supabase
+          .from("user_products")
+          .select("id", { count: "exact" })
+          .eq("user_id", selectedUser.id)
+      ]);
+      
+      setUserCategories(userCatsRes.data?.map(uc => uc.category_id) || []);
+      
+      setUserProductCounts(prev => ({
+        ...prev,
+        [selectedUser.id]: countRes.count || 0
+      }));
+    }
+    
+    loadUserData();
+  }, [selectedUser?.id]);
 
   const reloadUserProducts = async () => {
     if (!selectedUser) return;
@@ -110,14 +146,31 @@ export function AssignProducts() {
     
     await loadAssignedProducts();
 
-    const { count } = await supabase
-      .from("user_products")
-      .select("id", { count: "exact" })
-      .eq("user_id", currentUserId);
+    // Usar invalidateUserProducts del contexto para actualizar solo este usuario
+    const newProducts = await invalidateUserProducts(currentUserId);
+    
+    // Actualizar productos asignados con los nuevos datos
+    const ids = new Set();
+    const productData = [];
+    newProducts?.forEach((up) => {
+      if (!up.base_id) return;
       
+      const baseIdStr = String(up.base_id);
+      ids.add(baseIdStr);
+      
+      productData.push({ 
+        base_id: baseIdStr, 
+        precio_venta: up.precio_venta,
+        active: up.active !== false,
+        id: up.id
+      });
+    });
+    
+    setUserProducts(ids);
+    setAssignedProductsData(productData);
     setUserProductCounts((prev) => ({
       ...prev,
-      [currentUserId]: count || 0,
+      [currentUserId]: newProducts?.length || 0,
     }));
   };
 
@@ -132,19 +185,31 @@ export function AssignProducts() {
   }, [products]);
 
   const uniqueCategories = useMemo(() => {
+    // Filtrar productos solo del usuario
+    const productosDelUsuario = products.filter(
+      (p) => p.category_id && userCategories.includes(p.category_id)
+    );
+    
     const cats = {};
-    products.forEach((p) => {
+    productosDelUsuario.forEach((p) => {
       if (p.categories?.name) {
         cats[p.categories.name] = (cats[p.categories.name] || 0) + 1;
       }
     });
     return Object.entries(cats).sort((a, b) => b[1] - a[1]);
-  }, [products]);
+  }, [products, userCategories]);
 
   const productosFiltrados = useMemo(() => {
     let disponibles = products.filter(
       (p) => !userProducts.has(String(p.id))
     );
+
+    // Filtrar solo productos de las categorías del usuario
+    if (userCategories.length > 0) {
+      disponibles = disponibles.filter(
+        (p) => p.category_id && userCategories.includes(p.category_id)
+      );
+    }
 
     if (selectedCategory) {
       disponibles = disponibles.filter(
@@ -166,17 +231,23 @@ export function AssignProducts() {
         p.name.toLowerCase().includes(lower) ||
         p.brands?.name?.toLowerCase().includes(lower)
     );
-  }, [products, search, userProducts, selectedBrand, selectedCategory]);
+  }, [products, search, userProducts, selectedBrand, selectedCategory, userCategories]);
 
   const productosAsignadosFiltrados = useMemo(() => {
-    let filtrados = assignedProductsData.map((ap) => {
+    let filtrados = [];
+    
+    for (const ap of assignedProductsData) {
+      if (!ap.base_id) continue;
+      
       const baseProduct = products.find((p) => String(p.id) === ap.base_id);
-      return {
+      if (!baseProduct) continue;
+      
+      filtrados.push({
         ...ap,
         name: baseProduct?.name || "Producto desconocido",
         brand: baseProduct?.brands?.name || "Sin marca",
-      };
-    });
+      });
+    }
 
     if (!search) return filtrados;
 
@@ -184,7 +255,7 @@ export function AssignProducts() {
     return filtrados.filter(
       (p) =>
         p.name.toLowerCase().includes(lower) ||
-        p.brand.toLowerCase().includes(lower)
+        (p.brand && p.brand.toLowerCase().includes(lower))
     );
   }, [assignedProductsData, products, search]);
 
@@ -206,7 +277,11 @@ export function AssignProducts() {
     } else {
       setSelectedProducts((prev) => ({
         ...prev,
-        [id]: { precio_venta: parseFloat(precioBase) || 0 },
+        [id]: { 
+          precio_venta: parseFloat(precioBase) || 0,
+          precio_compra: 0,
+          stock: 0
+        },
       }));
     }
   };
@@ -232,24 +307,44 @@ export function AssignProducts() {
   const updatePrecio = (id, value) => {
     setSelectedProducts((prev) => ({
       ...prev,
-      [id]: { precio_venta: parseFloat(value) || 0 },
+      [id]: { ...prev[id], precio_venta: parseFloat(value) || 0 },
     }));
   };
 
-  const applyBasePriceToAll = () => {
-    if (!precioBase) return;
+  const updatePrecioCompra = (id, value) => {
+    setSelectedProducts((prev) => ({
+      ...prev,
+      [id]: { ...prev[id], precio_compra: parseFloat(value) || 0 },
+    }));
+  };
+
+  const updateStock = (id, value) => {
+    setSelectedProducts((prev) => ({
+      ...prev,
+      [id]: { ...prev[id], stock: parseInt(value) || 0 },
+    }));
+  };
+
+  const applyBaseToAll = (field, value) => {
+    if (value === "" && field !== "stock") return;
     const updated = {};
+    const val = field === "stock" ? parseInt(value) || 0 : parseFloat(value) || 0;
     Object.keys(selectedProducts).forEach((id) => {
-      updated[id] = { precio_venta: parseFloat(precioBase) || 0 };
+      updated[id] = { ...selectedProducts[id], [field]: val };
     });
     setSelectedProducts(updated);
-    showNotification(`Precio $${precioBase} aplicado a ${Object.keys(updated).length} productos`);
+    const labels = { precio_venta: "precio venta", precio_compra: "precio compra", stock: "stock" };
+    showNotification(`${labels[field]} ${value} aplicado a ${Object.keys(updated).length} productos`);
   };
 
   const selectAll = () => {
     const all = {};
     productosFiltrados.forEach((p) => {
-      all[p.id] = { precio_venta: parseFloat(precioBase) || 0 };
+      all[p.id] = { 
+        precio_venta: parseFloat(precioBase) || 0,
+        precio_compra: 0,
+        stock: 0
+      };
     });
     setSelectedProducts(all);
   };
@@ -259,25 +354,14 @@ export function AssignProducts() {
   const selectFirst = (n = 10) => {
     const first = {};
     productosFiltrados.slice(0, n).forEach((p) => {
-      first[p.id] = { precio_venta: parseFloat(precioBase) || 0 };
+      first[p.id] = { 
+        precio_venta: parseFloat(precioBase) || 0,
+        precio_compra: 0,
+        stock: 0
+      };
     });
     setSelectedProducts(first);
     showNotification(`${Math.min(n, productosFiltrados.length)} productos seleccionados`);
-  };
-
-  const selectLastAssigned = () => {
-    const toSelect = {};
-    lastAssigned.forEach((id) => {
-      if (!selectedProducts[id]) {
-        toSelect[id] = { precio_venta: parseFloat(precioBase) || 0 };
-      }
-    });
-    if (Object.keys(toSelect).length > 0) {
-      setSelectedProducts((prev) => ({ ...prev, ...toSelect }));
-      showNotification(`${Object.keys(toSelect).length} productos restaurados`);
-    } else {
-      showNotification("Ya están seleccionados o no hay últimos", "warning");
-    }
   };
 
   const handleAsignar = async () => {
@@ -290,14 +374,13 @@ export function AssignProducts() {
       user_id: userId,
       base_id,
       precio_venta: selectedProducts[base_id]?.precio_venta || 0,
-      stock: 0,
+      precio_compra: selectedProducts[base_id]?.precio_compra || 0,
+      stock: selectedProducts[base_id]?.stock || 0,
     }));
 
     setAsignando(true);
 
     try {
-      setLastAssigned(ids);
-
       await supabase.from("user_products").insert(productsToInsert);
 
       await reloadUserProducts();
@@ -321,7 +404,6 @@ export function AssignProducts() {
     if (!selectedUser || selectedToDelete.size === 0) return;
 
     const countToDelete = selectedToDelete.size;
-    const userId = selectedUser.id;
 
     if (!confirm(`¿Desactivar ${countToDelete} productos?`)) return;
 
@@ -518,28 +600,66 @@ export function AssignProducts() {
               {activeTab === "asignar" ? (
                 <>
                   <div className={`rounded-xl p-3 mb-4 ${baseCard} border`}>
-                    <div className="flex flex-wrap gap-2 items-center">
-                      <div className="flex-1 min-w-32">
+                    <div className="flex flex-wrap gap-2 items-end">
+                      <div className="flex-1 min-w-24">
+                        <label className={`text-xs block mb-1 ${textSecondary}`}>Precio Venta</label>
                         <input
                           type="number"
-                          placeholder="$ Precio base"
+                          placeholder="$"
                           value={precioBase}
                           onChange={(e) => setPrecioBase(e.target.value)}
                           className={`w-full p-2 rounded-lg border ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
                         />
                       </div>
                       <button
-                        onClick={applyBasePriceToAll}
+                        onClick={() => applyBaseToAll("precio_venta", precioBase)}
                         disabled={!precioBase || Object.keys(selectedProducts).length === 0}
-                        className="px-3 py-2 bg-purple-500 text-white rounded-lg text-sm disabled:opacity-40 hover:bg-purple-600 transition-colors"
+                        className="px-2 py-2 bg-purple-500 text-white rounded-lg text-xs disabled:opacity-40 hover:bg-purple-600 transition-colors"
                       >
-                        Aplicar a {Object.keys(selectedProducts).length}
+                        Aplicar
                       </button>
+                      
+                      <div className="flex-1 min-w-24">
+                        <label className={`text-xs block mb-1 ${textSecondary}`}>Precio Compra</label>
+                        <input
+                          type="number"
+                          placeholder="$"
+                          value={precioBase}
+                          onChange={(e) => setPrecioBase(e.target.value)}
+                          className={`w-full p-2 rounded-lg border ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
+                        />
+                      </div>
+                      <button
+                        onClick={() => applyBaseToAll("precio_compra", precioBase)}
+                        disabled={!precioBase || Object.keys(selectedProducts).length === 0}
+                        className="px-2 py-2 bg-blue-500 text-white rounded-lg text-xs disabled:opacity-40 hover:bg-blue-600 transition-colors"
+                      >
+                        Aplicar
+                      </button>
+
+                      <div className="flex-1 min-w-24">
+                        <label className={`text-xs block mb-1 ${textSecondary}`}>Stock</label>
+                        <input
+                          type="number"
+                          placeholder="0"
+                          value={precioBase}
+                          onChange={(e) => setPrecioBase(e.target.value)}
+                          className={`w-full p-2 rounded-lg border ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
+                        />
+                      </div>
+                      <button
+                        onClick={() => applyBaseToAll("stock", precioBase)}
+                        disabled={!precioBase || Object.keys(selectedProducts).length === 0}
+                        className="px-2 py-2 bg-green-500 text-white rounded-lg text-xs disabled:opacity-40 hover:bg-green-600 transition-colors"
+                      >
+                        Aplicar
+                      </button>
+
                       <button
                         onClick={Object.keys(selectedProducts).length === productosFiltrados.length ? deselectAll : selectAll}
-                        className="px-3 py-2 bg-blue-500 text-white rounded-lg text-sm hover:bg-blue-600 transition-colors"
+                        className="px-3 py-2 bg-gray-500 text-white rounded-lg text-sm hover:bg-gray-600 transition-colors"
                       >
-                        {Object.keys(selectedProducts).length === productosFiltrados.length ? "Deseleccionar" : "Todos"}
+                        {Object.keys(selectedProducts).length === productosFiltrados.length ? "Limpiar" : "Todos"}
                       </button>
                     </div>
 
@@ -553,11 +673,6 @@ export function AssignProducts() {
                       <button onClick={() => selectFirst(25)} className={`px-3 py-1 rounded-full text-xs ${dark ? "bg-gray-700 hover:bg-gray-600" : "bg-gray-200 hover:bg-gray-300"} ${textSecondary}`}>
                         Primeros 25
                       </button>
-                      {lastAssigned.length > 0 && (
-                        <button onClick={selectLastAssigned} className={`px-3 py-1 rounded-full text-xs bg-yellow-500/20 text-yellow-500 hover:bg-yellow-500/30`}>
-                          Restaurar ({lastAssigned.length})
-                        </button>
-                      )}
                     </div>
                   </div>
 
@@ -635,10 +750,13 @@ export function AssignProducts() {
                             !selectedCategory ? "bg-purple-500 text-white" : `${dark ? "hover:bg-gray-700" : "hover:bg-gray-100"} ${textSecondary}`
                           }`}
                         >
-                          Todas ({products.length - userProducts.size})
+                          Todas ({productosFiltrados.length})
                         </button>
-                        {uniqueCategories.map(([name, count]) => {
-                          const availableCount = products.filter((p) => p.categories?.name === name && !userProducts.has(String(p.id))).length;
+                        {uniqueCategories.map(([name]) => {
+                          const disponiblesDelUsuario = products.filter(
+                            (p) => p.category_id && userCategories.includes(p.category_id)
+                          );
+                          const availableCount = disponiblesDelUsuario.filter((p) => p.categories?.name === name && !userProducts.has(String(p.id))).length;
                           return (
                             <button
                               key={name}
@@ -746,14 +864,36 @@ export function AssignProducts() {
                                 </div>
                               </div>
                               {isSelected && (
-                                <div className="mt-3 pt-3 border-t border-blue-500/30">
+                                <div className="mt-3 pt-3 border-t border-blue-500/30 space-y-2">
                                   <div className="flex items-center gap-2">
-                                    <span className={`text-xs ${textSecondary}`}>Precio:</span>
+                                    <span className={`text-xs w-20 ${textSecondary}`}>Venta:</span>
                                     <input
                                       type="number"
                                       placeholder="$"
                                       value={selectedProducts[prod.id]?.precio_venta || ""}
                                       onChange={(e) => updatePrecio(prod.id, e.target.value)}
+                                      onClick={(e) => e.stopPropagation()}
+                                      className={`flex-1 p-2 rounded-lg border text-sm text-right ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
+                                    />
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className={`text-xs w-20 ${textSecondary}`}>Compra:</span>
+                                    <input
+                                      type="number"
+                                      placeholder="$"
+                                      value={selectedProducts[prod.id]?.precio_compra || ""}
+                                      onChange={(e) => updatePrecioCompra(prod.id, e.target.value)}
+                                      onClick={(e) => e.stopPropagation()}
+                                      className={`flex-1 p-2 rounded-lg border text-sm text-right ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
+                                    />
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className={`text-xs w-20 ${textSecondary}`}>Stock:</span>
+                                    <input
+                                      type="number"
+                                      placeholder="0"
+                                      value={selectedProducts[prod.id]?.stock || ""}
+                                      onChange={(e) => updateStock(prod.id, e.target.value)}
                                       onClick={(e) => e.stopPropagation()}
                                       className={`flex-1 p-2 rounded-lg border text-sm text-right ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
                                     />

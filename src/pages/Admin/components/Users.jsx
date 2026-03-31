@@ -1,6 +1,27 @@
 import { useState, useEffect, useMemo } from "react";
 import { useAppContext } from "../../../contexto/Context";
 import { supabase } from "../../../services/supabaseClient";
+import { useAdminData } from "../../../hooks/useAdminData";
+
+function useAdminCategories() {
+  const { systemCategories, isLoaded, loadInitialData } = useAdminData();
+  const [categorias, setCategorias] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!isLoaded) {
+      loadInitialData().then(() => {
+        setCategorias(systemCategories);
+        setLoading(false);
+      });
+    } else {
+      setCategorias(systemCategories);
+      setLoading(false);
+    }
+  }, [isLoaded, systemCategories]);
+
+  return { categorias, loading };
+}
 
 function shortId(id) {
   return id.slice(0, 8) + "…";
@@ -29,7 +50,7 @@ function StatCard({ icon, label, value, color = "blue" }) {
   );
 }
 
-function UserExpandedDetail({ user }) {
+function UserExpandedDetail({ user, onClose }) {
   const { preferencias, profile } = useAppContext();
   const dark = preferencias?.theme === "dark";
   
@@ -39,10 +60,15 @@ function UserExpandedDetail({ user }) {
   const [activeSection, setActiveSection] = useState("resumen");
   const [expandedSale, setExpandedSale] = useState(null);
   const [dateFilter, setDateFilter] = useState("today");
-  const [allUsers, setAllUsers] = useState({});
   const [selectedProducts, setSelectedProducts] = useState(new Set());
   const [deactivating, setDeactivating] = useState(false);
   const [productFilter, setProductFilter] = useState("all");
+  
+  // Categorías
+  const [allCategorias, setAllCategorias] = useState([]);
+  const [userCategorias, setUserCategorias] = useState([]);
+  const [loadingCategorias, setLoadingCategorias] = useState(false);
+  const [allUsers, setAllUsers] = useState({});
 
   const loadUserData = async () => {
     const targetUserId = user?.id;
@@ -85,6 +111,50 @@ function UserExpandedDetail({ user }) {
   useEffect(() => {
     loadUserData();
   }, [user?.id, profile?.id]);
+
+  // Cargar categorías disponibles y del usuario
+  const loadCategorias = async () => {
+    const [catsRes, userCatsRes] = await Promise.all([
+      supabase.from("categories").select("id, name, color").order("name"),
+      supabase.from("user_categories").select("category_id").eq("user_id", user?.id)
+    ]);
+    
+    setAllCategorias(catsRes.data || []);
+    setUserCategorias(userCatsRes.data?.map(uc => uc.category_id) || []);
+  };
+
+  useEffect(() => {
+    if (user?.id) loadCategorias();
+  }, [user?.id]);
+
+  const toggleCategoria = async (catId) => {
+    if (!user?.id) return;
+    
+    setLoadingCategorias(true);
+    const tieneCategoria = userCategorias.includes(catId);
+    
+    try {
+      if (tieneCategoria) {
+        // Quitar categoría
+        await supabase
+          .from("user_categories")
+          .delete()
+          .eq("user_id", user.id)
+          .eq("category_id", catId);
+      } else {
+        // Agregar categoría
+        await supabase
+          .from("user_categories")
+          .insert({ user_id: user.id, category_id: catId, active: true });
+      }
+      
+      await loadCategorias();
+    } catch (err) {
+      console.error("Error toggling categoria:", err);
+    } finally {
+      setLoadingCategorias(false);
+    }
+  };
 
   const getDateFilter = () => {
     const now = new Date();
@@ -147,7 +217,6 @@ function UserExpandedDetail({ user }) {
     if (selectedProducts.size === 0 || !user?.id) return;
 
     const idsToDeactivate = Array.from(selectedProducts);
-    const currentUserId = user.id;
 
     if (!confirm(`¿Desactivar ${idsToDeactivate.length} productos?`)) return;
 
@@ -251,7 +320,7 @@ function UserExpandedDetail({ user }) {
           </div>
         </div>
         <button
-          onClick={() => setExpandedUser(null)}
+          onClick={onClose}
           className={`p-2 rounded-lg ${dark ? "hover:bg-gray-700" : "hover:bg-gray-100"}`}
         >
           <span className="text-xl">✕</span>
@@ -278,6 +347,7 @@ function UserExpandedDetail({ user }) {
         {[
           { id: "resumen", icon: "📈", label: "Resumen" },
           { id: "productos", icon: "📦", label: `Prod (${products.length})` },
+          { id: "categorias", icon: "📁", label: `Cats (${userCategorias.length})` },
           { id: "ventas", icon: "🧾", label: `Ventas (${sales.length})` },
         ].map(tab => (
           <button
@@ -331,6 +401,56 @@ function UserExpandedDetail({ user }) {
             <div className={`p-4 rounded-xl bg-red-500/10 border border-red-500/30`}>
               <p className="text-red-500 text-sm">
                 🔴 {products.filter(p => p.active === false).length} productos inactivos
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeSection === "categorias" && (
+        <div className="space-y-3">
+          <div className={`p-4 rounded-xl ${bgCard}`}>
+            <div className="flex items-center justify-between mb-3">
+              <h4 className={`font-semibold ${textPrimary}`}>Categorías del usuario</h4>
+              <span className={`text-xs ${textSecondary}`}>
+                {userCategorias.length} de {allCategorias.length}
+              </span>
+            </div>
+            
+            {allCategorias.length === 0 ? (
+              <p className={`text-sm ${textSecondary}`}>No hay categorías disponibles</p>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                {allCategorias.map(cat => {
+                  const tieneCat = userCategorias.includes(cat.id);
+                  return (
+                    <button
+                      key={cat.id}
+                      onClick={() => toggleCategoria(cat.id)}
+                      disabled={loadingCategorias}
+                      className={`p-3 rounded-lg border text-left transition-all flex items-center gap-2 ${
+                        tieneCat
+                          ? "border-green-500 bg-green-500/10"
+                          : `${dark ? "border-gray-600" : "border-gray-200"}`
+                      }`}
+                    >
+                      <div className={`w-4 h-4 rounded-full flex items-center justify-center ${
+                        tieneCat ? "bg-green-500" : "border-2 border-gray-400"
+                      }`}>
+                        {tieneCat && <span className="text-white text-xs">✓</span>}
+                      </div>
+                      <span className={`text-sm ${textPrimary}`}>{cat.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          
+          {userCategorias.length === 0 && (
+            <div className={`p-4 rounded-xl bg-yellow-500/10 border border-yellow-500/30`}>
+              <p className="text-yellow-500 text-sm">
+                ⚠️ Este usuario no tiene categorías asignadas. No podrá ver productos.
               </p>
             </div>
           )}
@@ -547,9 +667,6 @@ function UserExpandedDetail({ user }) {
                       <p className={`font-medium ${textPrimary}`}>
                         {new Date(sale.fecha).toLocaleString("es-AR")}
                       </p>
-                      <p className={`text-xs ${textSecondary}`}>
-                        {sale.user_sales_detail?.length || 0} productos
-                      </p>
                     </div>
                     <div className="text-right">
                       <p className={`font-bold text-green-500`}>${sale.monto_total?.toLocaleString()}</p>
@@ -590,11 +707,13 @@ function UserExpandedDetail({ user }) {
 
 export function Users() {
   const { profile, preferencias } = useAppContext();
-  const { users, loading, refreshUsers } = useAdminUsers(profile);
+  const { addUserOptimistic } = useAdminData();
+  const { users, loading } = useAdminUsers(profile);
+  const { categorias } = useAdminCategories();
   const [expandedUser, setExpandedUser] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [showAddForm, setShowAddForm] = useState(false);
-  const [newUser, setNewUser] = useState({ name: "", email: "", password: "", role: "user" });
+  const [newUser, setNewUser] = useState({ name: "", email: "", password: "", role: "user", categorias: [] });
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState("");
   const [createSuccess, setCreateSuccess] = useState("");
@@ -610,6 +729,9 @@ export function Users() {
     setCreateError("");
     setCreateSuccess("");
     setCreating(true);
+
+    // Guardar la sesión actual del admin antes de crear el usuario
+    const { data: currentSession } = await supabase.auth.getSession();
 
     try {
       if (!newUser.email || !newUser.password || !newUser.name) {
@@ -638,14 +760,47 @@ export function Users() {
 
         if (profileError) throw profileError;
 
-        setNewUser({ name: "", email: "", password: "", role: "user" });
+        // Insertar categorías seleccionadas
+        if (newUser.categorias && newUser.categorias.length > 0) {
+          const categoriasData = newUser.categorias.map(catId => ({
+            user_id: authData.user.id,
+            category_id: catId,
+            active: true
+          }));
+          
+          const { error: catError } = await supabase
+            .from("user_categories")
+            .insert(categoriasData);
+          
+          if (catError) {
+            console.error("Error inserting categories:", catError);
+          }
+        }
+
+        // Restaurar la sesión del admin
+        if (currentSession?.session) {
+          await supabase.auth.setSession(currentSession.session);
+        }
+
+        // Actualización optimista: agregar usuario directamente sin query
+        const newUserData = {
+          id: authData.user.id,
+          name: newUser.name,
+          role: newUser.role,
+          created_at: new Date().toISOString()
+        };
+        addUserOptimistic(newUserData);
+
+        setNewUser({ name: "", email: "", password: "", role: "user", categorias: [] });
         setCreateSuccess("¡Usuario creado exitosamente!");
         setShowAddForm(false);
-        
-        await refreshUsers();
       }
     } catch (err) {
       setCreateError(err.message);
+      // Si hay error, restaurar sesión del admin
+      if (currentSession?.session) {
+        await supabase.auth.setSession(currentSession.session);
+      }
     } finally {
       setCreating(false);
     }
@@ -740,6 +895,36 @@ export function Users() {
             </select>
           </div>
 
+          {/* Selector de categorías */}
+          <div>
+            <label className={`block text-sm mb-1 ${textSecondary}`}>Categorías asociadas</label>
+            <div className={`grid grid-cols-2 md:grid-cols-3 gap-2 max-h-32 overflow-y-auto p-2 rounded-lg border ${dark ? "border-gray-600 bg-gray-700" : "border-gray-300 bg-gray-50"}`}>
+              {categorias.map(cat => (
+                <label
+                  key={cat.id}
+                  className={`flex items-center gap-2 text-xs cursor-pointer p-1 rounded ${textPrimary}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={newUser.categorias.includes(cat.id)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setNewUser({ ...newUser, categorias: [...newUser.categorias, cat.id] });
+                      } else {
+                        setNewUser({ ...newUser, categorias: newUser.categorias.filter(id => id !== cat.id) });
+                      }
+                    }}
+                    className="w-4 h-4 rounded"
+                  />
+                  {cat.name}
+                </label>
+              ))}
+            </div>
+            {categorias.length === 0 && (
+              <p className={`text-xs ${textSecondary}`}>No hay categorías disponibles</p>
+            )}
+          </div>
+
           {createError && (
             <p className="text-red-500 text-sm">{createError}</p>
           )}
@@ -761,7 +946,7 @@ export function Users() {
                 setShowAddForm(false);
                 setCreateError("");
                 setCreateSuccess("");
-                setNewUser({ name: "", email: "", password: "", role: "user" });
+                setNewUser({ name: "", email: "", password: "", role: "user", categorias: [] });
               }}
               className={`px-4 py-2.5 rounded-lg border ${dark ? "border-gray-600 text-gray-400" : "border-gray-300 text-gray-600"}`}
             >
@@ -822,7 +1007,7 @@ export function Users() {
             {/* EXPANDED DETAIL */}
             {expandedUser === u.id && (
               <div className={`border-t ${dark ? "border-gray-700" : "border-gray-200"}`}>
-                <UserExpandedDetail key={u.id} user={u} />
+                <UserExpandedDetail key={u.id} user={u} onClose={() => setExpandedUser(null)} />
               </div>
             )}
           </div>
@@ -840,34 +1025,27 @@ export function Users() {
 }
 
 function useAdminUsers(profile) {
+  const { users: cachedUsers } = useAdminData();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!profile) return;
-
-    async function loadUsers() {
-      setLoading(true);
-      const { data } = await supabase
-        .from("profiles")
-        .select("id, name, role, created_at")
-        .order("created_at", { ascending: false });
-      setUsers(data || []);
+    if (cachedUsers.length > 0) {
+      setUsers(cachedUsers);
       setLoading(false);
+    } else if (profile) {
+      async function loadUsers() {
+        setLoading(true);
+        const { data } = await supabase
+          .from("profiles")
+          .select("id, name, role, created_at")
+          .order("created_at", { ascending: false });
+        setUsers(data || []);
+        setLoading(false);
+      }
+      loadUsers();
     }
+  }, [profile, cachedUsers]);
 
-    loadUsers();
-  }, [profile]);
-
-  const refreshUsers = async () => {
-    setLoading(true);
-    const { data } = await supabase
-      .from("profiles")
-      .select("id, name, role, created_at")
-      .order("created_at", { ascending: false });
-    setUsers(data || []);
-    setLoading(false);
-  };
-
-  return { users, loading, refreshUsers };
+  return { users, loading };
 }

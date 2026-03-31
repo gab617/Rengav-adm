@@ -5,6 +5,7 @@ import "./index.css";
 import App from "./App.jsx";
 import { AppContextProvider } from "./contexto/Context.jsx";
 import { AuthProvider } from "./contexto/AuthContext.jsx";
+import { AdminDataProvider } from "./hooks/useAdminData.jsx";
 
 
 const userPrefs = localStorage.getItem("prefs_user"); // o usar un id fijo si no hay user
@@ -16,10 +17,12 @@ if (userPrefs) {
 
 createRoot(document.getElementById("root")).render(
     <AuthProvider>
-      <BrowserRouter>
-        <AppContextProvider>
-          <App />
-        </AppContextProvider>
-      </BrowserRouter>
+      <AdminDataProvider>
+        <BrowserRouter>
+          <AppContextProvider>
+            <App />
+          </AppContextProvider>
+        </BrowserRouter>
+      </AdminDataProvider>
     </AuthProvider>
 );

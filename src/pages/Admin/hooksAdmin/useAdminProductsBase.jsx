@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "../../../services/supabaseClient";
 
-export function useAdminProductsBase() {
+export function useAdminProductsBase(onProductCreated) {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -27,12 +27,12 @@ export function useAdminProductsBase() {
     setLoading(false);
   }
 
-  async function createProductBase({
+  const createProductBase = useCallback(async ({
     name,
     brand_id,
     category_id,
     subcategory_id,
-  }) {
+  }) => {
     if (!name || !category_id ) {
       throw new Error("Faltan campos obligatorios");
     }
@@ -65,13 +65,18 @@ export function useAdminProductsBase() {
 
     if (error) throw error;
 
-    // 🔥 Actualización optimista real (sin reload)
+    // Actualización optimista local
     setProducts((prev) =>
       [...prev, data].sort((a, b) =>
         a.name.localeCompare(b.name)
       )
     );
-  }
+    
+    // Notificar callback si existe
+    if (onProductCreated) {
+      onProductCreated();
+    }
+  }, [onProductCreated]);
 
   useEffect(() => {
     loadProducts();
