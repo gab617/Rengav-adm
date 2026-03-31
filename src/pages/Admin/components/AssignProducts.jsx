@@ -28,7 +28,9 @@ export function AssignProducts() {
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedProducts, setSelectedProducts] = useState({});
   const [selectedToDelete, setSelectedToDelete] = useState(new Set());
-  const [precioBase, setPrecioBase] = useState("");
+  const [precioBaseVenta, setPrecioBaseVenta] = useState("");
+  const [precioBaseCompra, setPrecioBaseCompra] = useState("");
+  const [stockBase, setStockBase] = useState("");
   const [asignando, setAsignando] = useState(false);
   const [eliminando, setEliminando] = useState(false);
   const [activeTab, setActiveTab] = useState("asignar");
@@ -223,14 +225,16 @@ const ids = new Set();
       );
     }
 
-    if (!search) return disponibles;
+    if (!search) return [...disponibles].sort((a, b) => a.name.localeCompare(b.name));
 
     const lower = search.toLowerCase();
-    return disponibles.filter(
-      (p) =>
-        p.name.toLowerCase().includes(lower) ||
-        p.brands?.name?.toLowerCase().includes(lower)
-    );
+    return disponibles
+      .filter(
+        (p) =>
+          p.name.toLowerCase().includes(lower) ||
+          p.brands?.name?.toLowerCase().includes(lower)
+      )
+      .sort((a, b) => a.name.localeCompare(b.name));
   }, [products, search, userProducts, selectedBrand, selectedCategory, userCategories]);
 
   const productosAsignadosFiltrados = useMemo(() => {
@@ -278,7 +282,7 @@ const ids = new Set();
       setSelectedProducts((prev) => ({
         ...prev,
         [id]: { 
-          precio_venta: parseFloat(precioBase) || 0,
+          precio_venta: parseFloat(precioBaseVenta) || 0,
           precio_compra: 0,
           stock: 0
         },
@@ -341,7 +345,7 @@ const ids = new Set();
     const all = {};
     productosFiltrados.forEach((p) => {
       all[p.id] = { 
-        precio_venta: parseFloat(precioBase) || 0,
+        precio_venta: 0,
         precio_compra: 0,
         stock: 0
       };
@@ -355,7 +359,7 @@ const ids = new Set();
     const first = {};
     productosFiltrados.slice(0, n).forEach((p) => {
       first[p.id] = { 
-        precio_venta: parseFloat(precioBase) || 0,
+        precio_venta: 0,
         precio_compra: 0,
         stock: 0
       };
@@ -366,6 +370,17 @@ const ids = new Set();
 
   const handleAsignar = async () => {
     if (!selectedUser || Object.keys(selectedProducts).length === 0) return;
+
+    // Validaciones
+    const sinStock = Object.values(selectedProducts).filter(p => !p.stock || p.stock === 0).length;
+    const sinPrecio = Object.values(selectedProducts).filter(p => !p.precio_venta || p.precio_venta === 0).length;
+    
+    if (sinStock > 0 || sinPrecio > 0) {
+      let warnings = [];
+      if (sinStock > 0) warnings.push(`${sinStock} sin stock`);
+      if (sinPrecio > 0) warnings.push(`${sinPrecio} sin precio`);
+      showNotification(`⚠️ ${warnings.join(", ")}`, "warning");
+    }
 
     const userId = selectedUser.id;
     const userName = selectedUser.name;
@@ -384,7 +399,9 @@ const ids = new Set();
       await supabase.from("user_products").insert(productsToInsert);
 
       await reloadUserProducts();
-      setPrecioBase("");
+      setPrecioBaseVenta("");
+      setPrecioBaseCompra("");
+      setStockBase("");
       setSelectedProducts({});
       showNotification(`¡${ids.length} productos asignados a ${userName}!`, "success");
     } catch (err) {
@@ -606,14 +623,14 @@ const ids = new Set();
                         <input
                           type="number"
                           placeholder="$"
-                          value={precioBase}
-                          onChange={(e) => setPrecioBase(e.target.value)}
+                          value={precioBaseVenta}
+                          onChange={(e) => setPrecioBaseVenta(e.target.value)}
                           className={`w-full p-2 rounded-lg border ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
                         />
                       </div>
                       <button
-                        onClick={() => applyBaseToAll("precio_venta", precioBase)}
-                        disabled={!precioBase || Object.keys(selectedProducts).length === 0}
+                        onClick={() => applyBaseToAll("precio_venta", precioBaseVenta)}
+                        disabled={!precioBaseVenta || Object.keys(selectedProducts).length === 0}
                         className="px-2 py-2 bg-purple-500 text-white rounded-lg text-xs disabled:opacity-40 hover:bg-purple-600 transition-colors"
                       >
                         Aplicar
@@ -624,14 +641,14 @@ const ids = new Set();
                         <input
                           type="number"
                           placeholder="$"
-                          value={precioBase}
-                          onChange={(e) => setPrecioBase(e.target.value)}
+                          value={precioBaseCompra}
+                          onChange={(e) => setPrecioBaseCompra(e.target.value)}
                           className={`w-full p-2 rounded-lg border ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
                         />
                       </div>
                       <button
-                        onClick={() => applyBaseToAll("precio_compra", precioBase)}
-                        disabled={!precioBase || Object.keys(selectedProducts).length === 0}
+                        onClick={() => applyBaseToAll("precio_compra", precioBaseCompra)}
+                        disabled={!precioBaseCompra || Object.keys(selectedProducts).length === 0}
                         className="px-2 py-2 bg-blue-500 text-white rounded-lg text-xs disabled:opacity-40 hover:bg-blue-600 transition-colors"
                       >
                         Aplicar
@@ -642,14 +659,14 @@ const ids = new Set();
                         <input
                           type="number"
                           placeholder="0"
-                          value={precioBase}
-                          onChange={(e) => setPrecioBase(e.target.value)}
+                          value={stockBase}
+                          onChange={(e) => setStockBase(e.target.value)}
                           className={`w-full p-2 rounded-lg border ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
                         />
                       </div>
                       <button
-                        onClick={() => applyBaseToAll("stock", precioBase)}
-                        disabled={!precioBase || Object.keys(selectedProducts).length === 0}
+                        onClick={() => applyBaseToAll("stock", stockBase)}
+                        disabled={!stockBase && stockBase !== "0" || Object.keys(selectedProducts).length === 0}
                         className="px-2 py-2 bg-green-500 text-white rounded-lg text-xs disabled:opacity-40 hover:bg-green-600 transition-colors"
                       >
                         Aplicar
@@ -660,6 +677,19 @@ const ids = new Set();
                         className="px-3 py-2 bg-gray-500 text-white rounded-lg text-sm hover:bg-gray-600 transition-colors"
                       >
                         {Object.keys(selectedProducts).length === productosFiltrados.length ? "Limpiar" : "Todos"}
+                      </button>
+                      
+                      <button 
+                        onClick={() => {
+                          const cleared = {};
+                          Object.keys(selectedProducts).forEach(id => {
+                            cleared[id] = { precio_venta: 0, precio_compra: 0, stock: 0 };
+                          });
+                          setSelectedProducts(cleared);
+                        }}
+                        className="px-3 py-2 bg-red-500/20 text-red-400 rounded-lg text-sm hover:bg-red-500/30 transition-colors"
+                      >
+                        Limpiar Valores
                       </button>
                     </div>
 
@@ -805,15 +835,25 @@ const ids = new Set();
 
                   {productosFiltrados.length === 0 ? (
                     <div className={`text-center py-12 ${textSecondary}`}>
-                      <div className="text-5xl mb-4">✓</div>
-                      <p>No hay productos disponibles</p>
-                      {(selectedCategory || selectedBrand) && (
-                        <button
-                          onClick={() => { setSelectedCategory(""); setSelectedBrand(""); }}
-                          className="mt-3 text-blue-500 hover:underline"
-                        >
-                          Limpiar filtros
-                        </button>
+                      {userCategories.length === 0 ? (
+                        <>
+                          <div className="text-5xl mb-4">📁</div>
+                          <p className="font-medium text-yellow-500 mb-2">Este usuario no tiene categorías</p>
+                          <p className="text-sm">Asignale categorías en la sección Usuarios para ver productos</p>
+                        </>
+                      ) : (
+                        <>
+                          <div className="text-5xl mb-4">✓</div>
+                          <p>No hay productos disponibles</p>
+                          {(selectedCategory || selectedBrand) && (
+                            <button
+                              onClick={() => { setSelectedCategory(""); setSelectedBrand(""); }}
+                              className="mt-3 text-blue-500 hover:underline"
+                            >
+                              Limpiar filtros
+                            </button>
+                          )}
+                        </>
                       )}
                     </div>
                   ) : (
@@ -830,74 +870,94 @@ const ids = new Set();
                           Seleccionar todos
                         </button>
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                      <div className="space-y-2">
                         {productosFiltrados.map((prod) => {
                           const isSelected = !!selectedProducts[prod.id];
+                          const tieneWarning = selectedProducts[prod.id]?.precio_venta > 0 && selectedProducts[prod.id]?.precio_compra > 0 && selectedProducts[prod.id].precio_venta < selectedProducts[prod.id].precio_compra;
+                          
                           return (
                             <div
                               key={prod.id}
                               onClick={() => toggleProduct(prod.id)}
-                              className={`p-4 rounded-xl border cursor-pointer transition-all relative ${
-                                isSelected ? "border-blue-500 bg-blue-500/10 ring-2 ring-blue-500" : `${baseCard} hover:border-blue-400`
+                              className={`p-2 rounded-lg border cursor-pointer transition-all ${
+                                isSelected 
+                                  ? `border-blue-500 bg-blue-500/10 ${tieneWarning ? "ring-2 ring-red-500" : ""}` 
+                                  : `${baseCard} hover:border-blue-400`
                               }`}
                             >
-                              {isSelected && (
-                                <div className="absolute top-2 right-2 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
-                                  <span className="text-white text-xs">✓</span>
-                                </div>
-                              )}
-                              <div className="flex justify-between items-start gap-2">
-                                <div className="flex-1 min-w-0 pr-6">
-                                  <p className={`font-medium truncate ${textPrimary}`}>{prod.name}</p>
-                                  <div className="flex items-center gap-2 mt-1">
-                                    {prod.brands?.name && (
-                                      <span className={`text-xs px-2 py-0.5 rounded-full ${dark ? "bg-blue-500/20 text-blue-400" : "bg-blue-50 text-blue-600"}`}>
-                                        {prod.brands.name}
+                              <div className="flex items-center gap-2">
+                                {isSelected && (
+                                  <div className="w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
+                                    <span className="text-white text-xs">✓</span>
+                                  </div>
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <p className={`font-medium text-sm truncate ${textPrimary}`}>{prod.name}</p>
+                                    {selectedProducts[prod.id]?.stock === 0 && (
+                                      <span className="px-1.5 py-0.5 rounded text-xs bg-red-500/20 text-red-400" title="Stock en 0">
+                                        📦 0
                                       </span>
                                     )}
-                                    {prod.categories?.name && (
-                                      <span className={`text-xs px-2 py-0.5 rounded-full ${dark ? "bg-purple-500/20 text-purple-400" : "bg-purple-50 text-purple-600"}`}>
-                                        {prod.categories.name}
+                                    {(!selectedProducts[prod.id]?.precio_venta || selectedProducts[prod.id]?.precio_venta === 0) && (
+                                      <span className="px-1.5 py-0.5 rounded text-xs bg-yellow-500/20 text-yellow-400" title="Sin precio">
+                                        💰 -
                                       </span>
                                     )}
                                   </div>
                                 </div>
+                                <div className="flex items-center gap-1">
+                                  {prod.brands?.name && (
+                                    <span className={`text-xs px-1.5 py-0.5 rounded ${dark ? "bg-blue-500/20 text-blue-400" : "bg-blue-50 text-blue-600"}`}>
+                                      {prod.brands.name}
+                                    </span>
+                                  )}
+                                  {prod.categories?.name && (
+                                    <span className={`text-xs px-1.5 py-0.5 rounded ${dark ? "bg-purple-500/20 text-purple-400" : "bg-purple-50 text-purple-600"}`}>
+                                      {prod.categories.name}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
+
                               {isSelected && (
-                                <div className="mt-3 pt-3 border-t border-blue-500/30 space-y-2">
-                                  <div className="flex items-center gap-2">
-                                    <span className={`text-xs w-20 ${textSecondary}`}>Venta:</span>
+                                <div className="mt-2 pt-2 border-t border-blue-500/30 flex flex-wrap items-center gap-x-4 gap-y-1">
+                                  <div className="flex items-center gap-1">
+                                    <span className={`text-xs ${textSecondary}`}>Venta</span>
                                     <input
                                       type="number"
-                                      placeholder="$"
+                                      placeholder="$0"
                                       value={selectedProducts[prod.id]?.precio_venta || ""}
                                       onChange={(e) => updatePrecio(prod.id, e.target.value)}
                                       onClick={(e) => e.stopPropagation()}
-                                      className={`flex-1 p-2 rounded-lg border text-sm text-right ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
+                                      className={`w-16 p-1 rounded border text-xs text-right ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
                                     />
                                   </div>
-                                  <div className="flex items-center gap-2">
-                                    <span className={`text-xs w-20 ${textSecondary}`}>Compra:</span>
+                                  <div className="flex items-center gap-1">
+                                    <span className={`text-xs ${textSecondary}`}>Compra</span>
                                     <input
                                       type="number"
-                                      placeholder="$"
+                                      placeholder="$0"
                                       value={selectedProducts[prod.id]?.precio_compra || ""}
                                       onChange={(e) => updatePrecioCompra(prod.id, e.target.value)}
                                       onClick={(e) => e.stopPropagation()}
-                                      className={`flex-1 p-2 rounded-lg border text-sm text-right ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
+                                      className={`w-16 p-1 rounded border text-xs text-right ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
                                     />
                                   </div>
-                                  <div className="flex items-center gap-2">
-                                    <span className={`text-xs w-20 ${textSecondary}`}>Stock:</span>
+                                  <div className="flex items-center gap-1">
+                                    <span className={`text-xs ${textSecondary}`}>Stock</span>
                                     <input
                                       type="number"
                                       placeholder="0"
                                       value={selectedProducts[prod.id]?.stock || ""}
                                       onChange={(e) => updateStock(prod.id, e.target.value)}
                                       onClick={(e) => e.stopPropagation()}
-                                      className={`flex-1 p-2 rounded-lg border text-sm text-right ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
+                                      className={`w-12 p-1 rounded border text-xs text-right ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
                                     />
                                   </div>
+                                  {tieneWarning && (
+                                    <span className="text-red-500 font-bold text-xs">⚠️ P. venta &lt; compra</span>
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -910,7 +970,7 @@ const ids = new Set();
                   {Object.keys(selectedProducts).length > 0 && (
                     <div className={`fixed bottom-0 left-0 right-0 p-4 ${dark ? "bg-gray-900 border-t border-gray-800" : "bg-white border-t border-gray-200"} shadow-2xl z-40`}>
                       <div className="max-w-6xl mx-auto">
-                        <div className="flex items-center justify-between gap-4 mb-3">
+<div className="flex items-center justify-between gap-4 mb-3">
                           <div>
                             <div className={`font-bold text-lg ${textPrimary}`}>
                               {Object.keys(selectedProducts).length} productos
@@ -919,12 +979,26 @@ const ids = new Set();
                               → {selectedUser.name}
                             </div>
                           </div>
-                          {precioBase && (
-                            <div className={`px-3 py-1 rounded-lg text-sm ${dark ? "bg-purple-500/20 text-purple-400" : "bg-purple-50 text-purple-600"}`}>
-                              Precio base: ${precioBase}
-                            </div>
-                          )}
+                          <div className={`px-3 py-1 rounded-lg text-sm ${dark ? "bg-purple-500/20 text-purple-400" : "bg-purple-50 text-purple-600"}`}>
+                            {Object.keys(selectedProducts).length} productos seleccionados
+                          </div>
                         </div>
+                        
+                        {/* Warning para precios negativos */}
+                        {(() => {
+                          let negativoCount = 0;
+                          Object.values(selectedProducts).forEach(p => {
+                            if (p.precio_venta > 0 && p.precio_compra > 0 && p.precio_venta < p.precio_compra) {
+                              negativoCount++;
+                            }
+                          });
+                          return negativoCount > 0 ? (
+                            <div className="mb-3 p-2 rounded-lg bg-red-500/20 border border-red-500/30 text-red-400 text-sm">
+                              ⚠️ {negativoCount} producto(s) con precio de venta menor al de compra
+                            </div>
+                          ) : null;
+                        })()}
+                        
                         <div className="flex flex-col sm:flex-row gap-2">
                           <button onClick={deselectAll} className={`sm:flex-1 px-4 py-2.5 rounded-xl border ${borderColor} ${textSecondary}`}>
                             Cancelar

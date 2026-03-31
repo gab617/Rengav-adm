@@ -50,7 +50,7 @@ function StatCard({ icon, label, value, color = "blue" }) {
   );
 }
 
-function UserExpandedDetail({ user, onClose }) {
+function UserExpandedDetail({ user, onClose, invalidateUserCategories }) {
   const { preferencias, profile } = useAppContext();
   const dark = preferencias?.theme === "dark";
   
@@ -149,6 +149,7 @@ function UserExpandedDetail({ user, onClose }) {
       }
       
       await loadCategorias();
+      await invalidateUserCategories(user.id);
     } catch (err) {
       console.error("Error toggling categoria:", err);
     } finally {
@@ -388,6 +389,23 @@ function UserExpandedDetail({ user, onClose }) {
               </div>
             </div>
           </div>
+
+          {/* Categorías del usuario en resumen */}
+          {userCategorias.length > 0 && (
+            <div className={`p-4 rounded-xl ${bgCard}`}>
+              <h4 className={`font-semibold mb-2 ${textPrimary}`}>Categorías asignadas ({userCategorias.length})</h4>
+              <div className="flex flex-wrap gap-2">
+                {userCategorias.map(catId => {
+                  const cat = allCategorias.find(c => c.id === catId);
+                  return cat ? (
+                    <span key={catId} className="px-2 py-1 rounded text-xs bg-purple-500/20 text-purple-400">
+                      {cat.name}
+                    </span>
+                  ) : null;
+                })}
+              </div>
+            </div>
+          )}
 
           {stats.productosSinStock > 0 && (
             <div className={`p-4 rounded-xl bg-yellow-500/10 border border-yellow-500/30`}>
@@ -707,7 +725,7 @@ function UserExpandedDetail({ user, onClose }) {
 
 export function Users() {
   const { profile, preferencias } = useAppContext();
-  const { addUserOptimistic } = useAdminData();
+  const { addUserOptimistic, userCategoriesMap, systemCategories, invalidateUserCategories, setUserCategoriesMap } = useAdminData();
   const { users, loading } = useAdminUsers(profile);
   const { categorias } = useAdminCategories();
   const [expandedUser, setExpandedUser] = useState(null);
@@ -782,7 +800,7 @@ export function Users() {
           await supabase.auth.setSession(currentSession.session);
         }
 
-        // Actualización optimista: agregar usuario directamente sin query
+        // Actualización optimista: agregar usuario y sus categorías
         const newUserData = {
           id: authData.user.id,
           name: newUser.name,
@@ -790,9 +808,17 @@ export function Users() {
           created_at: new Date().toISOString()
         };
         addUserOptimistic(newUserData);
+        
+        // Agregar categorías al cache
+        if (newUser.categorias?.length > 0) {
+          setUserCategoriesMap((prev) => ({
+            ...prev,
+            [authData.user.id]: newUser.categorias
+          }));
+        }
 
         setNewUser({ name: "", email: "", password: "", role: "user", categorias: [] });
-        setCreateSuccess("¡Usuario creado exitosamente!");
+        setCreateSuccess("¡Negocio creado exitosamente!");
         setShowAddForm(false);
       }
     } catch (err) {
@@ -832,11 +858,11 @@ export function Users() {
       {/* HEADER */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <h1 className={`text-lg md:text-2xl font-bold ${textPrimary}`}>
-          👥 Usuarios
+          🏪 Negocios / Usuarios
         </h1>
         <div className="flex items-center gap-2">
           <span className={`text-xs md:text-sm ${textSecondary}`}>
-            {users.length} usuarios
+            {users.length} negocios
           </span>
           <button
             onClick={() => setShowAddForm(!showAddForm)}
@@ -890,7 +916,7 @@ export function Users() {
               onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
               className={`w-full px-3 py-2.5 rounded-lg border text-sm ${inputBg}`}
             >
-              <option value="user">Usuario</option>
+              <option value="user">Negocio</option>
               <option value="admin">Administrador</option>
             </select>
           </div>
@@ -998,6 +1024,21 @@ export function Users() {
                 }`}>
                   {u.role}
                 </span>
+                {userCategoriesMap[u.id]?.length > 0 && (
+                  <div className="flex gap-1">
+                    {userCategoriesMap[u.id].slice(0, 2).map(catId => {
+                      const cat = systemCategories.find(c => c.id === catId);
+                      return cat ? (
+                        <span key={catId} className="px-1.5 py-0.5 rounded text-xs bg-purple-500/20 text-purple-400">
+                          {cat.name}
+                        </span>
+                      ) : null;
+                    })}
+                    {userCategoriesMap[u.id].length > 2 && (
+                      <span className={`text-xs ${textSecondary}`}>+{userCategoriesMap[u.id].length - 2}</span>
+                    )}
+                  </div>
+                )}
                 <span className={`text-2xl ${textSecondary} transition-transform ${expandedUser === u.id ? "rotate-180" : ""}`}>
                   ▼
                 </span>
@@ -1007,7 +1048,7 @@ export function Users() {
             {/* EXPANDED DETAIL */}
             {expandedUser === u.id && (
               <div className={`border-t ${dark ? "border-gray-700" : "border-gray-200"}`}>
-                <UserExpandedDetail key={u.id} user={u} onClose={() => setExpandedUser(null)} />
+                <UserExpandedDetail key={u.id} user={u} onClose={() => setExpandedUser(null)} invalidateUserCategories={invalidateUserCategories} />
               </div>
             )}
           </div>

@@ -7,6 +7,7 @@ import { UlCustomProducts } from "./components/UlCustomProducts";
 import { Config } from "./components/Config";
 import { InactiveProductsViewer } from "./components/InactiveProductsViewer";
 import { AgregarProductosSistema } from "./components/AgregarProductosSistema";
+import { BulkEditProducts } from "./components/BulkEditProducts";
 
 export function Usuario() {
   const { logout, user } = useAuth();
@@ -49,6 +50,7 @@ export function Usuario() {
 
   const tabs = [
     { id: "productos", label: "Productos", icon: "📦", count: stats.productosCustom },
+    { id: "edicion", label: "Edición Masiva", icon: "✏️", count: stats.productosActivos },
     { id: "config", label: "Configuración", icon: "⚙️", count: null },
     { id: "inactivos", label: "Inactivos", icon: "💤", count: stats.productosInactivos },
   ];
@@ -216,6 +218,12 @@ export function Usuario() {
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {activeTab === "edicion" && (
+          <div className={`p-4 rounded-2xl ${bgCard} border ${borderColor}`}>
+            <BulkEditProducts />
           </div>
         )}
 
