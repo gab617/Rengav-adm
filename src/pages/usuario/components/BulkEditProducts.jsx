@@ -286,14 +286,14 @@ export function BulkEditProducts() {
               <input
                 type="number"
                 placeholder="$"
-                value={precioBaseVenta}
+                value={precioBaseVenta || ""}
                 onChange={(e) => setPrecioBaseVenta(e.target.value)}
                 className={`w-full p-2 rounded-lg border text-sm ${inputBg} ${borderColor}`}
               />
             </div>
             <button
               onClick={() => applyBaseToAll("precio_venta", precioBaseVenta)}
-              disabled={!precioBaseVenta}
+              disabled={!precioBaseVenta }
               className="px-2 py-2 bg-purple-500 text-white rounded-lg text-xs disabled:opacity-40"
             >
               Aplicar
@@ -304,7 +304,7 @@ export function BulkEditProducts() {
               <input
                 type="number"
                 placeholder="$"
-                value={precioBaseCompra}
+                value={precioBaseCompra || ""}
                 onChange={(e) => setPrecioBaseCompra(e.target.value)}
                 className={`w-full p-2 rounded-lg border text-sm ${inputBg} ${borderColor}`}
               />
@@ -322,7 +322,7 @@ export function BulkEditProducts() {
               <input
                 type="number"
                 placeholder="0"
-                value={stockBase}
+                value={stockBase || ""}
                 onChange={(e) => setStockBase(e.target.value)}
                 className={`w-full p-2 rounded-lg border text-sm ${inputBg} ${borderColor}`}
               />
@@ -412,7 +412,7 @@ export function BulkEditProducts() {
                     <input
                       type="number"
                       placeholder="$0"
-                      value={selectedProducts[prod.id]?.precio_venta ?? ""}
+                      value={selectedProducts[prod.id]?.precio_venta || ""}
                       onChange={(e) => updatePrecio(prod.id, e.target.value)}
                       onClick={(e) => e.stopPropagation()}
                       className={`w-16 p-1 rounded border text-xs text-right ${inputBg} ${borderColor}`}
@@ -423,7 +423,7 @@ export function BulkEditProducts() {
                     <input
                       type="number"
                       placeholder="$0"
-                      value={selectedProducts[prod.id]?.precio_compra ?? ""}
+                      value={selectedProducts[prod.id]?.precio_compra || ""}
                       onChange={(e) => updatePrecioCompra(prod.id, e.target.value)}
                       onClick={(e) => e.stopPropagation()}
                       className={`w-16 p-1 rounded border text-xs text-right ${inputBg} ${borderColor}`}
@@ -434,7 +434,7 @@ export function BulkEditProducts() {
                     <input
                       type="number"
                       placeholder="0"
-                      value={selectedProducts[prod.id]?.stock ?? ""}
+                      value={selectedProducts[prod.id]?.stock || ""}
                       onChange={(e) => updateStock(prod.id, e.target.value)}
                       onClick={(e) => e.stopPropagation()}
                       className={`w-12 p-1 rounded border text-xs text-right ${inputBg} ${borderColor}`}
