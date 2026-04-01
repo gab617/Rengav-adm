@@ -38,6 +38,7 @@ export function AssignProducts() {
   const [notification, setNotification] = useState(null);
   const [showBrandFilter, setShowBrandFilter] = useState(false);
   const [showCategoryFilter, setShowCategoryFilter] = useState(false);
+  const [showSubcategoryFilter, setShowSubcategoryFilter] = useState(false);
   const [userCategories, setUserCategories] = useState([]);
 
   const showNotification = (msg, type = "success") => {
@@ -202,6 +203,20 @@ const ids = new Set();
     return Object.entries(cats).sort((a, b) => b[1] - a[1]);
   }, [products, userCategories]);
 
+  const uniqueSubcategories = useMemo(() => {
+    if (!selectedCategory) return [];
+    const productosDeCategoria = products.filter(
+      (p) => p.category_id && userCategories.includes(p.category_id) && p.categories?.name === selectedCategory
+    );
+    const subs = {};
+    productosDeCategoria.forEach((p) => {
+      if (p.subcategories?.name) {
+        subs[p.subcategories.name] = (subs[p.subcategories.name] || 0) + 1;
+      }
+    });
+    return Object.entries(subs).sort((a, b) => b[1] - a[1]);
+  }, [products, userCategories, selectedCategory]);
+
   const productosFiltrados = useMemo(() => {
     let disponibles = products.filter(
       (p) => !userProducts.has(String(p.id))
@@ -217,6 +232,12 @@ const ids = new Set();
     if (selectedCategory) {
       disponibles = disponibles.filter(
         (p) => p.categories?.name === selectedCategory
+      );
+    }
+
+    if (selectedSubcategory) {
+      disponibles = disponibles.filter(
+        (p) => p.subcategories?.name === selectedSubcategory
       );
     }
 
@@ -236,7 +257,7 @@ const ids = new Set();
           p.brands?.name?.toLowerCase().includes(lower)
       )
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [products, search, userProducts, selectedBrand, selectedCategory, userCategories]);
+  }, [products, search, userProducts, selectedBrand, selectedCategory, selectedSubcategory, userCategories]);
 
   const productosAsignadosFiltrados = useMemo(() => {
     let filtrados = [];
@@ -751,7 +772,7 @@ const ids = new Set();
                     {/* TOGGLE FILTERS */}
                     <div className="flex gap-2 mb-2">
                       <button
-                        onClick={() => { setShowCategoryFilter(!showCategoryFilter); setShowBrandFilter(false); }}
+                        onClick={() => { setShowCategoryFilter(!showCategoryFilter); setShowBrandFilter(false); setShowSubcategoryFilter(false); }}
                         className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${
                           showCategoryFilter || selectedCategory
                             ? "bg-purple-500 text-white"
@@ -760,8 +781,20 @@ const ids = new Set();
                       >
                         📁 Categorías {selectedCategory && <span className="bg-white/30 px-1.5 rounded text-xs">1</span>}
                       </button>
+                      {selectedCategory && (
+                        <button
+                          onClick={() => { setShowSubcategoryFilter(!showSubcategoryFilter); setShowCategoryFilter(false); setShowBrandFilter(false); }}
+                          className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+                            showSubcategoryFilter || selectedSubcategory
+                              ? "bg-pink-500 text-white"
+                              : `${baseCard} ${textSecondary} hover:${textPrimary}`
+                          }`}
+                        >
+                          📂 Subcategorías {selectedSubcategory && <span className="bg-white/30 px-1.5 rounded text-xs">1</span>}
+                        </button>
+                      )}
                       <button
-                        onClick={() => { setShowBrandFilter(!showBrandFilter); setShowCategoryFilter(false); }}
+                        onClick={() => { setShowBrandFilter(!showBrandFilter); setShowCategoryFilter(false); setShowSubcategoryFilter(false); }}
                         className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${
                           showBrandFilter || selectedBrand
                             ? "bg-blue-500 text-white"
@@ -798,6 +831,38 @@ const ids = new Set();
                             >
                               <span>{name}</span>
                               <span className={`text-xs ${selectedCategory === name ? "text-white/70" : ""}`}>{availableCount}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* SUBCATEGORY FILTER */}
+                    {showSubcategoryFilter && selectedCategory && (
+                      <div className="mt-3 space-y-1 max-h-48 overflow-y-auto">
+                        <button
+                          onClick={() => { setSelectedSubcategory(""); setShowSubcategoryFilter(false); }}
+                          className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-all ${
+                            !selectedSubcategory ? "bg-pink-500 text-white" : `${dark ? "hover:bg-gray-700" : "hover:bg-gray-100"} ${textSecondary}`
+                          }`}
+                        >
+                          Todas ({productosFiltrados.length})
+                        </button>
+                        {uniqueSubcategories.map(([name]) => {
+                          const disponiblesDeCategoria = products.filter(
+                            (p) => p.category_id && userCategories.includes(p.category_id) && p.categories?.name === selectedCategory
+                          );
+                          const availableCount = disponiblesDeCategoria.filter((p) => p.subcategories?.name === name && !userProducts.has(String(p.id))).length;
+                          return (
+                            <button
+                              key={name}
+                              onClick={() => { setSelectedSubcategory(name); setShowSubcategoryFilter(false); }}
+                              className={`w-full text-left px-3 py-2 rounded-lg text-sm flex justify-between items-center transition-all ${
+                                selectedSubcategory === name ? "bg-pink-500 text-white" : `${dark ? "hover:bg-gray-700" : "hover:bg-gray-100"} ${textSecondary}`
+                              }`}
+                            >
+                              <span>{name}</span>
+                              <span className={`text-xs ${selectedSubcategory === name ? "text-white/70" : ""}`}>{availableCount}</span>
                             </button>
                           );
                         })}

@@ -18,7 +18,7 @@ export function AdminDataProvider({ children }) {
       supabase.from("profiles").select("id, name, role, created_at").order("created_at", { ascending: false }),
       supabase
         .from("products_base")
-        .select("id, name, brand_id, category_id, brands(name), categories(name)")
+        .select("id, name, brand_id, category_id, subcategory_id, brands(name), categories(name), subcategories(name)")
         .order("name"),
       supabase.from("user_products").select("user_id"),
       supabase.from("categories").select("id, name").order("name"),
@@ -63,7 +63,7 @@ export function AdminDataProvider({ children }) {
   const invalidateProductsBase = useCallback(async () => {
     const { data } = await supabase
       .from("products_base")
-      .select("id, name, brand_id, category_id, brands(name), categories(name)")
+      .select("id, name, brand_id, category_id, subcategory_id, brands(name), categories(name), subcategories(name)")
       .order("name");
     setProductsBase(data || []);
   }, []);
