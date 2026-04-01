@@ -32,11 +32,6 @@ export function AgregarProductosSistema({ onClose }) {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // IDs de productos base que el usuario YA tiene
-  const idsAsignados = useMemo(() => {
-    return new Set(products.map(p => p.base_id).filter(Boolean));
-  }, [products]);
-
   // Map de productos asignados ACTIVOS con su info
   const productosAsignadosMap = useMemo(() => {
     const map = {};
@@ -109,7 +104,10 @@ export function AgregarProductosSistema({ onClose }) {
       }
     });
 
-    return { productosDisponibles: disponibles, productosAsignados: asignados };
+    return { 
+      productosDisponibles: disponibles.sort((a, b) => (a.name || "").localeCompare(b.name || "")), 
+      productosAsignados: asignados.sort((a, b) => (a.name || "").localeCompare(b.name || "")) 
+    };
   }, [productosSistema, assignedProducts, productosAsignadosMap, productosInactivosSet]);
 
   // Estado
@@ -119,8 +117,8 @@ export function AgregarProductosSistema({ onClose }) {
   const [subcategoriaActiva, setSubcategoriaActiva] = useState("todas");
   const [showHistorial, setShowHistorial] = useState(false);
   
-  // Selección múltiple
-  const [selectedProducts, setSelectedProducts] = useState([]);
+  // Selección múltiple (mapa para permitir inputs individuales)
+  const [selectedProductsMap, setSelectedProductsMap] = useState({});
   const [submitting, setSubmitting] = useState(false);
   
   // Historial de productos agregados
@@ -133,13 +131,12 @@ export function AgregarProductosSistema({ onClose }) {
     stock: "",
     descripcion: "",
   });
-
-  // Cálculos para el formulario
-  const precioCompraNum = parseFloat(formSingle.precio_compra) || 0;
-  const precioVentaNum = parseFloat(formSingle.precio_venta) || 0;
-  const gananciaPorUnidad = precioVentaNum - precioCompraNum;
-  const gananciaNegativa = precioCompraNum > 0 && precioVentaNum > 0 && precioCompraNum > precioVentaNum;
-
+  
+  // Bulk inputs
+  const [bulkPrecioVenta, setBulkPrecioVenta] = useState("");
+  const [bulkPrecioCompra, setBulkPrecioCompra] = useState("");
+  const [bulkStock, setBulkStock] = useState("");
+  
   // Subcategorías de la categoría seleccionada
   const subcategoriasDeCategoria = useMemo(() => {
     if (categoriaActiva === "todas") return [];
@@ -214,92 +211,158 @@ export function AgregarProductosSistema({ onClose }) {
 
   // Toggle selección de producto (clic en toda la card)
   const toggleProductSelection = (producto) => {
-    setSelectedProducts(prev => {
-      const isSelected = prev.some(p => p.id === producto.id);
-      if (isSelected) {
-        return prev.filter(p => p.id !== producto.id);
+    setSelectedProductsMap(prev => {
+      if (prev[producto.id]) {
+        const newMap = { ...prev };
+        delete newMap[producto.id];
+        return newMap;
       }
-      return [...prev, producto];
+      return {
+        ...prev,
+        [producto.id]: {
+          producto,
+          precio_compra: formSingle.precio_compra || "",
+          precio_venta: formSingle.precio_venta || "",
+          stock: formSingle.stock || "",
+          descripcion: formSingle.descripcion || "",
+        }
+      };
+    });
+  };
+
+  // Actualizar valor de un producto específico
+  const updateProductValue = (productoId, field, value) => {
+    setSelectedProductsMap(prev => ({
+      ...prev,
+      [productoId]: {
+        ...prev[productoId],
+        [field]: value
+      }
+    }));
+  };
+
+  // Aplicar valor a todos los productos seleccionados
+  const applyBulkToAll = (field, value) => {
+    setSelectedProductsMap(prev => {
+      const updated = {};
+      Object.keys(prev).forEach(id => {
+        updated[id] = { ...prev[id], [field]: value };
+      });
+      return updated;
     });
   };
 
   // Toggle seleccionar todos
   const toggleSelectAll = () => {
     const source = productosDisponibles;
+    const currentCount = Object.keys(selectedProductsMap).length;
     
-    if (selectedProducts.length === source.length) {
-      setSelectedProducts([]);
+    if (currentCount === source.length) {
+      setSelectedProductsMap({});
     } else {
-      setSelectedProducts([...source]);
+      const newMap = {};
+      source.forEach(p => {
+        newMap[p.id] = {
+          producto: p,
+          precio_compra: formSingle.precio_compra || "",
+          precio_venta: formSingle.precio_venta || "",
+          stock: formSingle.stock || "",
+          descripcion: formSingle.descripcion || "",
+        };
+      });
+      setSelectedProductsMap(newMap);
     }
   };
 
-  // Agregar UN producto con datos específicos
-  const handleAgregarUno = async () => {
-    if (selectedProducts.length !== 1) return;
-    
-    const producto = selectedProducts[0];
-    const precio_compra = formSingle.precio_compra ? parseFloat(formSingle.precio_compra) : 0;
-    const precio_venta = formSingle.precio_venta ? parseFloat(formSingle.precio_venta) : 0;
-    const stock = formSingle.stock ? parseInt(formSingle.stock) : 0;
+  // Obtener array de productos seleccionados (para operaciones)
+  const getSelectedProductsArray = () => {
+    return Object.values(selectedProductsMap)
+      .filter(item => item.producto?.id) // Filter out any items without valid product
+      .map(item => ({
+        ...item.producto,
+        data: {
+          precio_compra: parseFloat(item.precio_compra) || 0,
+          precio_venta: parseFloat(item.precio_venta) || 0,
+          stock: parseInt(item.stock) || 0,
+          descripcion: item.descripcion || null,
+        }
+      }));
+  };
+
+  // Agregar productos con datos específicos (uno o múltiplos)
+  const handleAgregar = async () => {
+    const productosArray = getSelectedProductsArray();
+    if (productosArray.length === 0) return;
     
     // Validar ganancia negativa
-    if (precio_compra > 0 && precio_venta > 0 && precio_compra > precio_venta) {
-      const confirmacion = confirm(
-        `⚠️ Ganancia negativa\n\n` +
-        `Precio Compra: $${precio_compra.toLocaleString()}\n` +
-        `Precio Venta: $${precio_venta.toLocaleString()}\n` +
-        `Ganancia por unidad: -$${(precio_compra - precio_venta).toLocaleString()}\n\n` +
-        `¿Deseas continuar de todos modos?`
-      );
-      if (!confirmacion) return;
+    for (const item of productosArray) {
+      const pc = item.data.precio_compra;
+      const pv = item.data.precio_venta;
+      if (pc > 0 && pv > 0 && pc > pv) {
+        const confirmacion = confirm(
+          `⚠️ Ganancia negativa en "${item.name}"\n\n` +
+          `Precio Compra: $${pc.toLocaleString()}\n` +
+          `Precio Venta: $${pv.toLocaleString()}\n` +
+          `Ganancia por unidad: -$${(pc - pv).toLocaleString()}\n\n` +
+          `¿Deseas continuar de todos modos?`
+        );
+        if (!confirmacion) return;
+        break;
+      }
     }
     
     setSubmitting(true);
 
-    const result = await agregarProductosBulk([producto], {
-      precio_compra,
-      precio_venta,
-      stock,
-      descripcion: formSingle.descripcion || null,
-    });
+    const productosParaHook = productosArray.map(p => p.producto || p);
+    const datosComunes = productosArray[0]?.data;
+    
+    const result = await agregarProductosBulk(
+      productosParaHook,
+      datosComunes || {}
+    );
 
     setSubmitting(false);
 
     if (result.success && result.productos.length > 0) {
       // Agregar al historial
-      const datosProducto = {
-        id: Date.now(),
-        nombre: producto.name,
-        brand_name: producto.brand_name,
-        precio_compra,
-        precio_venta,
-        stock,
-        fecha: new Date().toLocaleString("es-AR"),
-      };
-      setHistorialAgregados(prev => [datosProducto, ...prev].slice(0, 10));
+      productosArray.forEach(p => {
+        const datosProducto = {
+          id: Date.now() + Math.random(),
+          nombre: p.name,
+          brand_name: p.brand_name,
+          precio_compra: p.data.precio_compra,
+          precio_venta: p.data.precio_venta,
+          stock: p.data.stock,
+          fecha: new Date().toLocaleString("es-AR"),
+        };
+        setHistorialAgregados(prev => [datosProducto, ...prev].slice(0, 10));
+      });
       
       result.productos.forEach(p => agregarProductoBase(p));
-      setSelectedProducts([]);
+      setSelectedProductsMap({});
       setFormSingle({ precio_compra: "", precio_venta: "", stock: "", descripcion: "" });
+      alert(`✅ ${result.productos.length} producto(s) agregado(s)`);
     } else {
       alert(result.error || "Error al agregar");
     }
   };
 
-  // Agregar MÚLTIPLES productos (bulk sin datos)
-  const handleAgregarBulk = async () => {
-    if (selectedProducts.length < 2) return;
+  // Agregar MÚLTIPLES productos sin datos (bulk simple)
+  const handleAgregarBulkSimple = async () => {
+    const productosArray = getSelectedProductsArray();
+    if (productosArray.length < 1) return;
     
     setSubmitting(true);
 
-    const result = await agregarProductosBulk(selectedProducts, {});
+    const productosParaHook = productosArray.map(p => p.producto || p);
+    
+    const result = await agregarProductosBulk(productosParaHook, {});
 
     setSubmitting(false);
 
     if (result.success && result.productos.length > 0) {
       result.productos.forEach(p => agregarProductoBase(p));
-      setSelectedProducts([]);
+      setSelectedProductsMap({});
       alert(`✅ ${result.productos.length} productos agregados`);
     } else {
       alert(result.error || "Error al agregar");
@@ -319,8 +382,14 @@ export function AgregarProductosSistema({ onClose }) {
   const borderColor = dark ? "border-gray-700" : "border-gray-200";
   const inputBg = dark ? "bg-gray-700 text-white" : "bg-gray-50 text-gray-900";
 
-  const isSingleSelection = selectedProducts.length === 1;
-  const isMultiSelection = selectedProducts.length >= 2;
+  const selectedCount = Object.keys(selectedProductsMap).length;
+  const isSingleSelection = selectedCount === 1;
+  const isMultiSelection = selectedCount >= 2;
+
+  // Check if any product has data filled in
+  const hasAnyData = Object.values(selectedProductsMap).some(p => 
+    p.precio_compra || p.precio_venta || p.stock
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 md:p-4 bg-black/60 backdrop-blur-sm">
@@ -387,7 +456,7 @@ export function AgregarProductosSistema({ onClose }) {
             <button
               onClick={() => {
                 setActiveTab("disponibles");
-                setSelectedProducts([]);
+                setSelectedProductsMap({});
               }}
               className={`px-4 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${
                 activeTab === "disponibles"
@@ -408,7 +477,7 @@ export function AgregarProductosSistema({ onClose }) {
             <button
               onClick={() => {
                 setActiveTab("asignados");
-                setSelectedProducts([]);
+                setSelectedProductsMap({});
               }}
               className={`px-4 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${
                 activeTab === "asignados"
@@ -429,32 +498,92 @@ export function AgregarProductosSistema({ onClose }) {
           </div>
         </div>
 
-        {/* BARRA DE ACCIÓN */}
-        {activeTab === "disponibles" && selectedProducts.length > 0 && (
+        {/* BARRA DE ACCIÓN - Solo visible en desktop */}
+        {activeTab === "disponibles" && selectedCount > 0 && !esMobile && (
           <div className={`px-4 py-2 border-b ${borderColor} ${dark ? "bg-green-500/10" : "bg-green-50"}`}>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between mb-2">
               <span className={`text-sm ${textPrimary}`}>
                 {isSingleSelection && (
                   <span>📝 1 producto seleccionado - Editar datos</span>
                 )}
                 {isMultiSelection && (
-                  <span>📋 {selectedProducts.length} productos seleccionados - Carga masiva</span>
+                  <span>📋 {selectedCount} productos seleccionados - Carga masiva</span>
                 )}
               </span>
               <button
-                onClick={() => setSelectedProducts([])}
+                onClick={() => { setSelectedProductsMap({}); }}
                 className={`px-3 py-1 rounded-lg text-sm ${dark ? "hover:bg-gray-700 text-gray-400" : "hover:bg-gray-200 text-gray-600"}`}
               >
                 ✕ Cancelar
               </button>
             </div>
+            
+            {/* Bulk inputs */}
+            {isMultiSelection && (
+              <div className="flex flex-wrap gap-2 items-center">
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    placeholder="Venta"
+                    value={bulkPrecioVenta}
+                    onChange={(e) => setBulkPrecioVenta(e.target.value)}
+                    className={`w-16 px-2 py-1 rounded border text-xs ${inputBg} ${borderColor}`}
+                  />
+                  <button
+                    onClick={() => applyBulkToAll("precio_venta", bulkPrecioVenta)}
+                    disabled={!bulkPrecioVenta}
+                    className="px-1.5 py-1 bg-purple-500 text-white rounded text-xs disabled:opacity-40"
+                  >
+                    Apply
+                  </button>
+                </div>
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    placeholder="Compra"
+                    value={bulkPrecioCompra}
+                    onChange={(e) => setBulkPrecioCompra(e.target.value)}
+                    className={`w-16 px-2 py-1 rounded border text-xs ${inputBg} ${borderColor}`}
+                  />
+                  <button
+                    onClick={() => applyBulkToAll("precio_compra", bulkPrecioCompra)}
+                    disabled={!bulkPrecioCompra}
+                    className="px-1.5 py-1 bg-blue-500 text-white rounded text-xs disabled:opacity-40"
+                  >
+                    Apply
+                  </button>
+                </div>
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    placeholder="Stock"
+                    value={bulkStock}
+                    onChange={(e) => setBulkStock(e.target.value)}
+                    className={`w-12 px-2 py-1 rounded border text-xs ${inputBg} ${borderColor}`}
+                  />
+                  <button
+                    onClick={() => applyBulkToAll("stock", bulkStock)}
+                    disabled={!bulkStock && bulkStock !== "0"}
+                    className="px-1.5 py-1 bg-green-500 text-white rounded text-xs disabled:opacity-40"
+                  >
+                    Apply
+                  </button>
+                </div>
+                <button
+                  onClick={() => setSelectedProductsMap({})}
+                  className={`px-2 py-1 rounded text-xs ${dark ? "hover:bg-gray-700 text-gray-400" : "hover:bg-gray-200 text-gray-500"}`}
+                >
+                  Limpiar
+                </button>
+              </div>
+            )}
           </div>
         )}
 
         {/* CONTENIDO */}
         <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
           {/* LISTA DE PRODUCTOS */}
-          <div className={`flex-1 overflow-y-auto p-2 sm:p-4 ${borderColor} md:border-r ${selectedProducts.length > 0 && esMobile ? "pb-28" : ""}`}>
+          <div className={`flex-1 overflow-y-auto p-2 sm:p-4 ${borderColor} md:border-r ${selectedCount > 0 && esMobile ? "pb-28" : ""}`}>
             {/* BÚSQUEDA */}
             <div className="relative mb-3">
               <span className="absolute left-3 top-1/2 -translate-y-1/2">🔍</span>
@@ -532,20 +661,20 @@ export function AgregarProductosSistema({ onClose }) {
               </div>
             )}
 
-            {/* RESULTADOS + SELECT ALL */}
+              {/* RESULTADOS + SELECT ALL */}
             {activeTab === "disponibles" && (
               <div className="flex items-center justify-between mb-2">
                 <span className={`text-sm ${textSecondary}`}>
                   {productosFiltrados.length} productos
-                  {selectedProducts.length > 0 && (
-                    <span className="ml-2 text-green-500">• {selectedProducts.length} seleccionados</span>
+                  {selectedCount > 0 && (
+                    <span className="ml-2 text-green-500">• {selectedCount} seleccionados</span>
                   )}
                 </span>
                 <button
                   onClick={toggleSelectAll}
                   className={`text-xs ${dark ? "text-blue-400 hover:text-blue-300" : "text-blue-600 hover:text-blue-700"}`}
                 >
-                  {selectedProducts.length === productosDisponibles.length ? "Deseleccionar todos" : "Seleccionar todos"}
+                  {selectedCount === productosDisponibles.length ? "Deseleccionar todos" : "Seleccionar todos"}
                 </button>
               </div>
             )}
@@ -573,7 +702,7 @@ export function AgregarProductosSistema({ onClose }) {
                   const subcat = subcategorias.find(s => s.id === producto.subcategory_id);
                   const infoUsuario = producto.infoUsuario;
                   const isInactive = producto.isInactive;
-                  const isSelected = selectedProducts.some(p => p.id === producto.id);
+                  const isSelected = selectedProductsMap[producto.id] !== undefined;
 
                   const cardClasses = isSelected
                     ? `border-green-500 ${dark ? "bg-green-500/20" : "bg-green-50"}`
@@ -658,99 +787,183 @@ export function AgregarProductosSistema({ onClose }) {
           </div>
 
           {/* PANEL LATERAL */}
-          <div className={`hidden md:block md:w-72 p-4 overflow-y-auto ${bgModal}`}>
-            {selectedProducts.length === 0 ? (
+          <div className={`hidden md:block md:w-80 p-4 overflow-y-auto ${bgModal}`}>
+            {selectedCount === 0 ? (
               <div className={`text-center py-8 ${textSecondary}`}>
                 <span className="text-4xl mb-2 block">👆</span>
                 <p className="text-sm">Hacé click en un producto para seleccionarlo</p>
               </div>
             ) : isSingleSelection ? (
               <div className="space-y-4">
-                <div>
-                  <h3 className={`font-bold ${textPrimary}`}>
-                    {selectedProducts[0].name}
-                  </h3>
-                  <p className={`text-sm ${textSecondary}`}>
-                    {categorias.find(c => c.id === selectedProducts[0].category_id)?.nombre}
-                    {selectedProducts[0].brand_name && ` • ${selectedProducts[0].brand_name}`}
-                  </p>
-                </div>
+                {(() => {
+                  const [selectedItem] = Object.values(selectedProductsMap);
+                  const product = selectedItem?.producto;
+                  const data = selectedItem || {};
+                  const pc = parseFloat(data.precio_compra) || 0;
+                  const pv = parseFloat(data.precio_venta) || 0;
+                  const ganancia = pv - pc;
+                  const gananciaNegativa = pc > 0 && pv > 0 && pc > pv;
+                  
+                  return (
+                    <>
+                      <div>
+                        <h3 className={`font-bold ${textPrimary}`}>
+                          {product?.name}
+                        </h3>
+                        <p className={`text-sm ${textSecondary}`}>
+                          {categorias.find(c => c.id === product?.category_id)?.nombre}
+                          {product?.brand_name && ` • ${product.brand_name}`}
+                        </p>
+                      </div>
 
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>P. Compra</label>
-                    <input
-                      type="number"
-                      value={formSingle.precio_compra}
-                      onChange={(e) => setFormSingle(prev => ({ ...prev, precio_compra: e.target.value }))}
-                      placeholder="0"
-                      className={`w-full px-2 py-1.5 rounded-lg border ${inputBg} text-sm`}
-                    />
-                  </div>
-                  <div>
-                    <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>P. Venta</label>
-                    <input
-                      type="number"
-                      value={formSingle.precio_venta}
-                      onChange={(e) => setFormSingle(prev => ({ ...prev, precio_venta: e.target.value }))}
-                      placeholder="0"
-                      className={`w-full px-2 py-1.5 rounded-lg border ${inputBg} text-sm`}
-                    />
-                  </div>
-                </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>P. Compra</label>
+                          <input
+                            type="number"
+                            value={data.precio_compra || ""}
+                            onChange={(e) => updateProductValue(product.id, "precio_compra", e.target.value)}
+                            placeholder="0"
+                            className={`w-full px-2 py-1.5 rounded-lg border ${inputBg} text-sm`}
+                          />
+                        </div>
+                        <div>
+                          <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>P. Venta</label>
+                          <input
+                            type="number"
+                            value={data.precio_venta || ""}
+                            onChange={(e) => updateProductValue(product.id, "precio_venta", e.target.value)}
+                            placeholder="0"
+                            className={`w-full px-2 py-1.5 rounded-lg border ${inputBg} text-sm`}
+                          />
+                        </div>
+                      </div>
 
-                {/* Indicador de ganancia */}
-                {precioVentaNum > 0 && precioCompraNum > 0 && (
-                  <div className={`p-2 rounded-lg text-xs ${gananciaNegativa ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" : "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"}`}>
-                    {gananciaNegativa ? (
-                      <span>⚠️ Ganancia: -${Math.abs(gananciaPorUnidad).toLocaleString()} por unidad</span>
-                    ) : (
-                      <span>✓ Ganancia: ${gananciaPorUnidad.toLocaleString()} por unidad</span>
-                    )}
-                  </div>
-                )}
+                      {pv > 0 && pc > 0 && (
+                        <div className={`p-2 rounded-lg text-xs ${gananciaNegativa ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" : "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"}`}>
+                          {gananciaNegativa ? (
+                            <span>⚠️ Ganancia: -${Math.abs(ganancia).toLocaleString()} por unidad</span>
+                          ) : (
+                            <span>✓ Ganancia: ${ganancia.toLocaleString()} por unidad</span>
+                          )}
+                        </div>
+                      )}
 
-                <div>
-                  <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>Stock</label>
-                  <input
-                    type="number"
-                    value={formSingle.stock === 0 ? "" : formSingle.stock}
-                    onChange={(e) => setFormSingle(prev => ({ ...prev, stock: e.target.value }))}
-                    placeholder="0"
-                    className={`w-full px-2 py-1.5 rounded-lg border ${inputBg} text-sm`}
-                  />
-                </div>
+                      <div>
+                        <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>Stock</label>
+                        <input
+                          type="number"
+                          value={data.stock === 0 || data.stock === "" ? "" : data.stock}
+                          onChange={(e) => updateProductValue(product.id, "stock", e.target.value)}
+                          placeholder="0"
+                          className={`w-full px-2 py-1.5 rounded-lg border ${inputBg} text-sm`}
+                        />
+                      </div>
 
-                <button
-                  onClick={handleAgregarUno}
-                  disabled={submitting}
-                  className={`w-full py-2 text-white rounded-lg font-medium disabled:opacity-50 transition-colors text-sm ${
-                    gananciaNegativa ? "bg-yellow-600 hover:bg-yellow-500" : "bg-green-500 hover:bg-green-600"
-                  }`}
-                >
-                  {submitting ? "..." : gananciaNegativa ? "⚠️ Agregar con pérdida" : "✓ Agregar"}
-                </button>
+                      <div>
+                        <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>Descripción (opcional)</label>
+                        <textarea
+                          value={data.descripcion || ""}
+                          onChange={(e) => updateProductValue(product.id, "descripcion", e.target.value)}
+                          placeholder="Descripción..."
+                          className={`w-full px-2 py-1.5 rounded-lg border ${inputBg} text-sm resize-none`}
+                          rows={2}
+                        />
+                      </div>
+
+                      <button
+                        onClick={handleAgregar}
+                        disabled={submitting}
+                        className={`w-full py-2 text-white rounded-lg font-medium disabled:opacity-50 transition-colors text-sm ${
+                          gananciaNegativa ? "bg-yellow-600 hover:bg-yellow-500" : "bg-green-500 hover:bg-green-600"
+                        }`}
+                      >
+                        {submitting ? "..." : gananciaNegativa ? "⚠️ Agregar con pérdida" : "✓ Agregar"}
+                      </button>
+                    </>
+                  );
+                })()}
               </div>
             ) : (
               <div className="space-y-3">
                 <div>
                   <h3 className={`font-bold ${textPrimary}`}>
-                    📋 {selectedProducts.length} productos
+                    📋 {selectedCount} productos
                   </h3>
-                  <p className={`text-xs ${textSecondary}`}>Carga masiva</p>
+                  <p className={`text-xs ${textSecondary}`}>Carga masiva - Seleccioná los valores a aplicar</p>
+                </div>
+
+                {/* Bulk inputs in sidebar */}
+                <div className={`p-3 rounded-lg border ${borderColor}`}>
+                  <p className={`text-xs font-medium mb-2 ${textSecondary}`}>Aplicar a todos:</p>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        placeholder="P. Venta"
+                        value={bulkPrecioVenta}
+                        onChange={(e) => setBulkPrecioVenta(e.target.value)}
+                        className={`flex-1 px-2 py-1 rounded border text-xs ${inputBg} ${borderColor}`}
+                      />
+                      <button
+                        onClick={() => { applyBulkToAll("precio_venta", bulkPrecioVenta); }}
+                        disabled={!bulkPrecioVenta}
+                        className="px-2 py-1 bg-purple-500 text-white rounded text-xs disabled:opacity-40"
+                      >
+                        Apply
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        placeholder="P. Compra"
+                        value={bulkPrecioCompra}
+                        onChange={(e) => setBulkPrecioCompra(e.target.value)}
+                        className={`flex-1 px-2 py-1 rounded border text-xs ${inputBg} ${borderColor}`}
+                      />
+                      <button
+                        onClick={() => { applyBulkToAll("precio_compra", bulkPrecioCompra); }}
+                        disabled={!bulkPrecioCompra}
+                        className="px-2 py-1 bg-blue-500 text-white rounded text-xs disabled:opacity-40"
+                      >
+                        Apply
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        placeholder="Stock"
+                        value={bulkStock}
+                        onChange={(e) => setBulkStock(e.target.value)}
+                        className={`flex-1 px-2 py-1 rounded border text-xs ${inputBg} ${borderColor}`}
+                      />
+                      <button
+                        onClick={() => { applyBulkToAll("stock", bulkStock); }}
+                        disabled={!bulkStock && bulkStock !== "0"}
+                        className="px-2 py-1 bg-green-500 text-white rounded text-xs disabled:opacity-40"
+                      >
+                        Apply
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
                 <div className={`max-h-48 overflow-y-auto rounded-lg border ${borderColor}`}>
-                  {selectedProducts.map((producto, index) => (
+                  {Object.entries(selectedProductsMap).map(([id, item], index) => (
                     <div
-                      key={producto.id}
+                      key={id}
                       className={`p-2 flex items-center justify-between gap-2 ${
                         index !== 0 ? `border-t ${borderColor}` : ""
                       }`}
                     >
-                      <p className={`text-sm truncate flex-1 ${textPrimary}`}>{producto.name}</p>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm truncate ${textPrimary}`}>{item.producto.name}</p>
+                        <p className={`text-[10px] ${textSecondary}`}>
+                          V: {item.precio_venta || "-"} | C: {item.precio_compra || "-"} | S: {item.stock || "0"}
+                        </p>
+                      </div>
                       <button
-                        onClick={() => toggleProductSelection(producto)}
+                        onClick={() => toggleProductSelection(item.producto)}
                         className={`p-1 rounded text-xs ${dark ? "hover:bg-gray-700 text-gray-400" : "hover:bg-gray-100 text-gray-500"}`}
                       >
                         ✕
@@ -760,98 +973,144 @@ export function AgregarProductosSistema({ onClose }) {
                 </div>
 
                 <button
-                  onClick={handleAgregarBulk}
+                  onClick={hasAnyData ? handleAgregar : handleAgregarBulkSimple}
                   disabled={submitting}
                   className="w-full py-2 bg-green-500 text-white rounded-lg font-medium disabled:opacity-50 hover:bg-green-600 transition-colors text-sm"
                 >
-                  {submitting ? "..." : `✓ Agregar ${selectedProducts.length}`}
+                  {submitting ? "..." : hasAnyData ? `✓ Agregar ${selectedCount} con precios` : `✓ Agregar ${selectedCount}`}
                 </button>
               </div>
             )}
           </div>
 
           {/* BARRA INFERIOR MOBILE */}
-          {esMobile && selectedProducts.length > 0 && (
+          {esMobile && selectedCount > 0 && (
             <div className={`fixed bottom-0 left-0 right-0 p-2 ${bgModal} border-t ${borderColor} shadow-xl z-50`}>
               {isSingleSelection ? (
                 <div className="space-y-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className={`text-xs font-medium truncate flex-1 ${textPrimary}`}>
-                      {selectedProducts[0].name}
-                    </p>
+                  {(() => {
+                    const [selectedItem] = Object.values(selectedProductsMap);
+                    const product = selectedItem?.producto;
+                    const data = selectedItem || {};
+                    const pc = parseFloat(data.precio_compra) || 0;
+                    const pv = parseFloat(data.precio_venta) || 0;
+                    const ganancia = pv - pc;
+                    const gananciaNegativa = pc > 0 && pv > 0 && pc > pv;
+                    
+                    return (
+                      <>
+                        <div className="flex items-center justify-between gap-2">
+                          <p className={`text-xs font-medium truncate flex-1 ${textPrimary}`}>
+                            {product?.name}
+                          </p>
+                          <button
+                            onClick={() => { setSelectedProductsMap({}); }}
+                            className={`p-1 rounded text-xs ${dark ? "bg-gray-700 text-gray-300" : "bg-gray-200 text-gray-600"}`}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                        {pv > 0 && pc > 0 && (
+                          <p className={`text-[10px] px-1 ${gananciaNegativa ? "text-red-500" : "text-green-500"}`}>
+                            {gananciaNegativa ? `⚠️ -$${Math.abs(ganancia).toLocaleString()}/u` : `✓ +$${ganancia.toLocaleString()}/u`}
+                          </p>
+                        )}
+                        <div className="flex gap-1">
+                          <input
+                            type="number"
+                            value={data.precio_compra || ""}
+                            onChange={(e) => updateProductValue(product.id, "precio_compra", e.target.value)}
+                            placeholder="Comp"
+                            className={`flex-1 min-w-0 px-1.5 py-1 rounded border ${inputBg} text-xs`}
+                          />
+                          <input
+                            type="number"
+                            value={data.precio_venta || ""}
+                            onChange={(e) => updateProductValue(product.id, "precio_venta", e.target.value)}
+                            placeholder="Vent"
+                            className={`flex-1 min-w-0 px-1.5 py-1 rounded border ${inputBg} text-xs`}
+                          />
+                          <input
+                            type="number"
+                            value={data.stock === 0 || data.stock === "" ? "" : data.stock}
+                            onChange={(e) => updateProductValue(product.id, "stock", e.target.value)}
+                            placeholder="Stk"
+                            className={`w-12 px-1.5 py-1 rounded border ${inputBg} text-xs`}
+                          />
+                          <button
+                            onClick={handleAgregar}
+                            disabled={submitting}
+                            className={`px-2 py-1 text-white rounded font-medium text-xs disabled:opacity-50 ${
+                              gananciaNegativa ? "bg-yellow-600" : "bg-green-500"
+                            }`}
+                          >
+                            ✓
+                          </button>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-xs font-medium ${textPrimary}`}>
+                        📋 {selectedCount} productos
+                      </p>
+                    </div>
                     <button
-                      onClick={() => setSelectedProducts([])}
+                      onClick={() => { setSelectedProductsMap({}); }}
                       className={`p-1 rounded text-xs ${dark ? "bg-gray-700 text-gray-300" : "bg-gray-200 text-gray-600"}`}
                     >
                       ✕
                     </button>
                   </div>
-                  {/* Indicador de ganancia */}
-                  {precioVentaNum > 0 && precioCompraNum > 0 && (
-                    <p className={`text-[10px] px-1 ${gananciaNegativa ? "text-red-500" : "text-green-500"}`}>
-                      {gananciaNegativa ? `⚠️ -$${Math.abs(gananciaPorUnidad).toLocaleString()}/u` : `✓ +$${gananciaPorUnidad.toLocaleString()}/u`}
-                    </p>
-                  )}
                   <div className="flex gap-1">
                     <input
                       type="number"
-                      value={formSingle.precio_compra}
-                      onChange={(e) => setFormSingle(prev => ({ ...prev, precio_compra: e.target.value }))}
-                      placeholder="Comp"
+                      placeholder="Venta"
+                      value={bulkPrecioVenta}
+                      onChange={(e) => setBulkPrecioVenta(e.target.value)}
                       className={`flex-1 min-w-0 px-1.5 py-1 rounded border ${inputBg} text-xs`}
                     />
                     <input
                       type="number"
-                      value={formSingle.precio_venta}
-                      onChange={(e) => setFormSingle(prev => ({ ...prev, precio_venta: e.target.value }))}
-                      placeholder="Vent"
+                      placeholder="Compra"
+                      value={bulkPrecioCompra}
+                      onChange={(e) => setBulkPrecioCompra(e.target.value)}
                       className={`flex-1 min-w-0 px-1.5 py-1 rounded border ${inputBg} text-xs`}
                     />
                     <input
                       type="number"
-                      value={formSingle.stock}
-                      onChange={(e) => setFormSingle(prev => ({ ...prev, stock: e.target.value }))}
-                      placeholder="Stk"
+                      placeholder="Stock"
+                      value={bulkStock}
+                      onChange={(e) => setBulkStock(e.target.value)}
                       className={`w-12 px-1.5 py-1 rounded border ${inputBg} text-xs`}
                     />
                     <button
-                      onClick={handleAgregarUno}
-                      disabled={submitting}
-                      className={`px-2 py-1 text-white rounded font-medium text-xs disabled:opacity-50 ${
-                        gananciaNegativa ? "bg-yellow-600" : "bg-green-500"
-                      }`}
+                      onClick={() => { applyBulkToAll("precio_venta", bulkPrecioVenta); applyBulkToAll("precio_compra", bulkPrecioCompra); applyBulkToAll("stock", bulkStock); }}
+                      className="px-2 py-1 bg-purple-500 text-white rounded text-xs"
                     >
-                      ✓
+                      Apply
                     </button>
                   </div>
-                </div>
-              ) : (
-                <div className="flex items-center justify-between gap-1">
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-xs font-medium ${textPrimary}`}>
-                      📋 {selectedProducts.length} productos
-                    </p>
+                  <div className="flex justify-end gap-1">
+                    <button
+                      onClick={hasAnyData ? handleAgregar : handleAgregarBulkSimple}
+                      disabled={submitting}
+                      className="px-3 py-1 bg-green-500 text-white rounded font-medium text-xs disabled:opacity-50"
+                    >
+                      {submitting ? "..." : hasAnyData ? "✓ Agregar c/precios" : "✓ Agregar"}
+                    </button>
                   </div>
-                  <button
-                    onClick={() => setSelectedProducts([])}
-                    className={`p-1 rounded text-xs ${dark ? "bg-gray-700 text-gray-300" : "bg-gray-200 text-gray-600"}`}
-                  >
-                    ✕
-                  </button>
-                  <button
-                    onClick={handleAgregarBulk}
-                    disabled={submitting}
-                    className="px-3 py-1 bg-green-500 text-white rounded font-medium text-xs disabled:opacity-50"
-                  >
-                    ✓ Agregar
-                  </button>
                 </div>
               )}
             </div>
           )}
 
           {/* INDICADOR MOBILE CUANDO NO HAY SELECCIÓN */}
-          {esMobile && selectedProducts.length === 0 && (
+          {esMobile && selectedCount === 0 && (
             <div className={`md:hidden fixed bottom-0 left-0 right-0 p-2 ${bgModal} border-t ${borderColor}`}>
               <p className={`text-xs text-center ${textSecondary}`}>👆 Seleccioná productos</p>
             </div>

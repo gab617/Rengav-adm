@@ -627,16 +627,30 @@ export function Ventas() {
 
                     {estaExpandida && detalles.length > 0 && (
                       <ul className={`mt-2 ml-6 space-y-1 p-2 rounded-lg ${dark ? "bg-gray-900/50" : "bg-white"}`}>
-                        {detalles.map((detalle, idx) => (
-                          <li key={idx} className={`flex justify-between text-sm ${dark ? "text-gray-400" : "text-gray-600"}`}>
-                            <span className="truncate flex-1 mr-2">
-                              {detalle.nombre_producto}
-                            </span>
-                            <span className="shrink-0">
-                              x{detalle.cantidad} · ${formatoMoneda(detalle.precio_unitario * detalle.cantidad)}
-                            </span>
-                          </li>
-                        ))}
+                        {detalles.map((detalle, idx) => {
+                          // Obtener marca del producto
+                          const userProduct = detalle.user_products;
+                          const isBase = !!userProduct?.products_base;
+                          const marca = isBase
+                            ? userProduct?.products_base?.brands?.name
+                            : userProduct?.user_custom_products?.brands?.name || userProduct?.user_custom_products?.brand_text;
+
+                          return (
+                            <li key={idx} className={`flex justify-between text-sm ${dark ? "text-gray-400" : "text-gray-600"}`}>
+                              <span className="truncate flex-1 mr-2">
+                                <span className="font-medium">{detalle.nombre_producto}</span>
+                                {marca && (
+                                  <span className={`text-xs block ${dark ? "text-gray-500" : "text-gray-400"}`}>
+                                    {marca}
+                                  </span>
+                                )}
+                              </span>
+                              <span className="shrink-0">
+                                x{detalle.cantidad} · ${formatoMoneda(detalle.precio_unitario * detalle.cantidad)}
+                              </span>
+                            </li>
+                          );
+                        })}
                       </ul>
                     )}
                   </li>

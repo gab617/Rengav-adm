@@ -101,7 +101,7 @@ function UserExpandedDetail({ user, onClose, invalidateUserCategories }) {
 
     if (user?.id !== targetUserId) return;
 
-    const filteredProducts = (productsRes.data || []).filter(p => p.products_base);
+    const filteredProducts = (productsRes.data || []); // Including both base and custom products
     setProducts(filteredProducts);
     setSales(salesRes.data || []);
     
@@ -257,6 +257,8 @@ function UserExpandedDetail({ user, onClose, invalidateUserCategories }) {
   const stats = {
     productosActivos: products.filter(p => p.active !== false).length,
     productosInactivos: products.filter(p => p.active === false).length,
+    productosBase: products.filter(p => p.products_base).length,
+    productosCustom: products.filter(p => p.user_custom_products).length,
     stockTotal: products.reduce((acc, p) => acc + (p.stock || 0), 0),
     productosSinStock: products.filter(p => p.stock <= 0).length,
     ventasTotales: filteredSales.length,
@@ -271,6 +273,9 @@ function UserExpandedDetail({ user, onClose, invalidateUserCategories }) {
     }
     if (productFilter === "inactive") {
       return products.filter(p => p.active === false);
+    }
+    if (productFilter === "custom") {
+      return products.filter(p => p.user_custom_products);
     }
     return products;
   }, [products, productFilter]);
@@ -329,9 +334,10 @@ function UserExpandedDetail({ user, onClose, invalidateUserCategories }) {
       </div>
 
       {/* STATS GRID */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3">
         <StatCard icon="📦" label="Activos" value={stats.productosActivos} color="green" />
-        <StatCard icon="📋" label="Inactivos" value={stats.productosInactivos} color="red" />
+        <StatCard icon="🏭" label="Base" value={stats.productosBase} color="blue" />
+        <StatCard icon="✨" label="Custom" value={stats.productosCustom} color="purple" />
         <StatCard icon="🏪" label="Stock" value={stats.stockTotal} color="blue" />
         <StatCard icon="⚠️" label="Sin stock" value={stats.productosSinStock} color="yellow" />
       </div>
@@ -484,13 +490,16 @@ function UserExpandedDetail({ user, onClose, invalidateUserCategories }) {
                 { id: "all", label: `Todos (${products.length})` },
                 { id: "active", label: `Activos (${stats.productosActivos})` },
                 { id: "inactive", label: `Inactivos (${stats.productosInactivos})` },
+                { id: "custom", label: `Custom (${stats.productosCustom})` },
               ].map(filter => (
                 <button
                   key={filter.id}
                   onClick={() => setProductFilter(filter.id)}
                   className={`py-1 px-3 rounded text-xs font-medium transition-all ${
                     productFilter === filter.id
-                      ? "bg-blue-500 text-white"
+                      ? filter.id === "custom"
+                        ? "bg-purple-500 text-white"
+                        : "bg-blue-500 text-white"
                       : `${textSecondary} hover:${textPrimary}`
                   }`}
                 >
@@ -562,6 +571,14 @@ function UserExpandedDetail({ user, onClose, invalidateUserCategories }) {
                         <p className={`font-medium truncate ${isInactive ? "line-through opacity-60" : ""} ${textPrimary}`}>
                           {name || "Sin nombre"}
                         </p>
+                        {/* Badge para tipo de producto */}
+                        <span className={`px-1.5 py-0.5 rounded text-xs shrink-0 ${
+                          isBase
+                            ? "bg-blue-500/20 text-blue-400"
+                            : "bg-purple-500/20 text-purple-400"
+                        }`}>
+                          {isBase ? "Base" : "Custom"}
+                        </span>
                         <span className={`px-1.5 py-0.5 rounded text-xs shrink-0 ${
                           isInactive
                             ? "bg-red-500/20 text-red-400"

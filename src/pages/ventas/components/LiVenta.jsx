@@ -101,9 +101,15 @@ export function LiVenta({
           {isActive && (
             <ul className="grid grid-cols-1 gap-2 max-h-[350px] overflow-y-auto p-[0.1em] border border-yellow-500/50 rounded-md custom-scrollbar">
               {venta.user_sales_detail.map((detalle) => {
-                console.log(detalle);
                 const totalDetalle =
                   Number(detalle.precio_unitario) * Number(detalle.cantidad);
+                
+                // Obtener marca del producto
+                const userProduct = detalle.user_products;
+                const isBase = !!userProduct?.products_base;
+                const marca = isBase
+                  ? userProduct?.products_base?.brands?.name
+                  : userProduct?.user_custom_products?.brands?.name || userProduct?.user_custom_products?.brand_text;
 
                 return (
                   <li
@@ -114,6 +120,13 @@ export function LiVenta({
                     <p className="font-semibold text-gray-900">
                       {detalle.nombre_producto || "Producto"}
                     </p>
+                    
+                    {/* Marca */}
+                    {marca && (
+                      <p className="text-xs text-gray-600">
+                        {marca}
+                      </p>
+                    )}
 
                     {/* Precio unitario */}
                     <p className="text-gray-700">

@@ -93,9 +93,8 @@ export function ListVentas({
 
   const botonesFiltro = [
     { id: "hoy", label: "Hoy", filtro: "dia" },
-    { id: "semana", label: "Esta semana", filtro: "semana" },
-    { id: "mes", label: "Este mes", filtro: "mes" },
-    { id: "mesPasado", label: "Mes pasado", filtro: "mes" },
+    { id: "semana", label: "Semana", filtro: "semana" },
+    { id: "mes", label: "Mes", filtro: "mes" },
     { id: "personalizado", label: "Personalizado", filtro: "personalizado" },
   ];
 
@@ -123,13 +122,16 @@ export function ListVentas({
         </div>
         
         {/* BOTONES DE FILTRO - Responsive Grid */}
-        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 mb-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
           {botonesFiltro.map((btn) => (
             <button
               key={btn.id}
               onClick={() => {
                 if (btn.id === "personalizado") {
-                  setShowCustomRange(!showCustomRange);
+                  if (filtro !== "personalizado") {
+                    setRangoPersonalizado(customDesde, customHasta);
+                  }
+                  setShowCustomRange(true);
                 } else {
                   cambiarFiltroRapido(btn.id);
                   setShowCustomRange(false);

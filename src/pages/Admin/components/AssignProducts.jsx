@@ -26,6 +26,7 @@ export function AssignProducts() {
   const [search, setSearch] = useState("");
   const [selectedBrand, setSelectedBrand] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
+  const [selectedSubcategory, setSelectedSubcategory] = useState("");
   const [selectedProducts, setSelectedProducts] = useState({});
   const [selectedToDelete, setSelectedToDelete] = useState(new Set());
   const [precioBaseVenta, setPrecioBaseVenta] = useState("");

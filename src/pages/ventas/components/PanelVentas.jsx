@@ -31,8 +31,18 @@ export function PanelVentas({
 
   const contadorProductos = ventasProcesadas.reduce((acc, venta) => {
     (venta.user_sales_detail || []).forEach((p) => {
+      // Obtener marca del producto
+      const userProduct = p.user_products;
+      const isBase = !!userProduct?.products_base;
+      const marca = isBase
+        ? userProduct?.products_base?.brands?.name
+        : userProduct?.user_custom_products?.brands?.name || userProduct?.user_custom_products?.brand_text;
+      
+      // Crear clave compuesta: nombre + marca
       const nombre = p.nombre_producto;
-      acc[nombre] = (acc[nombre] || 0) + p.cantidad;
+      const key = marca ? `${nombre} | ${marca}` : nombre;
+      
+      acc[key] = (acc[key] || 0) + p.cantidad;
     });
     return acc;
   }, {});
@@ -178,27 +188,38 @@ export function PanelVentas({
             🏆 Top Productos
           </h3>
           <div className="space-y-2">
-            {rankingTop5.map(([nombre, cantidad], index) => (
-              <div
-                key={nombre}
-                className={`flex items-center justify-between p-2 rounded-lg ${
-                  dark ? "bg-gray-700/50" : "bg-gray-50"
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                    index === 0 ? "bg-yellow-500 text-black" :
-                    index === 1 ? "bg-gray-400 text-black" :
-                    index === 2 ? "bg-orange-600 text-white" :
-                    dark ? "bg-gray-600" : "bg-gray-300"
-                  }`}>
-                    {index + 1}
-                  </span>
-                  <span className="text-sm truncate max-w-[150px]">{nombre}</span>
+            {rankingTop5.map(([key, cantidad], index) => {
+              // Separar nombre de marca (si tiene)
+              const [nombre, marca] = key.includes(" | ") ? key.split(" | ") : [key, null];
+              return (
+                <div
+                  key={key}
+                  className={`flex items-center justify-between p-2 rounded-lg ${
+                    dark ? "bg-gray-700/50" : "bg-gray-50"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                      index === 0 ? "bg-yellow-500 text-black" :
+                      index === 1 ? "bg-gray-400 text-black" :
+                      index === 2 ? "bg-orange-600 text-white" :
+                      dark ? "bg-gray-600" : "bg-gray-300"
+                    }`}>
+                      {index + 1}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm truncate max-w-[150px]">{nombre}</p>
+                      {marca && (
+                        <p className={`text-xs truncate ${dark ? "text-gray-500" : "text-gray-400"}`}>
+                          {marca}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <span className="font-bold">{cantidad} ud</span>
                 </div>
-                <span className="font-bold">{cantidad} ud</span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

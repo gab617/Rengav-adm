@@ -64,7 +64,8 @@ export const useVentas = ({ userId }) => {
     setLoadingVentas(true);
     try {
       const { desde, hasta } = rango || calcularRango(filtro, fechaSeleccionada, mesSeleccionado);
-      const cacheKey = `${desde}-${hasta}`;
+      // Include filtro in cache key to avoid mixing data from different filter types
+      const cacheKey = `${filtro}-${desde}-${hasta}`;
 
       // Verificar cache
       if (ventasCache[cacheKey]) {
@@ -86,7 +87,20 @@ export const useVentas = ({ userId }) => {
             precio_unitario,
             precio_compra,
             nombre_producto,
-            product_id
+            product_id,
+            user_products (
+              products_base (
+                brands (
+                  name
+                )
+              ),
+              user_custom_products (
+                brand_text,
+                brands (
+                  name
+                )
+              )
+            )
           )
         `
         )
@@ -437,9 +451,17 @@ export const useVentas = ({ userId }) => {
           null,
           "[]"
         );
+      if (filtro === "personalizado") {
+        return fechaVenta.isBetween(
+          dayjs(rangoFechas.desde),
+          dayjs(rangoFechas.hasta),
+          null,
+          "[]"
+        );
+      }
       return true;
     });
-  }, [ventas, filtro, fechaSeleccionada, mesSeleccionado]);
+  }, [ventas, filtro, fechaSeleccionada, mesSeleccionado, rangoFechas]);
 
   const ventasAgrupadas = useMemo(() => {
     if (filtro === "semana") {

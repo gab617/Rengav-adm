@@ -3,13 +3,26 @@ import { supabase } from "../../../services/supabaseClient";
 import { useAppContext } from "../../../contexto/Context";
 
 export function BulkEditProducts() {
-  const { profile, preferencias, actualizarProducto, products: productsContext } = useAppContext();
+  const { profile, preferencias, actualizarProducto, categorias, subcategorias, unifiedBrands } = useAppContext();
   const dark = preferencias?.theme === "dark";
+  
+  // Mapa de marcas para resolver nombres
+  const brandsMap = useMemo(() => {
+    const map = {};
+    (unifiedBrands || []).forEach(b => {
+      if (b.brand_id) {
+        map[b.brand_id] = b.label || b.name;
+      }
+    });
+    return map;
+  }, [unifiedBrands]);
   
   const [loading, setLoading] = useState(true);
   const [products, setProducts] = useState([]);
   const [selectedProducts, setSelectedProducts] = useState({});
   const [search, setSearch] = useState("");
+  const [categoriaActiva, setCategoriaActiva] = useState("todas");
+  const [subcategoriaActiva, setSubcategoriaActiva] = useState("todas");
   const [precioBaseVenta, setPrecioBaseVenta] = useState("");
   const [precioBaseCompra, setPrecioBaseCompra] = useState("");
   const [stockBase, setStockBase] = useState("");
@@ -42,25 +55,31 @@ export function BulkEditProducts() {
           precio_compra,
           stock,
           custom_id,
-          products_base (id, name, brand_id, brands(name), categories(name)),
+          products_base (id, name, brand_id, brand, category_id, subcategory_id, image_url, categories(id, name), subcategories(id, name)),
           user_custom_products (id, name, brand_id, brand_text, image_url)
         `)
         .eq("user_id", profile?.id);
       
       if (data) {
         const formatted = data.map(p => {
-          // Si tiene custom_id, es un producto custom
           const isCustom = p.custom_id !== null;
+          // Resolver marca
+          let brandName = "Sin marca";
+          if (isCustom) {
+            brandName = p.user_custom_products?.brand_text || brandsMap[p.user_custom_products?.brand_id] || "Sin marca";
+          } else {
+            brandName = p.products_base?.brand || brandsMap[p.products_base?.brand_id] || "Sin marca";
+          }
           return {
             ...p,
             isCustom,
             name: isCustom 
               ? (p.user_custom_products?.name || "Producto custom")
               : (p.products_base?.name || "Sin nombre"),
-            brand: isCustom 
-              ? (p.user_custom_products?.brand_text || p.user_custom_products?.brands?.name || "Sin marca")
-              : (p.products_base?.brands?.name || "Sin marca"),
+            brand: brandName,
             category: isCustom ? null : (p.products_base?.categories?.name || "Sin categoría"),
+            category_id: isCustom ? null : (p.products_base?.category_id || null),
+            subcategory_id: isCustom ? null : (p.products_base?.subcategory_id || null),
             image_url: isCustom ? p.user_custom_products?.image_url : p.products_base?.image_url
           };
         });
@@ -72,7 +91,52 @@ export function BulkEditProducts() {
     if (profile?.id) {
       loadProducts();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.id]);
+
+  // Subcategorías de la categoría seleccionada
+  const subcategoriasDeCategoria = useMemo(() => {
+    if (categoriaActiva === "todas") return [];
+    const subs = subcategorias || [];
+    return subs.filter(s => s.id_categoria === categoriaActiva);
+  }, [categoriaActiva, subcategorias]);
+
+  // Contadores por categoría
+  const conteoPorCategoria = useMemo(() => {
+    const counts = { todas: products.length };
+    products.forEach(p => {
+      if (p.category_id) {
+        counts[p.category_id] = (counts[p.category_id] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [products]);
+
+  // Contadores por subcategoría
+  const conteoPorSubcategoria = useMemo(() => {
+    if (categoriaActiva === "todas") return {};
+    const counts = { todas: conteoPorCategoria[categoriaActiva] || 0 };
+    products
+      .filter(p => p.category_id === categoriaActiva)
+      .forEach(p => {
+        if (p.subcategory_id) {
+          counts[p.subcategory_id] = (counts[p.subcategory_id] || 0) + 1;
+        }
+      });
+    return counts;
+  }, [products, categoriaActiva, conteoPorCategoria]);
+
+  // Categorías con productos
+  const categoriasConProductos = useMemo(() => {
+    const catIds = new Set(products.map(p => p.category_id).filter(Boolean));
+    const cats = categorias || [];
+    const filtered = cats.filter(c => catIds.has(c.id));
+    // Si no hay categorías con productos pero hay productos, usar los del contexto
+    if (filtered.length === 0 && products.length > 0) {
+      return cats.length > 0 ? cats : [];
+    }
+    return filtered;
+  }, [categorias, products]);
 
   const filteredProducts = useMemo(() => {
     let filtered = products;
@@ -81,6 +145,14 @@ export function BulkEditProducts() {
       filtered = filtered.filter(p => p.active !== false);
     } else if (filtro === "inactive") {
       filtered = filtered.filter(p => p.active === false);
+    }
+    
+    if (categoriaActiva !== "todas") {
+      filtered = filtered.filter(p => p.category_id === categoriaActiva);
+    }
+
+    if (subcategoriaActiva !== "todas" && subcategoriaActiva !== null) {
+      filtered = filtered.filter(p => p.subcategory_id === subcategoriaActiva);
     }
     
     if (search) {
@@ -94,7 +166,7 @@ export function BulkEditProducts() {
     
     // Ordenar alfabéticamente
     return [...filtered].sort((a, b) => a.name.localeCompare(b.name));
-  }, [products, search, filtro]);
+  }, [products, search, filtro, categoriaActiva, subcategoriaActiva]);
 
   const toggleProduct = (id) => {
     if (selectedProducts[id]) {
@@ -247,34 +319,100 @@ export function BulkEditProducts() {
       )}
 
       {/* filtros */}
-      <div className="flex flex-wrap gap-2 items-center">
-        <div className={`flex gap-1 p-1 rounded-lg ${dark ? "bg-gray-900" : "bg-gray-100"}`}>
-          {[
-            { id: "all", label: `Todos (${products.length})` },
-            { id: "active", label: `Activos (${products.filter(p => p.active !== false).length})` },
-            { id: "inactive", label: `Inactivos (${products.filter(p => p.active === false).length})` },
-          ].map(f => (
+      <div className="space-y-3">
+        {/* Fila 1: Activos/Inactivos + Buscar */}
+        <div className="flex flex-wrap gap-2 items-center">
+          <div className={`flex gap-1 p-1 rounded-lg ${dark ? "bg-gray-900" : "bg-gray-100"}`}>
+            {[
+              { id: "all", label: `Todos (${products.length})` },
+              { id: "active", label: `Activos (${products.filter(p => p.active !== false).length})` },
+              { id: "inactive", label: `Inactivos (${products.filter(p => p.active === false).length})` },
+            ].map(f => (
+              <button
+                key={f.id}
+                onClick={() => setFiltro(f.id)}
+                className={`py-1 px-3 rounded text-xs font-medium transition-all ${
+                  filtro === f.id
+                    ? "bg-blue-500 text-white"
+                    : `${textSecondary} hover:${textPrimary}`
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+          
+          <input
+            type="text"
+            placeholder="Buscar..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className={`flex-1 min-w-32 p-2 rounded-lg border text-sm ${inputBg} ${borderColor}`}
+          />
+        </div>
+
+        {/* Fila 2: Categorías */}
+        {categoriasConProductos.length > 0 ? (
+          <div className="flex gap-1 overflow-x-auto pb-1">
             <button
-              key={f.id}
-              onClick={() => setFiltro(f.id)}
-              className={`py-1 px-3 rounded text-xs font-medium transition-all ${
-                filtro === f.id
+              onClick={() => { setCategoriaActiva("todas"); setSubcategoriaActiva("todas"); }}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap ${
+                categoriaActiva === "todas"
                   ? "bg-blue-500 text-white"
-                  : `${textSecondary} hover:${textPrimary}`
+                  : dark ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-600"
               }`}
             >
-              {f.label}
+              Todas ({conteoPorCategoria.todas})
             </button>
-          ))}
-        </div>
-        
-        <input
-          type="text"
-          placeholder="Buscar por nombre o marca..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className={`flex-1 min-w-32 p-2 rounded-lg border text-sm ${inputBg} ${borderColor}`}
-        />
+            {categoriasConProductos.map(cat => (
+              <button
+                key={cat.id}
+                onClick={() => { setCategoriaActiva(cat.id); setSubcategoriaActiva("todas"); }}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap ${
+                  categoriaActiva === cat.id
+                    ? "text-white"
+                    : dark ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-600"
+                }`}
+                style={categoriaActiva === cat.id ? { backgroundColor: cat.color } : {}}
+              >
+                {cat.nombre} ({conteoPorCategoria[cat.id] || 0})
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className={`text-xs ${textSecondary}`}>
+            No hay categorías disponibles
+          </div>
+        )}
+
+        {/* Fila 3: Subcategorías */}
+        {categoriaActiva !== "todas" && subcategoriasDeCategoria.length > 0 && (
+          <div className="flex gap-1 overflow-x-auto pb-1">
+            <button
+              onClick={() => setSubcategoriaActiva("todas")}
+              className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
+                subcategoriaActiva === "todas"
+                  ? "bg-blue-500 text-white"
+                  : dark ? "bg-gray-600 text-gray-400" : "bg-gray-200 text-gray-500"
+              }`}
+            >
+              Todas ({conteoPorSubcategoria.todas})
+            </button>
+            {subcategoriasDeCategoria.map(sub => (
+              <button
+                key={sub.id}
+                onClick={() => setSubcategoriaActiva(sub.id)}
+                className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
+                  subcategoriaActiva === sub.id
+                    ? "bg-blue-500 text-white"
+                    : dark ? "bg-gray-600 text-gray-400" : "bg-gray-200 text-gray-500"
+                }`}
+              >
+                {sub.nombre} ({conteoPorSubcategoria[sub.id] || 0})
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* toolbar */}
