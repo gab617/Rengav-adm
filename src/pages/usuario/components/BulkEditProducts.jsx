@@ -307,7 +307,7 @@ export function BulkEditProducts() {
   }
 
   return (
-    <div className={`min-h-screen ${bgMain} p-4 pb-24`}>
+    <div className={`min-h-screen ${bgMain} p-2 md:p-4 pb-24`}>
       {notification && (
         <div className={`p-3 rounded-lg text-sm ${
           notification.type === "success" 
@@ -417,58 +417,88 @@ export function BulkEditProducts() {
 
       {/* toolbar */}
       {Object.keys(selectedProducts).length > 0 && (
-        <div className={`p-3 rounded-lg border ${borderColor} ${dark ? "bg-gray-800" : "bg-gray-50"}`}>
-          <div className="flex flex-wrap gap-2 items-end">
+        <div className={`p-2 md:p-3 rounded-lg border ${borderColor} ${dark ? "bg-gray-800" : "bg-gray-50"}`}>
+          <div className="grid grid-cols-1 sm:flex sm:flex-wrap gap-2 md:gap-4 items-end">
+            {/* Precio Venta */}
             <div className="flex-1 min-w-20">
               <label className={`text-xs block mb-1 ${textSecondary}`}>Precio Venta</label>
-              <input
-                type="number"
-                placeholder="$"
-                value={precioBaseVenta || ""}
-                onChange={(e) => setPrecioBaseVenta(e.target.value)}
-                className={`w-full p-2 rounded-lg border text-sm ${inputBg} ${borderColor}`}
-              />
+              <div className="flex gap-1">
+                <input
+                  type="number"
+                  placeholder="$"
+                  value={precioBaseVenta || ""}
+                  onChange={(e) => setPrecioBaseVenta(e.target.value)}
+                  className={`flex-1 p-2 rounded-lg border text-sm ${inputBg} ${borderColor}`}
+                />
+                <button
+                  onClick={() => applyBaseToAll("precio_venta", precioBaseVenta)}
+                  disabled={!precioBaseVenta }
+                  className="px-3 py-2 bg-purple-500 text-white rounded-lg text-xs disabled:opacity-40 sm:hidden"
+                >
+                  ✓
+                </button>
+              </div>
             </div>
             <button
               onClick={() => applyBaseToAll("precio_venta", precioBaseVenta)}
               disabled={!precioBaseVenta }
-              className="px-2 py-2 bg-purple-500 text-white rounded-lg text-xs disabled:opacity-40"
+              className="hidden sm:block px-3 py-2 bg-purple-500 text-white rounded-lg text-xs disabled:opacity-40"
             >
               Aplicar
             </button>
             
+            {/* Precio Compra */}
             <div className="flex-1 min-w-20">
               <label className={`text-xs block mb-1 ${textSecondary}`}>Precio Compra</label>
-              <input
-                type="number"
-                placeholder="$"
-                value={precioBaseCompra || ""}
-                onChange={(e) => setPrecioBaseCompra(e.target.value)}
-                className={`w-full p-2 rounded-lg border text-sm ${inputBg} ${borderColor}`}
-              />
+              <div className="flex gap-1">
+                <input
+                  type="number"
+                  placeholder="$"
+                  value={precioBaseCompra || ""}
+                  onChange={(e) => setPrecioBaseCompra(e.target.value)}
+                  className={`flex-1 p-2 rounded-lg border text-sm ${inputBg} ${borderColor}`}
+                />
+                <button
+                  onClick={() => applyBaseToAll("precio_compra", precioBaseCompra)}
+                  disabled={!precioBaseCompra}
+                  className="px-3 py-2 bg-blue-500 text-white rounded-lg text-xs disabled:opacity-40 sm:hidden"
+                >
+                  ✓
+                </button>
+              </div>
             </div>
             <button
               onClick={() => applyBaseToAll("precio_compra", precioBaseCompra)}
               disabled={!precioBaseCompra}
-              className="px-2 py-2 bg-blue-500 text-white rounded-lg text-xs disabled:opacity-40"
+              className="hidden sm:block px-3 py-2 bg-blue-500 text-white rounded-lg text-xs disabled:opacity-40"
             >
               Aplicar
             </button>
 
+            {/* Stock */}
             <div className="flex-1 min-w-20">
               <label className={`text-xs block mb-1 ${textSecondary}`}>Stock</label>
-              <input
-                type="number"
-                placeholder="0"
-                value={stockBase || ""}
-                onChange={(e) => setStockBase(e.target.value)}
-                className={`w-full p-2 rounded-lg border text-sm ${inputBg} ${borderColor}`}
-              />
+              <div className="flex gap-1">
+                <input
+                  type="number"
+                  placeholder="0"
+                  value={stockBase || ""}
+                  onChange={(e) => setStockBase(e.target.value)}
+                  className={`flex-1 p-2 rounded-lg border text-sm ${inputBg} ${borderColor}`}
+                />
+                <button
+                  onClick={() => applyBaseToAll("stock", stockBase)}
+                  disabled={!stockBase && stockBase !== "0"}
+                  className="px-3 py-2 bg-green-500 text-white rounded-lg text-xs disabled:opacity-40 sm:hidden"
+                >
+                  ✓
+                </button>
+              </div>
             </div>
             <button
               onClick={() => applyBaseToAll("stock", stockBase)}
               disabled={!stockBase && stockBase !== "0"}
-              className="px-2 py-2 bg-green-500 text-white rounded-lg text-xs disabled:opacity-40"
+              className="hidden sm:block px-3 py-2 bg-green-500 text-white rounded-lg text-xs disabled:opacity-40"
             >
               Aplicar
             </button>
@@ -510,36 +540,48 @@ export function BulkEditProducts() {
                   : `${baseCard} hover:border-blue-400`
               }`}
             >
-              <div className="flex items-center gap-2">
+              <div className="flex items-start gap-2">
                 {isSelected && (
-                  <div className="w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
+                  <div className="w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
                     <span className="text-white text-xs">✓</span>
                   </div>
                 )}
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className={`font-medium text-sm truncate ${textPrimary}`}>{prod.name}</p>
+                  {/* Primera línea: nombre + badges */}
+                  <div className="flex flex-wrap items-center gap-1">
+                    <p className={`font-medium text-sm ${textPrimary}`}>{prod.name}</p>
                     {sinStock && (
-                      <span className="px-1.5 py-0.5 rounded text-xs bg-red-500/20 text-red-400" title="Sin stock">
+                      <span className="px-1 py-0.5 rounded text-xs bg-red-500/20 text-red-400" title="Sin stock">
                         📦 0
                       </span>
                     )}
                     {sinPrecio && (
-                      <span className="px-1.5 py-0.5 rounded text-xs bg-yellow-500/20 text-yellow-400" title="Sin precio">
+                      <span className="px-1 py-0.5 rounded text-xs bg-yellow-500/20 text-yellow-400" title="Sin precio">
                         💰 -
                       </span>
                     )}
+                    {prod.type_unit === "weight" && (
+                      <span className="px-1 py-0.5 rounded text-xs bg-green-500/20 text-green-400" title="Por peso">
+                        ⚖️ kg
+                      </span>
+                    )}
                   </div>
-                </div>
-                <div className="flex items-center gap-1">
-                  {prod.brand && (
-                    <span className={`text-xs px-1.5 py-0.5 rounded ${dark ? "bg-blue-500/20 text-blue-400" : "bg-blue-50 text-blue-600"}`}>
-                      {prod.brand}
+                  {/* Segunda línea: marca, categoría y stock */}
+                  <div className="flex flex-wrap items-center gap-1 mt-1">
+                    {prod.brand && (
+                      <span className={`text-xs px-1 py-0.5 rounded ${dark ? "bg-blue-500/20 text-blue-400" : "bg-blue-50 text-blue-600"}`}>
+                        {prod.brand}
+                      </span>
+                    )}
+                    {prod.category && (
+                      <span className={`text-xs px-1 py-0.5 rounded ${dark ? "bg-purple-500/20 text-purple-400" : "bg-purple-50 text-purple-600"}`}>
+                        {prod.category}
+                      </span>
+                    )}
+                    <span className={`text-xs px-1 py-0.5 rounded ${dark ? "bg-green-500/20 text-green-400" : "bg-green-50 text-green-600"}`}>
+                      stock: {prod.stock || 0}
                     </span>
-                  )}
-                  <span className={`text-xs px-1.5 py-0.5 rounded ${dark ? "bg-green-500/20 text-green-400" : "bg-green-50 text-green-600"}`}>
-                    stock: {prod.stock || 0}
-                  </span>
+                  </div>
                 </div>
               </div>
 

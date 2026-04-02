@@ -13,6 +13,7 @@ export function useProductFilters(
   const [filtroCategorias, setFiltroCategorias] = useState([]);
   const [filtroSubcategorias, setFiltroSubcategorias] = useState([]);
   const [soloCustom, setSoloCustom] = useState(false);
+  const [soloPeso, setSoloPeso] = useState(false); // productos por peso
 
   const toggleCategoria = (id) => {
     setFiltroCategorias((prev) =>
@@ -65,13 +66,16 @@ export function useProductFilters(
 
     const cumpleStock = !filtroStock || prod.stock <= Number(filtroStock);
 
+    const cumplePeso = !soloPeso || base.type_unit === "weight";
+
     return (
       cumpleNombre &&
       cumpleId &&
       cumpleMarca &&
       cumpleCategoria &&
       cumpleSubcategoria &&
-      cumpleStock
+      cumpleStock &&
+      cumplePeso
     );
   };
 
@@ -86,6 +90,7 @@ export function useProductFilters(
     filtroStock,
     filtroCategorias,
     filtroSubcategorias,
+    soloPeso,
   ]);
 
   // 🔹 SOLO productos custom
@@ -101,6 +106,7 @@ export function useProductFilters(
     filtroStock,
     filtroCategorias,
     filtroSubcategorias,
+    soloPeso,
   ]);
 
   const marcasDisponibles = useMemo(() => {
@@ -120,6 +126,8 @@ export function useProductFilters(
     setFiltroStock("");
     setFiltroCategorias([]);
     setFiltroSubcategorias([]);
+    setSoloCustom(false);
+    setSoloPeso(false);
   };
 
   return {
@@ -131,12 +139,14 @@ export function useProductFilters(
       filtroCategorias,
       filtroSubcategorias,
       soloCustom,
+      soloPeso,
     },
     setFiltroNombre,
     setFiltroId,
     setFiltroMarca,
     setFiltroStock,
     setSoloCustom,
+    setSoloPeso,
     toggleCategoria,
     toggleSubcategoria,
     productosFiltrados,

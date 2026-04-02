@@ -9,6 +9,7 @@ export function ProductList({ products = [], categories = [], subcategories = []
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedSubcategory, setSelectedSubcategory] = useState("");
   const [selectedBrand, setSelectedBrand] = useState("");
+  const [filtroPeso, setFiltroPeso] = useState(false);
 
   const uniqueBrands = useMemo(() => {
     const brands = {};
@@ -35,6 +36,10 @@ export function ProductList({ products = [], categories = [], subcategories = []
   const filteredProducts = useMemo(() => {
     let filtered = [...products];
 
+    if (filtroPeso) {
+      filtered = filtered.filter((p) => p.type_unit === "weight");
+    }
+
     if (selectedCategory) {
       filtered = filtered.filter((p) => p.categories?.name === selectedCategory);
     }
@@ -58,7 +63,7 @@ export function ProductList({ products = [], categories = [], subcategories = []
     }
 
     return filtered;
-  }, [products, search, selectedCategory, selectedSubcategory, selectedBrand]);
+  }, [products, search, selectedCategory, selectedSubcategory, selectedBrand, filtroPeso]);
 
   const handleSelectCategory = (catName) => {
     setSelectedCategory(catName);
@@ -70,6 +75,7 @@ export function ProductList({ products = [], categories = [], subcategories = []
     setSelectedCategory("");
     setSelectedSubcategory("");
     setSelectedBrand("");
+    setFiltroPeso(false);
   };
 
   const textPrimary = dark ? "text-white" : "text-gray-900";
@@ -79,7 +85,7 @@ export function ProductList({ products = [], categories = [], subcategories = []
   const rowHover = dark ? "hover:bg-gray-700" : "hover:bg-gray-50";
   const borderColor = dark ? "border-gray-700" : "border-gray-200";
 
-  const hasActiveFilters = selectedCategory || selectedSubcategory || selectedBrand || search;
+  const hasActiveFilters = selectedCategory || selectedSubcategory || selectedBrand || search || filtroPeso;
 
   return (
     <div className="space-y-4">
@@ -101,6 +107,21 @@ export function ProductList({ products = [], categories = [], subcategories = []
             ✕
           </button>
         )}
+      </div>
+
+      {/* WEIGHT FILTER */}
+      <div className="flex items-center gap-2">
+        <span className={`text-xs font-medium ${textSecondary}`}>⚖️ TIPO:</span>
+        <button
+          onClick={() => setFiltroPeso(!filtroPeso)}
+          className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+            filtroPeso
+              ? "bg-blue-500 text-white"
+              : dark ? "bg-gray-700 text-gray-300 hover:bg-gray-600" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+          }`}
+        >
+          {filtroPeso ? "Por peso (kg)" : "Todos"}
+        </button>
       </div>
 
       {/* BRAND QUICK FILTER BAR */}
@@ -236,6 +257,11 @@ export function ProductList({ products = [], categories = [], subcategories = []
       {hasActiveFilters && (
         <div className={`p-2 rounded-lg flex items-center justify-between ${dark ? "bg-gray-800" : "bg-gray-100"}`}>
           <div className="flex flex-wrap gap-2">
+            {filtroPeso && (
+              <span className="px-2 py-1 rounded-full text-xs bg-blue-500/20 text-blue-400">
+                ⚖️ Por peso (kg)
+              </span>
+            )}
             {selectedCategory && (
               <span className="px-2 py-1 rounded-full text-xs bg-purple-500/20 text-purple-400">
                 📁 {selectedCategory}
@@ -311,6 +337,11 @@ export function ProductList({ products = [], categories = [], subcategories = []
                         {p.categories?.name && (
                           <span className={`text-xs px-2 py-0.5 rounded-full ${dark ? "bg-purple-500/20 text-purple-400" : "bg-purple-50 text-purple-600"}`}>
                             📁 {p.categories.name}
+                          </span>
+                        )}
+                        {p.type_unit === "weight" && (
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${dark ? "bg-yellow-500/20 text-yellow-400" : "bg-yellow-50 text-yellow-600"}`}>
+                            ⚖️ Por peso (kg)
                           </span>
                         )}
                         {subcat && (

@@ -39,6 +39,7 @@ export function AssignProducts() {
   const [showBrandFilter, setShowBrandFilter] = useState(false);
   const [showCategoryFilter, setShowCategoryFilter] = useState(false);
   const [showSubcategoryFilter, setShowSubcategoryFilter] = useState(false);
+  const [filtroPeso, setFiltroPeso] = useState(false);
   const [userCategories, setUserCategories] = useState([]);
 
   const showNotification = (msg, type = "success") => {
@@ -229,6 +230,13 @@ const ids = new Set();
       );
     }
 
+    // Filtrar por peso
+    if (filtroPeso) {
+      disponibles = disponibles.filter(
+        (p) => p.type_unit === "weight"
+      );
+    }
+
     if (selectedCategory) {
       disponibles = disponibles.filter(
         (p) => p.categories?.name === selectedCategory
@@ -257,7 +265,7 @@ const ids = new Set();
           p.brands?.name?.toLowerCase().includes(lower)
       )
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [products, search, userProducts, selectedBrand, selectedCategory, selectedSubcategory, userCategories]);
+  }, [products, search, userProducts, selectedBrand, selectedCategory, selectedSubcategory, userCategories, filtroPeso]);
 
   const productosAsignadosFiltrados = useMemo(() => {
     let filtrados = [];
@@ -522,7 +530,7 @@ const ids = new Set();
         </div>
       )}
 
-      <div className={`p-3 md:p-4 border-b ${dark ? "bg-gray-900 border-gray-800" : "bg-white border-gray-200"}`}>
+      <div className={`p-2 md:p-4 border-b ${dark ? "bg-gray-900 border-gray-800" : "bg-white border-gray-200"}`}>
         <h1 className={`text-lg md:text-2xl font-bold ${textPrimary}`}>
           ⚡ Asignaciones
         </h1>
@@ -558,7 +566,7 @@ const ids = new Set();
       </div>
 
       <div className="flex flex-col lg:flex-row">
-        <div className={`lg:w-72 w-full p-3 md:p-4 lg:border-r ${dark ? "border-gray-800 bg-gray-900" : "border-gray-200 bg-white"} border-b lg:border-b-0 max-h-48 lg:max-h-none overflow-y-auto`}>
+        <div className={`lg:w-72 w-full p-2 md:p-4 lg:border-r ${dark ? "border-gray-800 bg-gray-900" : "border-gray-200 bg-white"} border-b lg:border-b-0 max-h-48 lg:max-h-none overflow-y-auto`}>
           <h2 className={`font-semibold mb-3 ${textPrimary}`}>👥 Usuarios</h2>
 
           <div className="space-y-2 max-h-32 lg:max-h-96 overflow-y-auto">
@@ -600,7 +608,7 @@ const ids = new Set();
           </div>
         </div>
 
-        <div className="flex-1 p-3 md:p-4 pb-20 lg:pb-4">
+        <div className="flex-1 p-2 md:p-4 pb-20 lg:pb-4">
           {!selectedUser ? (
             <div className={`flex flex-col items-center justify-center h-48 lg:h-64 ${textSecondary}`}>
               <div className="text-4xl md:text-6xl mb-3 md:mb-4">👆</div>
@@ -638,54 +646,99 @@ const ids = new Set();
 
               {activeTab === "asignar" ? (
                 <>
-                  <div className={`rounded-xl p-3 mb-4 ${baseCard} border`}>
-                    <div className="flex flex-wrap gap-2 items-end">
+                  <div className={`rounded-xl p-2 md:p-3 mb-3 md:mb-4 ${baseCard} border`}>
+                    <div className="grid grid-cols-1 sm:flex sm:flex-wrap gap-2 md:gap-4 items-end">
+                      {/* Precio Venta */}
                       <div className="flex-1 min-w-24">
                         <label className={`text-xs block mb-1 ${textSecondary}`}>Precio Venta</label>
-                        <input
-                          type="number"
-                          placeholder="$"
-                          value={precioBaseVenta}
-                          onChange={(e) => setPrecioBaseVenta(e.target.value)}
-                          className={`w-full p-2 rounded-lg border ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
-                        />
+                        <div className="flex gap-1">
+                          <input
+                            type="number"
+                            placeholder="$"
+                            value={precioBaseVenta}
+                            onChange={(e) => setPrecioBaseVenta(e.target.value)}
+                            className={`flex-1 p-2 rounded-lg border ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
+                          />
+                          <button
+                            onClick={() => applyBaseToAll("precio_venta", precioBaseVenta)}
+                            disabled={!precioBaseVenta || Object.keys(selectedProducts).length === 0}
+                            className="px-3 py-2 bg-purple-500 text-white rounded-lg text-xs disabled:opacity-40 hover:bg-purple-600 transition-colors sm:hidden"
+                          >
+                            ✓
+                          </button>
+                        </div>
                       </div>
                       <button
                         onClick={() => applyBaseToAll("precio_venta", precioBaseVenta)}
                         disabled={!precioBaseVenta || Object.keys(selectedProducts).length === 0}
-                        className="px-2 py-2 bg-purple-500 text-white rounded-lg text-xs disabled:opacity-40 hover:bg-purple-600 transition-colors"
+                        className="hidden sm:block px-3 py-2 bg-purple-500 text-white rounded-lg text-xs disabled:opacity-40 hover:bg-purple-600 transition-colors"
                       >
                         Aplicar
                       </button>
                       
+                      {/* Precio Compra */}
                       <div className="flex-1 min-w-24">
                         <label className={`text-xs block mb-1 ${textSecondary}`}>Precio Compra</label>
-                        <input
-                          type="number"
-                          placeholder="$"
-                          value={precioBaseCompra}
-                          onChange={(e) => setPrecioBaseCompra(e.target.value)}
-                          className={`w-full p-2 rounded-lg border ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
-                        />
+                        <div className="flex gap-1">
+                          <input
+                            type="number"
+                            placeholder="$"
+                            value={precioBaseCompra}
+                            onChange={(e) => setPrecioBaseCompra(e.target.value)}
+                            className={`flex-1 p-2 rounded-lg border ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
+                          />
+                          <button
+                            onClick={() => applyBaseToAll("precio_compra", precioBaseCompra)}
+                            disabled={!precioBaseCompra || Object.keys(selectedProducts).length === 0}
+                            className="px-3 py-2 bg-blue-500 text-white rounded-lg text-xs disabled:opacity-40 hover:bg-blue-600 transition-colors sm:hidden"
+                          >
+                            ✓
+                          </button>
+                        </div>
                       </div>
                       <button
                         onClick={() => applyBaseToAll("precio_compra", precioBaseCompra)}
                         disabled={!precioBaseCompra || Object.keys(selectedProducts).length === 0}
-                        className="px-2 py-2 bg-blue-500 text-white rounded-lg text-xs disabled:opacity-40 hover:bg-blue-600 transition-colors"
+                        className="hidden sm:block px-3 py-2 bg-blue-500 text-white rounded-lg text-xs disabled:opacity-40 hover:bg-blue-600 transition-colors"
                       >
                         Aplicar
                       </button>
 
+                      {/* Stock */}
                       <div className="flex-1 min-w-24">
                         <label className={`text-xs block mb-1 ${textSecondary}`}>Stock</label>
-                        <input
-                          type="number"
-                          placeholder="0"
-                          value={stockBase}
-                          onChange={(e) => setStockBase(e.target.value)}
-                          className={`w-full p-2 rounded-lg border ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
-                        />
+                        <div className="flex gap-1">
+                          <input
+                            type="number"
+                            placeholder="0"
+                            value={stockBase}
+                            onChange={(e) => setStockBase(e.target.value)}
+                            className={`flex-1 p-2 rounded-lg border ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
+                          />
+                          <button
+                            onClick={() => applyBaseToAll("stock", stockBase)}
+                            disabled={!stockBase && stockBase !== "0" || Object.keys(selectedProducts).length === 0}
+                            className="px-3 py-2 bg-green-500 text-white rounded-lg text-xs disabled:opacity-40 hover:bg-green-600 transition-colors sm:hidden"
+                          >
+                            ✓
+                          </button>
+                        </div>
                       </div>
+                      <button
+                        onClick={() => applyBaseToAll("stock", stockBase)}
+                        disabled={!stockBase && stockBase !== "0" || Object.keys(selectedProducts).length === 0}
+                        className="hidden sm:block px-3 py-2 bg-green-500 text-white rounded-lg text-xs disabled:opacity-40 hover:bg-green-600 transition-colors"
+                      >
+                        Aplicar
+                      </button>
+
+                      <button
+                        onClick={Object.keys(selectedProducts).length === productosFiltrados.length ? deselectAll : selectAll}
+                        className="px-3 py-2 bg-gray-500 text-white rounded-lg text-sm hover:bg-gray-600 transition-colors"
+                      >
+                        {Object.keys(selectedProducts).length === productosFiltrados.length ? "Limpiar" : "Todos"}
+                      </button>
+                      
                       <button
                         onClick={() => applyBaseToAll("stock", stockBase)}
                         disabled={!stockBase && stockBase !== "0" || Object.keys(selectedProducts).length === 0}
@@ -759,7 +812,15 @@ const ids = new Set();
                           🏷️ {uniqueBrands.find(([id]) => id === selectedBrand)?.[1]} ✕
                         </button>
                       )}
-                      {(selectedCategory || selectedBrand) && (
+                      {filtroPeso && (
+                        <button
+                          onClick={() => setFiltroPeso(false)}
+                          className="px-3 py-1 rounded-full text-xs bg-yellow-500/20 text-yellow-400 flex items-center gap-1 hover:bg-yellow-500/30"
+                        >
+                          ⚖️ Por peso (kg) ✕
+                        </button>
+                      )}
+                      {(selectedCategory || selectedBrand || filtroPeso) && (
                         <button
                           onClick={() => { setSelectedCategory(""); setSelectedBrand(""); }}
                           className={`px-3 py-1 rounded-full text-xs ${dark ? "bg-gray-700 text-gray-400" : "bg-gray-200 text-gray-500"} hover:opacity-70`}
@@ -802,6 +863,16 @@ const ids = new Set();
                         }`}
                       >
                         🏷️ Marcas {selectedBrand && <span className="bg-white/30 px-1.5 rounded text-xs">1</span>}
+                      </button>
+                      <button
+                        onClick={() => { setFiltroPeso(!filtroPeso); }}
+                        className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+                          filtroPeso
+                            ? "bg-yellow-500 text-white"
+                            : `${baseCard} ${textSecondary} hover:${textPrimary}`
+                        }`}
+                      >
+                        ⚖️ {filtroPeso ? "Por peso" : "Peso"}
                       </button>
                     </div>
 
@@ -911,9 +982,9 @@ const ids = new Set();
                         <>
                           <div className="text-5xl mb-4">✓</div>
                           <p>No hay productos disponibles</p>
-                          {(selectedCategory || selectedBrand) && (
+                          {(selectedCategory || selectedBrand || filtroPeso) && (
                             <button
-                              onClick={() => { setSelectedCategory(""); setSelectedBrand(""); }}
+                              onClick={() => { setSelectedCategory(""); setSelectedBrand(""); setFiltroPeso(false); }}
                               className="mt-3 text-blue-500 hover:underline"
                             >
                               Limpiar filtros
@@ -951,38 +1022,45 @@ const ids = new Set();
                                   : `${baseCard} hover:border-blue-400`
                               }`}
                             >
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-start gap-2">
                                 {isSelected && (
-                                  <div className="w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
+                                  <div className="w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
                                     <span className="text-white text-xs">✓</span>
                                   </div>
                                 )}
                                 <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2">
-                                    <p className={`font-medium text-sm truncate ${textPrimary}`}>{prod.name}</p>
+                                  {/* Primera línea: nombre + badges */}
+                                  <div className="flex flex-wrap items-center gap-1">
+                                    <p className={`font-medium text-sm ${textPrimary}`}>{prod.name}</p>
                                     {selectedProducts[prod.id]?.stock === 0 && (
-                                      <span className="px-1.5 py-0.5 rounded text-xs bg-red-500/20 text-red-400" title="Stock en 0">
+                                      <span className="px-1 py-0.5 rounded text-xs bg-red-500/20 text-red-400" title="Stock en 0">
                                         📦 0
                                       </span>
                                     )}
                                     {(!selectedProducts[prod.id]?.precio_venta || selectedProducts[prod.id]?.precio_venta === 0) && (
-                                      <span className="px-1.5 py-0.5 rounded text-xs bg-yellow-500/20 text-yellow-400" title="Sin precio">
+                                      <span className="px-1 py-0.5 rounded text-xs bg-yellow-500/20 text-yellow-400" title="Sin precio">
                                         💰 -
                                       </span>
                                     )}
+                                    {prod.type_unit === "weight" && (
+                                      <span className="px-1 py-0.5 rounded text-xs bg-green-500/20 text-green-400" title="Por peso">
+                                        ⚖️ kg
+                                      </span>
+                                    )}
                                   </div>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                  {prod.brands?.name && (
-                                    <span className={`text-xs px-1.5 py-0.5 rounded ${dark ? "bg-blue-500/20 text-blue-400" : "bg-blue-50 text-blue-600"}`}>
-                                      {prod.brands.name}
-                                    </span>
-                                  )}
-                                  {prod.categories?.name && (
-                                    <span className={`text-xs px-1.5 py-0.5 rounded ${dark ? "bg-purple-500/20 text-purple-400" : "bg-purple-50 text-purple-600"}`}>
-                                      {prod.categories.name}
-                                    </span>
-                                  )}
+                                  {/* Segunda línea: marca y categoría */}
+                                  <div className="flex flex-wrap items-center gap-1 mt-1">
+                                    {prod.brands?.name && (
+                                      <span className={`text-xs px-1 py-0.5 rounded ${dark ? "bg-blue-500/20 text-blue-400" : "bg-blue-50 text-blue-600"}`}>
+                                        {prod.brands.name}
+                                      </span>
+                                    )}
+                                    {prod.categories?.name && (
+                                      <span className={`text-xs px-1 py-0.5 rounded ${dark ? "bg-purple-500/20 text-purple-400" : "bg-purple-50 text-purple-600"}`}>
+                                        {prod.categories.name}
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
 

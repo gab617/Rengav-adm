@@ -32,6 +32,7 @@ export function useAdminProductsBase(onProductCreated) {
     brand_id,
     category_id,
     subcategory_id,
+    type_unit = "unit",
   }) => {
     if (!name || !category_id ) {
       throw new Error("Faltan campos obligatorios");
@@ -47,6 +48,7 @@ export function useAdminProductsBase(onProductCreated) {
           brand_id: brand_id || null,
           category_id,
           subcategory_id,
+          type_unit,
         },
       ])
       .select(`
@@ -55,6 +57,7 @@ export function useAdminProductsBase(onProductCreated) {
         brand_id,
         category_id,
         subcategory_id,
+        type_unit,
         brands ( id, name ),
         categories ( id, name ),
         subcategories ( id, name )

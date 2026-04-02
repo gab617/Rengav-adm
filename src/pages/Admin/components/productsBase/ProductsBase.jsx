@@ -25,7 +25,9 @@ export function ProductsBase() {
   const [subcategoryId, setSubcategoryId] = useState("");
   const [brandId, setBrandId] = useState("");
   const [newBrandName, setNewBrandName] = useState("");
+  const [typeUnit, setTypeUnit] = useState("unit"); // unit o weight
   const [showForm, setShowForm] = useState(false);
+  const [filtroPeso, setFiltroPeso] = useState(false); // filtrar solo peso
 
   // Simple search on change
   const handleNameChange = (value) => {
@@ -79,6 +81,7 @@ export function ProductsBase() {
         category_id: Number(categoryId),
         subcategory_id: subcategoryId ? Number(subcategoryId) : null,
         brand_id: brandId ? Number(brandId) : null,
+        type_unit: typeUnit,
       });
       setName("");
       setSuggestions([]);
@@ -86,6 +89,7 @@ export function ProductsBase() {
       setSubcategoryId("");
       setBrandId("");
       setNewBrandName("");
+      setTypeUnit("unit");
       setShowForm(false);
     } catch (err) {
       alert(err.message);
@@ -122,12 +126,23 @@ export function ProductsBase() {
           <h1 className={`text-xl md:text-2xl font-bold ${textPrimary}`}>
             📦 Productos Base
           </h1>
-          <div className="flex gap-3 mt-1">
+          <div className="flex gap-3 mt-1 flex-wrap items-center">
             <span className={`text-xs ${textSecondary}`}>{stats.total} productos</span>
             <span className={`text-xs ${textSecondary}`}>·</span>
             <span className={`text-xs ${textSecondary}`}>{stats.brands} marcas</span>
             <span className={`text-xs ${textSecondary}`}>·</span>
             <span className={`text-xs ${textSecondary}`}>{stats.categories} categorías</span>
+            <span className={`text-xs ${textSecondary}`}>·</span>
+            <button
+              onClick={() => setFiltroPeso(!filtroPeso)}
+              className={`px-2 py-0.5 rounded-full text-xs font-medium transition-all ${
+                filtroPeso
+                  ? "bg-blue-600 text-white"
+                  : dark ? "bg-gray-700 text-gray-400" : "bg-gray-200 text-gray-600"
+              }`}
+            >
+              ⚖️ {filtroPeso ? "Por peso" : "Todos"}
+            </button>
           </div>
         </div>
         <button
@@ -178,6 +193,35 @@ export function ProductsBase() {
                 ))}
               </div>
             )}
+          </div>
+
+          {/* TIPO DE VENTA */}
+          <div>
+            <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>Tipo de venta</label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setTypeUnit("unit")}
+                className={`flex-1 py-2 px-3 rounded-lg border text-sm transition-all ${
+                  typeUnit === "unit"
+                    ? "bg-blue-500 text-white border-blue-500"
+                    : `${inputBg} border-gray-300 hover:bg-gray-100`
+                }`}
+              >
+                📦 Por unidad
+              </button>
+              <button
+                type="button"
+                onClick={() => setTypeUnit("weight")}
+                className={`flex-1 py-2 px-3 rounded-lg border text-sm transition-all ${
+                  typeUnit === "weight"
+                    ? "bg-blue-500 text-white border-blue-500"
+                    : `${inputBg} border-gray-300 hover:bg-gray-100`
+                }`}
+              >
+                ⚖️ Por peso
+              </button>
+            </div>
           </div>
 
           <select

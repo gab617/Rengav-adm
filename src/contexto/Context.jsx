@@ -9,7 +9,6 @@ import { usePreferences } from "../hooksSB/usePreferencesUser";
 import { useProductFilters } from "../hooksSB/useProductsFilters";
 import { useBrands } from "../hooksSB/useBrands";
 import { useProfile } from "../hooksSB/useProfile";
-import { useAdminUsers } from "../pages/Admin/hooksAdmin/useAdminUsers";
 const AppContext = createContext();
 
 export const AppContextProvider = ({ children }) => {
@@ -97,6 +96,9 @@ export const AppContextProvider = ({ children }) => {
   const profileHook = useProfile()
   /* console.log(unifiedBrands); */
 
+  // Loading general para el app - espera a que profile esté listo
+  const appLoading = profileHook.loadingProfile;
+
   // 🔹 Aplicar el tema global dark/light
   useEffect(() => {
     if (!preferencesUserHook.preferencias) return;
@@ -120,6 +122,7 @@ export const AppContextProvider = ({ children }) => {
         ...brandsHook,
         ...profileHook,
         unifiedBrands,
+        appLoading,
       }}
     >
       {children}

@@ -62,13 +62,82 @@ function UserExpandedDetail({ user, onClose, invalidateUserCategories }) {
   const [dateFilter, setDateFilter] = useState("today");
   const [selectedProducts, setSelectedProducts] = useState(new Set());
   const [deactivating, setDeactivating] = useState(false);
+  const [updatingProducts, setUpdatingProducts] = useState(false);
   const [productFilter, setProductFilter] = useState("all");
+  const [filterCategory, setFilterCategory] = useState("all");
+  const [filterSubcategory, setFilterSubcategory] = useState("all");
+  const [filterTipo, setFilterTipo] = useState("all");
   
-  // Categorías
-  const [allCategorias, setAllCategorias] = useState([]);
+  // Categorías - separadas para tab vs filtros de productos
+  const [systemCategoriesForTab, setSystemCategoriesForTab] = useState([]); // Para tab de categorías (todas)
+  const [filterCategories, setFilterCategories] = useState([]); // Para filtros de productos
   const [userCategorias, setUserCategorias] = useState([]);
   const [loadingCategorias, setLoadingCategorias] = useState(false);
   const [allUsers, setAllUsers] = useState({});
+  const [subcategories, setSubcategories] = useState([]);
+  const [allSubcategoriesCache, setAllSubcategoriesCache] = useState([]); // Cache de todas las subcategorías
+  const [productCategoriesUsed, setProductCategoriesUsed] = useState([]); // Para filtros de productos
+  const [productSubcategoriesUsed, setProductSubcategoriesUsed] = useState([]);
+
+  // Cargar todas las subcategorías una sola vez al montar
+  useEffect(() => {
+    async function loadAllSubcategories() {
+      const { data } = await supabase
+        .from("subcategories")
+        .select("id, name, category_id")
+        .order("name");
+      setAllSubcategoriesCache(data || []);
+    }
+    loadAllSubcategories();
+  }, []);
+
+  // Cargar subcategorías desde cache cuando se selecciona una categoría
+  useEffect(() => {
+    if (filterCategory === "all") {
+      setSubcategories([]);
+      return;
+    }
+    // Filtrar solo las subcategorías que el usuario tiene en sus productos
+    const subsToFilter = productSubcategoriesUsed.length > 0 ? productSubcategoriesUsed : null;
+    let filtered = allSubcategoriesCache.filter(s => String(s.category_id) === String(filterCategory));
+    if (subsToFilter) {
+      filtered = filtered.filter(s => subsToFilter.includes(s.id));
+    }
+    setSubcategories(filtered);
+  }, [filterCategory, productSubcategoriesUsed, allSubcategoriesCache]);
+
+  // Extraer categorías y subcategorías únicas de los productos del usuario (para filtros)
+  useEffect(() => {
+    const cats = new Set();
+    const subs = new Set();
+    products.forEach(p => {
+      if (p.products_base?.category_id) {
+        cats.add(p.products_base.category_id);
+      }
+      if (p.products_base?.subcategory_id) {
+        subs.add(p.products_base.subcategory_id);
+      }
+    });
+    setProductCategoriesUsed(Array.from(cats));
+    setProductSubcategoriesUsed(Array.from(subs));
+  }, [products]);
+
+  // Cargar categorías del sistema filtradas solo por las que usa este usuario (para filtros de productos)
+  useEffect(() => {
+    async function loadUserCategories() {
+      const { data } = await supabase
+        .from("categories")
+        .select("id, name, color")
+        .in("id", productCategoriesUsed.length > 0 ? productCategoriesUsed : ["none"])
+        .order("name");
+      setFilterCategories(data || []);
+    }
+    if (productCategoriesUsed.length > 0) {
+      loadUserCategories();
+    } else {
+      setFilterCategories([]);
+    }
+  }, [productCategoriesUsed]);
 
   const loadUserData = async () => {
     const targetUserId = user?.id;
@@ -87,7 +156,7 @@ function UserExpandedDetail({ user, onClose, invalidateUserCategories }) {
         .from("user_products")
         .select(`
           id, active, precio_compra, precio_venta, stock, user_id, base_id,
-          products_base (id, name, brands(name)),
+          products_base (id, name, brands(name), type_unit, category_id, subcategory_id, categories(name), subcategories(name)),
           user_custom_products (id, name)
         `)
         .eq("user_id", targetUserId),
@@ -112,14 +181,14 @@ function UserExpandedDetail({ user, onClose, invalidateUserCategories }) {
     loadUserData();
   }, [user?.id, profile?.id]);
 
-  // Cargar categorías disponibles y del usuario
+  // Cargar categorías disponibles y del usuario (para el tab de categorías - TODAS)
   const loadCategorias = async () => {
     const [catsRes, userCatsRes] = await Promise.all([
-      supabase.from("categories").select("id, name, color").order("name"),
+      supabase.from("categories").select("id, name, color, subcategories(id, name)").order("name"),
       supabase.from("user_categories").select("category_id").eq("user_id", user?.id)
     ]);
     
-    setAllCategorias(catsRes.data || []);
+    setSystemCategoriesForTab(catsRes.data || []);
     setUserCategorias(userCatsRes.data?.map(uc => uc.category_id) || []);
   };
 
@@ -231,7 +300,13 @@ function UserExpandedDetail({ user, onClose, invalidateUserCategories }) {
       );
       await Promise.all(updates);
 
-      await loadUserData();
+      // Actualizar estado local sin recargar todo
+      setProducts(prev => prev.map(p => 
+        selectedProducts.has(p.id) 
+          ? { ...p, active: false, stock: 0 }
+          : p
+      ));
+      setSelectedProducts(new Set());
     } catch (err) {
       console.error(err);
       alert("Error al desactivar productos");
@@ -241,16 +316,24 @@ function UserExpandedDetail({ user, onClose, invalidateUserCategories }) {
   };
 
   const reactivateProduct = async (productId) => {
+    setUpdatingProducts(true);
     try {
       await supabase
         .from("user_products")
         .update({ active: true })
         .eq("id", productId);
 
-      await loadUserData();
+      // Actualizar estado local sin recargar todo
+      setProducts(prev => prev.map(p => 
+        p.id === productId 
+          ? { ...p, active: true }
+          : p
+      ));
     } catch (err) {
       console.error(err);
       alert("Error al reactivar producto");
+    } finally {
+      setUpdatingProducts(false);
     }
   };
 
@@ -268,17 +351,32 @@ function UserExpandedDetail({ user, onClose, invalidateUserCategories }) {
   };
 
   const filteredProducts = useMemo(() => {
+    let result = products;
+    
     if (productFilter === "active") {
-      return products.filter(p => p.active !== false);
+      result = result.filter(p => p.active !== false);
+    } else if (productFilter === "inactive") {
+      result = result.filter(p => p.active === false);
+    } else if (productFilter === "custom") {
+      result = result.filter(p => p.user_custom_products);
     }
-    if (productFilter === "inactive") {
-      return products.filter(p => p.active === false);
+    
+    if (filterCategory !== "all") {
+      result = result.filter(p => p.products_base && String(p.products_base.category_id) === String(filterCategory));
     }
-    if (productFilter === "custom") {
-      return products.filter(p => p.user_custom_products);
+    
+    if (filterSubcategory !== "all") {
+      result = result.filter(p => p.products_base && String(p.products_base.subcategory_id) === String(filterSubcategory));
     }
-    return products;
-  }, [products, productFilter]);
+    
+    if (filterTipo === "weight") {
+      result = result.filter(p => p.products_base?.type_unit === "weight");
+    } else if (filterTipo === "unit") {
+      result = result.filter(p => p.products_base?.type_unit === "unit");
+    }
+    
+    return result;
+  }, [products, productFilter, filterCategory, filterSubcategory, filterTipo]);
 
   const filterLabels = {
     today: "Hoy",
@@ -300,19 +398,19 @@ function UserExpandedDetail({ user, onClose, invalidateUserCategories }) {
   }
 
   return (
-    <div className={`p-3 md:p-4 rounded-xl ${dark ? "bg-gray-800" : "bg-gray-50"} border ${dark ? "border-blue-700" : "border-blue-300"} pb-20 md:pb-0`}>
+    <div className={`p-2 sm:p-3 md:p-4 rounded-xl ${dark ? "bg-gray-800" : "bg-gray-50"} border ${dark ? "border-blue-700" : "border-blue-300"} pb-20 md:pb-0`}>
       {/* HEADER */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold ${
+      <div className="flex items-center justify-between mb-2 sm:mb-4">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className={`w-10 h-10 sm:w-12 rounded-full flex items-center justify-center text-lg sm:text-xl font-bold ${
             user.role === "admin" ? "bg-red-500/20 text-red-500" : "bg-blue-500/20 text-blue-500"
           }`}>
             {user.name?.charAt(0)?.toUpperCase() || "?"}
           </div>
           <div>
-            <h3 className={`font-bold text-lg ${textPrimary}`}>{user.name}</h3>
-            <div className="flex items-center gap-2">
-              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+            <h3 className={`font-bold text-base sm:text-lg ${textPrimary}`}>{user.name}</h3>
+            <div className="flex items-center gap-1 sm:gap-2">
+              <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-xs font-medium ${
                 user.role === "admin" ? "bg-red-500/20 text-red-400" : "bg-blue-500/20 text-blue-400"
               }`}>
                 {user.role}
@@ -402,7 +500,7 @@ function UserExpandedDetail({ user, onClose, invalidateUserCategories }) {
               <h4 className={`font-semibold mb-2 ${textPrimary}`}>Categorías asignadas ({userCategorias.length})</h4>
               <div className="flex flex-wrap gap-2">
                 {userCategorias.map(catId => {
-                  const cat = allCategorias.find(c => c.id === catId);
+                  const cat = systemCategoriesForTab.find(c => c.id === catId);
                   return cat ? (
                     <span key={catId} className="px-2 py-1 rounded text-xs bg-purple-500/20 text-purple-400">
                       {cat.name}
@@ -437,15 +535,15 @@ function UserExpandedDetail({ user, onClose, invalidateUserCategories }) {
             <div className="flex items-center justify-between mb-3">
               <h4 className={`font-semibold ${textPrimary}`}>Categorías del usuario</h4>
               <span className={`text-xs ${textSecondary}`}>
-                {userCategorias.length} de {allCategorias.length}
+                {userCategorias.length} de {systemCategoriesForTab.length}
               </span>
             </div>
             
-            {allCategorias.length === 0 ? (
+            {systemCategoriesForTab.length === 0 ? (
               <p className={`text-sm ${textSecondary}`}>No hay categorías disponibles</p>
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                {allCategorias.map(cat => {
+                {systemCategoriesForTab.map(cat => {
                   const tieneCat = userCategorias.includes(cat.id);
                   return (
                     <button
@@ -494,7 +592,12 @@ function UserExpandedDetail({ user, onClose, invalidateUserCategories }) {
               ].map(filter => (
                 <button
                   key={filter.id}
-                  onClick={() => setProductFilter(filter.id)}
+                  onClick={() => {
+                    setProductFilter(filter.id);
+                    setFilterCategory("all");
+                    setFilterSubcategory("all");
+                    setFilterTipo("all");
+                  }}
                   className={`py-1 px-3 rounded text-xs font-medium transition-all ${
                     productFilter === filter.id
                       ? filter.id === "custom"
@@ -529,6 +632,69 @@ function UserExpandedDetail({ user, onClose, invalidateUserCategories }) {
                   Ninguno
                 </button>
               </div>
+            )}
+          </div>
+
+          {/* FILTROS DE CATEGORÍA/SUBCATEGORÍA Y TIPO */}
+          <div className="flex flex-wrap gap-1 sm:gap-2 items-center">
+            <select
+              value={filterCategory}
+              onChange={(e) => {
+                setFilterCategory(e.target.value);
+                setFilterSubcategory("all");
+              }}
+              className={`px-1.5 sm:px-2 py-1 rounded text-xs border ${dark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"}`}
+            >
+              <option value="all">📁 Categoría</option>
+              {filterCategories.map(cat => (
+                <option key={cat.id} value={cat.id}>{cat.name}</option>
+              ))}
+            </select>
+
+            {filterCategory !== "all" && (
+              <select
+                value={filterSubcategory}
+                onChange={(e) => setFilterSubcategory(e.target.value)}
+                className={`px-1.5 sm:px-2 py-1 rounded text-xs border ${dark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"}`}
+              >
+                <option value="all">📂 Sub</option>
+                {subcategories.map(sub => (
+                  <option key={sub.id} value={sub.id}>{sub.name}</option>
+                ))}
+              </select>
+            )}
+
+            <div className={`flex gap-1 p-1 rounded-lg ${dark ? "bg-gray-900" : "bg-gray-100"}`}>
+              {[
+                { id: "all", label: "Todos" },
+                { id: "unit", label: "📦 Unitario" },
+                { id: "weight", label: "⚖️ Peso (kg)" },
+              ].map(f => (
+                <button
+                  key={f.id}
+                  onClick={() => setFilterTipo(f.id)}
+                  className={`py-1 px-2 rounded text-xs font-medium transition-all ${
+                    filterTipo === f.id
+                      ? "bg-green-500 text-white"
+                      : `${textSecondary} hover:${textPrimary}`
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+
+            {(filterCategory !== "all" || filterSubcategory !== "all" || filterTipo !== "all") && (
+              <button
+                onClick={() => {
+                  setFilterCategory("all");
+                  setFilterSubcategory("all");
+                  setFilterTipo("all");
+                }}
+                className={`text-xs py-1 px-2 rounded ${dark ? "text-gray-400 hover:text-gray-300" : "text-gray-500 hover:text-gray-700"}`}
+              >
+                ✕ Limpiar
+              </button>
             )}
           </div>
 
@@ -567,11 +733,11 @@ function UserExpandedDetail({ user, onClose, invalidateUserCategories }) {
                     )}
 
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-1 sm:gap-2">
                         <p className={`font-medium truncate ${isInactive ? "line-through opacity-60" : ""} ${textPrimary}`}>
                           {name || "Sin nombre"}
                         </p>
-                        {/* Badge para tipo de producto */}
+                        {/* Badge para tipo de producto (Base/Custom) */}
                         <span className={`px-1.5 py-0.5 rounded text-xs shrink-0 ${
                           isBase
                             ? "bg-blue-500/20 text-blue-400"
@@ -579,6 +745,12 @@ function UserExpandedDetail({ user, onClose, invalidateUserCategories }) {
                         }`}>
                           {isBase ? "Base" : "Custom"}
                         </span>
+                        {/* Badge para tipo de venta (peso/unit) */}
+                        {isBase && p.products_base?.type_unit === "weight" && (
+                          <span className="px-1.5 py-0.5 rounded text-xs shrink-0 bg-green-500/20 text-green-400">
+                            ⚖️ kg
+                          </span>
+                        )}
                         <span className={`px-1.5 py-0.5 rounded text-xs shrink-0 ${
                           isInactive
                             ? "bg-red-500/20 text-red-400"
@@ -871,7 +1043,7 @@ export function Users() {
   }
 
   return (
-    <div className={`p-4 md:p-6 space-y-4 ${dark ? "bg-gray-900" : "bg-gray-50"} min-h-screen pb-20 md:pb-0`}>
+    <div className={`p-1 sm:p-2 md:p-4 space-y-2 sm:space-y-4 ${dark ? "bg-gray-900" : "bg-gray-50"} min-h-screen pb-20 md:pb-0`}>
       {/* HEADER */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <h1 className={`text-lg md:text-2xl font-bold ${textPrimary}`}>

@@ -11,29 +11,17 @@ import { BulkEditProducts } from "./components/BulkEditProducts";
 
 export function Usuario() {
   const { logout, user } = useAuth();
-  const { products, customProducts, preferencias, inactiveProducts, profile } = useAppContext();
+  const { products, customProducts, preferencias, inactiveProducts, profile, appLoading } = useAppContext();
   const navigate = useNavigate();
   const dark = preferencias?.theme === "dark";
-  const isAdmin = profile?.role === "admin";
 
+  // Hooks primero (siempre en mismo orden)
   const [activeTab, setActiveTab] = useState("productos");
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
   const [showAgregarSistema, setShowAgregarSistema] = useState(false);
-  const [esMobile, setEsMobile] = useState(window.innerWidth < 768);
 
-  useEffect(() => {
-    const handleResize = () => setEsMobile(window.innerWidth < 768);
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
-
-  const handleLogout = async () => {
-    await logout();
-    navigate("/");
-  };
-
-  // STATS
+  // useMemo primero (es un hook)
   const stats = useMemo(() => ({
     totalProductos: products.length || customProducts.length,
     productosActivos: products.filter(p => p.active !== false).length,
@@ -41,12 +29,35 @@ export function Usuario() {
     productosInactivos: inactiveProducts.length,
   }), [products, customProducts, inactiveProducts]);
 
+  // useEffect después
+  useEffect(() => {
+    // dummy
+  }, []);
+
+  // Early return DESPUÉS de todos los hooks
+  if (appLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          <p className="text-gray-500">Cargando...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const isAdmin = profile?.role === "admin";
+
+  const handleLogout = async () => {
+    await logout();
+    navigate("/");
+  };
+
   const textPrimary = dark ? "text-white" : "text-gray-900";
   const textSecondary = dark ? "text-gray-400" : "text-gray-500";
   const bgMain = dark ? "bg-gray-900" : "bg-gray-50";
-  const bgCard = dark ? "bg-gray-800" : "bg-white";
+  const bgCard = dark ? "bg-gray-800" : "white";
   const borderColor = dark ? "border-gray-700" : "border-gray-200";
-  const inputBg = dark ? "bg-gray-700 text-white" : "bg-gray-50 text-gray-900";
 
   const tabs = [
     { id: "productos", label: "Productos", icon: "📦", count: stats.productosCustom },
@@ -287,8 +298,7 @@ export function Usuario() {
       {showAgregarSistema && (
         <AgregarProductosSistema
           onClose={() => setShowAgregarSistema(false)}
-          onProductoAgregado={(producto) => {
-            // El hook useProducts ya actualiza el estado automáticamente
+          onProductoAgregado={() => {
             setShowAgregarSistema(false);
           }}
         />

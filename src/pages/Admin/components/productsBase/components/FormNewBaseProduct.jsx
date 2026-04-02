@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { supabase } from "../../../../services/supabaseClient";
 import { useAdminBrands } from "../../../hooksAdmin/useAdminBrands";
 import { useAdminCategories } from "../../../hooksAdmin/useAdminCategories";
 
-export function FormNewBaseProduct() {
+export function FormNewBaseProduct({ onClose }) {
   const { categories } = useAdminCategories();
   const {
     getBrandsByCategory,
@@ -10,9 +11,12 @@ export function FormNewBaseProduct() {
     linkBrandToCategory,
   } = useAdminBrands();
 
+  const [loading, setLoading] = useState(false);
+  const [name, setName] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [brandId, setBrandId] = useState("");
   const [newBrandName, setNewBrandName] = useState("");
+  const [typeUnit, setTypeUnit] = useState("unit"); // unit o weight
 
   const brandsForCategory = getBrandsByCategory(Number(categoryId));
 
@@ -27,8 +31,76 @@ export function FormNewBaseProduct() {
     setNewBrandName("");
   };
 
+  // 🔹 Guardar nuevo producto base
+  const handleSave = async () => {
+    if (!name || !categoryId || !brandId) {
+      alert("Completá todos los campos");
+      return;
+    }
+
+    setLoading(true);
+    const { error } = await supabase.from("products_base").insert({
+      name,
+      category_id: Number(categoryId),
+      brand_id: Number(brandId),
+      type_unit: typeUnit,
+    });
+    setLoading(false);
+
+    if (error) {
+      alert("Error: " + error.message);
+    } else {
+      onClose?.();
+    }
+  };
+
   return (
     <div className="space-y-4">
+      {/* NOMBRE */}
+      <div>
+        <label>Nombre del producto</label>
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Ej: Queso rallado"
+          className="border p-2 w-full"
+        />
+      </div>
+
+      {/* TIPO DE VENTA */}
+      <div>
+        <label>Tipo de venta</label>
+        <div className="flex gap-2 mt-1">
+          <button
+            type="button"
+            onClick={() => setTypeUnit("unit")}
+            className={`flex-1 py-2 px-3 rounded-lg border transition-all ${
+              typeUnit === "unit"
+                ? "bg-blue-500 text-white border-blue-500"
+                : "border-gray-300 hover:bg-gray-50"
+            }`}
+          >
+            📦 Por unidad
+          </button>
+          <button
+            type="button"
+            onClick={() => setTypeUnit("weight")}
+            className={`flex-1 py-2 px-3 rounded-lg border transition-all ${
+              typeUnit === "weight"
+                ? "bg-blue-500 text-white border-blue-500"
+                : "border-gray-300 hover:bg-gray-50"
+            }`}
+          >
+            ⚖️ Por peso (balanza)
+          </button>
+        </div>
+        <p className="text-xs text-gray-500 mt-1">
+          {typeUnit === "weight" 
+            ? "El cliente deberá pesar el producto en el carrito" 
+            : "El cliente compra cantidad entera"}
+        </p>
+      </div>
 
       {/* CATEGORIA */}
       <div>
@@ -88,6 +160,14 @@ export function FormNewBaseProduct() {
         </div>
       )}
 
+      {/* GUARDAR */}
+      <button
+        onClick={handleSave}
+        disabled={loading || !name || !categoryId || !brandId}
+        className="w-full bg-green-600 text-white py-2 rounded-lg font-medium disabled:opacity-50"
+      >
+        {loading ? "Guardando..." : "✓ Guardar producto"}
+      </button>
     </div>
   );
 }

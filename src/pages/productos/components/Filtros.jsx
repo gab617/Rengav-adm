@@ -20,6 +20,8 @@ export function Filtros({
   subcategorias,
   marcas,
   onOpenScanner,
+  soloPeso,
+  setSoloPeso,
 }) {
   const { preferencias } = useAppContext();
   const dark = preferencias?.theme === "dark";
@@ -50,7 +52,7 @@ export function Filtros({
   }, [marcas, marcaSearch]);
 
   const hayFiltrosActivos =
-    filtroNombre || filtroId || filtroMarca || filtroStock || filtroCategorias.length > 0 || soloCustom || filtroSubcategorias.length > 0;
+    filtroNombre || filtroId || filtroMarca || filtroStock || filtroCategorias.length > 0 || soloCustom || filtroSubcategorias.length > 0 || soloPeso;
 
   const resetearTodo = () => {
     setFiltroNombre("");
@@ -58,6 +60,7 @@ export function Filtros({
     setFiltroMarca("");
     setFiltroStock("");
     setSoloCustom(false);
+    setSoloPeso(false);
     setMarcaSearch("");
     filtroCategorias.forEach((cat) => toggleCategoria(cat));
   };
@@ -318,6 +321,18 @@ export function Filtros({
               }`}
           >
             ✨ {soloCustom ? "Personalizados" : "Todos"}
+          </button>
+
+          {/* POR PESO */}
+          <button
+            onClick={() => setSoloPeso(!soloPeso)}
+            className={`px-3 py-2 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-1
+              ${soloPeso
+                ? "bg-blue-600 text-white"
+                : dark ? "border border-gray-600 bg-gray-700 text-gray-300" : "border border-gray-200 bg-gray-50 text-gray-600"
+              }`}
+          >
+            ⚖️ {soloPeso ? "Por peso" : "Todos"}
           </button>
         </div>
 

@@ -21,6 +21,7 @@ export function UlProducts() {
     setFiltroMarca,
     setFiltroStock,
     setSoloCustom,
+    setSoloPeso,
     toggleCategoria,
     toggleSubcategoria,
     productosFiltrados,
@@ -112,6 +113,8 @@ const productosPorCategoria = useMemo(() => {
           categorias={categorias}
           subcategorias={subcategorias}
           marcas={marcasDisponibles}
+          soloPeso={filtros.soloPeso}
+          setSoloPeso={setSoloPeso}
         />
       </div>
 
