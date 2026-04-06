@@ -119,7 +119,7 @@ export function ListProveedores({ proveedores, onShowToast }) {
   const hasWhatsApp = (telefono) => {
     if (!telefono) return false;
     const clean = telefono.replace(/\D/g, "");
-    return clean.length >= 8;
+    return clean.length >= 6;
   };
 
   const getWhatsAppUrl = (telefono) => {

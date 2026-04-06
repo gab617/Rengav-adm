@@ -162,6 +162,7 @@ export const useProveedores = ({ userId }) => {
 
   return {
     proveedores,
+    setProveedores,
     pedidos,
     loading,
     error,

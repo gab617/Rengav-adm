@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useAppContext } from "../../contexto/Context";
-import { supabase } from "../../services/supabaseClient";
 
 function InputField({ name, label, type = "text", required, placeholder, value, onChange, onBlur, error, isValid, dark }) {
   const inputBg = dark
@@ -47,7 +46,7 @@ function InputField({ name, label, type = "text", required, placeholder, value, 
 }
 
 export function FormProveedor({ onSuccess, onError }) {
-  const { profile, preferencias } = useAppContext();
+  const { preferencias, agregarProveedor } = useAppContext();
   const dark = preferencias?.theme === "dark";
 
   const [formData, setFormData] = useState({
@@ -78,7 +77,7 @@ export function FormProveedor({ onSuccess, onError }) {
       case "telefono":
         if (!value.trim()) return "El teléfono es obligatorio";
         const cleanPhone = value.replace(/\D/g, "");
-        if (cleanPhone.length < 8) return "Teléfono inválido";
+        if (cleanPhone.length < 6) return "Teléfono muy corto";
         return "";
       case "email":
         if (!value.trim()) return "El email es obligatorio";
@@ -124,24 +123,18 @@ export function FormProveedor({ onSuccess, onError }) {
       return;
     }
 
-    if (!profile?.id) {
-      onError?.("No se pudo identificar el usuario");
-      return;
-    }
-
     setSubmitting(true);
 
     try {
-      const { error } = await supabase.from("user_providers").insert({
+      const result = await agregarProveedor({
         nombre: formData.nombre.trim(),
         telefono: formData.telefono.trim(),
         email: formData.email.trim().toLowerCase(),
         direccion: formData.direccion.trim() || null,
         descripcion: formData.descripcion.trim() || null,
-        user_id: profile.id,
       });
 
-      if (error) throw error;
+      if (!result.success) throw new Error(result.error);
 
       setFormData({
         nombre: "",
