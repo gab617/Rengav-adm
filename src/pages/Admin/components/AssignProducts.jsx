@@ -55,14 +55,20 @@ export function AssignProducts() {
       }
       
       // Sincronizar con datos del cache
-      setUsers(cachedUsers);
-      setProducts(cachedProducts);
-      setUserProductCounts(cachedCounts);
+      if (cachedUsers.length > 0) {
+        setUsers(cachedUsers);
+      }
+      if (cachedProducts.length > 0) {
+        setProducts(cachedProducts);
+      }
+      if (Object.keys(cachedCounts).length > 0) {
+        setUserProductCounts(cachedCounts);
+      }
       
       setLoading(false);
     }
     load();
-  }, []);
+  }, [isLoaded, cachedUsers, cachedProducts, cachedCounts]);
 
   // Actualizar productos cuando el cache cambie (ej: se agregó un nuevo producto)
   useEffect(() => {
@@ -70,6 +76,13 @@ export function AssignProducts() {
       setProducts(cachedProducts);
     }
   }, [cachedProducts, isLoaded]);
+
+  // Sincronizar users cuando cambian o cuando termina de cargar
+  useEffect(() => {
+    if (isLoaded) {
+      setUsers(cachedUsers);
+    }
+  }, [cachedUsers, isLoaded]);
 
   const loadAssignedProducts = async () => {
     if (!selectedUser) {

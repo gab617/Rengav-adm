@@ -3,7 +3,8 @@ import { supabase } from "../../../services/supabaseClient";
 import { useProfile } from "../../../hooksSB/useProfile";
 import { useAppContext } from "../../../contexto/Context";
 
-export function useAdminUsers(profile, profileLoading) {
+export function useAdminUsers() {
+  const { profile } = useProfile();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -12,11 +13,18 @@ export function useAdminUsers(profile, profileLoading) {
     let mounted = true;
 
     async function loadUsers() {
+      if (!profile?.id || profile.role !== "admin") {
+        setUsers([]);
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
 
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, role, created_at, name")
+        .select("id, role, created_at, name, parent_admin_id")
+        .or(`parent_admin_id.eq.${profile.id},id.eq.${profile.id}`)
         .order("created_at", { ascending: false });
 
       if (!mounted) return;
@@ -31,15 +39,14 @@ export function useAdminUsers(profile, profileLoading) {
       setLoading(false);
     }
 
-    // Solo ejecutamos la query si profile ya cargó y es admin
-    if (!profileLoading && profile?.role === "admin") {
+    if (profile?.role === "admin") {
       loadUsers();
     }
 
     return () => {
       mounted = false;
     };
-  }, [profile, profileLoading]);
+  }, [profile]);
 
   return { users, loading, error };
 }

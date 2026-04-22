@@ -1,7 +1,9 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "../../../services/supabaseClient";
+import { useProfile } from "../../../hooksSB/useProfile";
 
 export function useAdminProductsBase(onProductCreated) {
+  const { profile } = useProfile();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -9,11 +11,24 @@ export function useAdminProductsBase(onProductCreated) {
   async function loadProducts() {
     setLoading(true);
 
-    const { data, error } = await supabase
+    let relatedUsers = [];
+    
+    if (profile?.id && profile.role === "admin") {
+      const { data: relatedData } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("parent_admin_id", profile.id);
+      
+      relatedUsers = relatedData?.map(u => u.id) || [];
+      relatedUsers.push(profile.id);
+    }
+
+    const { data: productsData, error } = await supabase
       .from("products_base")
       .select(`
         id,
         name,
+        type_unit,
         brand_id,
         category_id,
         subcategory_id,
@@ -23,9 +38,34 @@ export function useAdminProductsBase(onProductCreated) {
       `)
       .order("name");
 
-    if (!error) setProducts(data || []);
+    let productsWithUsage = productsData || [];
+    
+    if (relatedUsers.length > 0) {
+      const { data: userProducts } = await supabase
+        .from("user_products")
+        .select("base_id")
+        .in("user_id", relatedUsers);
+      
+      const usedBaseIds = new Set(userProducts?.map(up => up.base_id).filter(id => id !== null) || []);
+      
+      productsWithUsage = (productsData || []).map(p => ({
+        ...p,
+        enUso: usedBaseIds.has(p.id)
+      }));
+    } else {
+      productsWithUsage = (productsData || []).map(p => ({
+        ...p,
+        enUso: false
+      }));
+    }
+
+    if (!error) setProducts(productsWithUsage);
     setLoading(false);
   }
+
+  useEffect(() => {
+    loadProducts();
+  }, [profile]);
 
   const createProductBase = useCallback(async ({
     name,
@@ -54,10 +94,10 @@ export function useAdminProductsBase(onProductCreated) {
       .select(`
         id,
         name,
+        type_unit,
         brand_id,
         category_id,
         subcategory_id,
-        type_unit,
         brands ( id, name ),
         categories ( id, name ),
         subcategories ( id, name )
@@ -68,9 +108,11 @@ export function useAdminProductsBase(onProductCreated) {
 
     if (error) throw error;
 
+    const newProduct = { ...data, enUso: false };
+    
     // Actualización optimista local
     setProducts((prev) =>
-      [...prev, data].sort((a, b) =>
+      [...prev, newProduct].sort((a, b) =>
         a.name.localeCompare(b.name)
       )
     );

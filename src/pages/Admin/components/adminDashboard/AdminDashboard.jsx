@@ -4,7 +4,7 @@ import { supabase } from "../../../../services/supabaseClient";
 import { useAppContext } from "../../../../contexto/Context";
 
 export function AdminDashboard() {
-  const { preferencias } = useAppContext();
+  const { preferencias, profile } = useAppContext();
   const dark = preferencias?.theme === "dark";
 
   const [stats, setStats] = useState({
@@ -19,33 +19,69 @@ export function AdminDashboard() {
   });
 
   useEffect(() => {
+    if (!profile?.id || profile.role !== "admin") return;
+
     async function loadStats() {
       try {
-        const [usersRes, productsRes, categoriesRes, brandsRes] = await Promise.all([
-          supabase.from("profiles").select("id", { count: "exact" }),
-          supabase.from("products_base").select("id", { count: "exact" }),
-          supabase.from("categories").select("id", { count: "exact" }),
-          supabase.from("brands").select("id", { count: "exact" }),
-        ]);
+        const { data: relatedUsers } = await supabase
+          .from("profiles")
+          .select("id")
+          .eq("parent_admin_id", profile.id);
+
+        let userIds = relatedUsers?.map(u => u.id) || [];
+        
+        userIds.push(profile.id);
+
+        console.log("userIds:", userIds);
+
+        const countsPromise = userIds.length > 0
+          ? Promise.all([
+              supabase.from("user_products").select("id", { count: "exact", head: true }).in("user_id", userIds),
+              supabase.from("user_categories").select("category_id").in("user_id", userIds),
+              supabase.from("user_products").select("base_id").in("user_id", userIds).not("base_id", "is", null),
+            ])
+          : Promise.resolve([{ count: 0 }, { data: [] }, { data: [] }]);
+
+        const [{ count: productsCount }, { data: userCategories }, { data: productsWithBase }] = await countsPromise;
+        
+        const uniqueCategories = new Set(userCategories?.map(c => c.category_id).filter(c => c !== null) || []);
+        
+        const baseIds = productsWithBase?.map(p => p.base_id).filter(b => b !== null) || [];
+        let uniqueBrands = 0;
+        
+        if (baseIds.length > 0) {
+          const { data: basesWithBrands } = await supabase
+            .from("products_base")
+            .select("brand_id")
+            .in("id", baseIds);
+          
+          uniqueBrands = new Set(basesWithBrands?.map(b => b.brand_id).filter(b => b !== null) || []).size;
+        }
+
+        console.log("productsCount:", productsCount);
+        console.log("uniqueCategories:", uniqueCategories.size);
+        console.log("uniqueBrands:", uniqueBrands);
 
         const { data: recientesUsers } = await supabase
           .from("profiles")
           .select("id, name, role, created_at")
+          .eq("parent_admin_id", profile.id)
           .order("created_at", { ascending: false })
           .limit(5);
 
-        const { data: recientesProducts } = await supabase
-          .from("products_base")
-          .select("id, name, categories(name)")
-          .limit(5);
+        let usuariosConAdmin = recientesUsers || [];
+        const adminAlreadyInList = usuariosConAdmin.find(u => u.id === profile.id);
+        if (!adminAlreadyInList) {
+          usuariosConAdmin = [{ id: profile.id, name: profile.name || "Mi cuenta", role: profile.role, created_at: profile.created_at }, ...usuariosConAdmin];
+        }
 
         setStats({
-          totalUsers: usersRes.count || 0,
-          totalProductsBase: productsRes.count || 0,
-          totalCategories: categoriesRes.count || 0,
-          totalBrands: brandsRes.count || 0,
-          usuariosRecientes: recientesUsers || [],
-          productosRecientes: recientesProducts || [],
+          totalUsers: userIds.length,
+          totalProductsBase: productsCount || 0,
+          totalCategories: uniqueCategories.size,
+          totalBrands: uniqueBrands,
+          usuariosRecientes: usuariosConAdmin,
+          productosRecientes: [],
           loading: false,
           error: null,
         });
@@ -59,7 +95,7 @@ export function AdminDashboard() {
     }
 
     loadStats();
-  }, []);
+  }, [profile]);
 
   const textPrimary = dark ? "text-white" : "text-gray-900";
   const textSecondary = dark ? "text-gray-400" : "text-gray-500";

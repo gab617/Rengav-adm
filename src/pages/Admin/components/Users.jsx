@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useAppContext } from "../../../contexto/Context";
 import { supabase } from "../../../services/supabaseClient";
 import { useAdminData } from "../../../hooks/useAdminData";
+import { useAdminUsers } from "../hooksAdmin/useAdminUsers"
 
 function useAdminCategories() {
   const { systemCategories, isLoaded, loadInitialData } = useAdminData();
@@ -915,7 +916,7 @@ function UserExpandedDetail({ user, onClose, invalidateUserCategories }) {
 export function Users() {
   const { profile, preferencias } = useAppContext();
   const { addUserOptimistic, userCategoriesMap, systemCategories, invalidateUserCategories, setUserCategoriesMap } = useAdminData();
-  const { users, loading } = useAdminUsers(profile);
+  const { users, loading } = useAdminUsers();
   const { categorias } = useAdminCategories();
   const [expandedUser, setExpandedUser] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
@@ -963,6 +964,7 @@ export function Users() {
             id: authData.user.id,
             name: newUser.name,
             role: newUser.role,
+            parent_admin_id: profile.id,
           });
 
         if (profileError) throw profileError;
@@ -1252,30 +1254,4 @@ export function Users() {
       )}
     </div>
   );
-}
-
-function useAdminUsers(profile) {
-  const { users: cachedUsers } = useAdminData();
-  const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (cachedUsers.length > 0) {
-      setUsers(cachedUsers);
-      setLoading(false);
-    } else if (profile) {
-      async function loadUsers() {
-        setLoading(true);
-        const { data } = await supabase
-          .from("profiles")
-          .select("id, name, role, created_at")
-          .order("created_at", { ascending: false });
-        setUsers(data || []);
-        setLoading(false);
-      }
-      loadUsers();
-    }
-  }, [profile, cachedUsers]);
-
-  return { users, loading };
 }

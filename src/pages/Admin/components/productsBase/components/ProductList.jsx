@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useAppContext } from "../../../../../contexto/Context";
 
 export function ProductList({ products = [], categories = [], subcategories = [] }) {
@@ -6,10 +6,26 @@ export function ProductList({ products = [], categories = [], subcategories = []
   const dark = preferencias?.theme === "dark";
 
   const [search, setSearch] = useState("");
+  const [searchDebounced, setSearchDebounced] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedSubcategory, setSelectedSubcategory] = useState("");
   const [selectedBrand, setSelectedBrand] = useState("");
   const [filtroPeso, setFiltroPeso] = useState(false);
+  const [filtroEnUso, setFiltroEnUso] = useState("todos"); // todos, enUso, sinUsar
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchDebounced(search);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const removeAccents = (str) => {
+    if (!str) return "";
+    return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  };
+
+  const normalizeSearch = removeAccents(searchDebounced.toLowerCase());
 
   const uniqueBrands = useMemo(() => {
     const brands = {};
@@ -40,8 +56,16 @@ export function ProductList({ products = [], categories = [], subcategories = []
       filtered = filtered.filter((p) => p.type_unit === "weight");
     }
 
+    if (filtroEnUso === "enUso") {
+      filtered = filtered.filter((p) => p.enUso === true);
+    } else if (filtroEnUso === "sinUsar") {
+      filtered = filtered.filter((p) => p.enUso !== true);
+    }
+
     if (selectedCategory) {
-      filtered = filtered.filter((p) => p.categories?.name === selectedCategory);
+      filtered = filtered.filter((p) => 
+        removeAccents(p.categories?.name?.toLowerCase()) === removeAccents(selectedCategory.toLowerCase())
+      );
     }
 
     if (selectedSubcategory) {
@@ -53,17 +77,18 @@ export function ProductList({ products = [], categories = [], subcategories = []
     }
 
     if (search) {
-      const lower = search.toLowerCase();
+      const lower = normalizeSearch;
       filtered = filtered.filter(
         (p) =>
-          p.name.toLowerCase().includes(lower) ||
-          p.brands?.name?.toLowerCase().includes(lower) ||
+          removeAccents(p.name.toLowerCase()).includes(lower) ||
+          removeAccents(p.brands?.name?.toLowerCase()).includes(lower) ||
+          removeAccents(p.categories?.name?.toLowerCase()).includes(lower) ||
           p.id?.toString().includes(search)
       );
     }
 
     return filtered;
-  }, [products, search, selectedCategory, selectedSubcategory, selectedBrand, filtroPeso]);
+  }, [products, search, selectedCategory, selectedSubcategory, selectedBrand, filtroPeso, filtroEnUso]);
 
   const handleSelectCategory = (catName) => {
     setSelectedCategory(catName);
@@ -76,6 +101,7 @@ export function ProductList({ products = [], categories = [], subcategories = []
     setSelectedSubcategory("");
     setSelectedBrand("");
     setFiltroPeso(false);
+    setFiltroEnUso("todos");
   };
 
   const textPrimary = dark ? "text-white" : "text-gray-900";
@@ -85,32 +111,34 @@ export function ProductList({ products = [], categories = [], subcategories = []
   const rowHover = dark ? "hover:bg-gray-700" : "hover:bg-gray-50";
   const borderColor = dark ? "border-gray-700" : "border-gray-200";
 
-  const hasActiveFilters = selectedCategory || selectedSubcategory || selectedBrand || search || filtroPeso;
+  const hasActiveFilters = selectedCategory || selectedSubcategory || selectedBrand || search || filtroPeso || filtroEnUso !== "todos";
 
-  return (
-    <div className="space-y-4">
-      {/* SEARCH */}
-      <div className="relative">
-        <input
-          type="text"
-          placeholder="Buscar productos..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className={`w-full px-3 py-2.5 pl-10 rounded-lg border text-sm ${inputBg}`}
-        />
-        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
-        {search && (
-          <button
-            onClick={() => setSearch("")}
-            className={`absolute right-3 top-1/2 -translate-y-1/2 ${textSecondary} hover:text-gray-600`}
-          >
-            ✕
-          </button>
-        )}
-      </div>
+    return (
+      <div className="space-y-4">
+        {/* SEARCH */}
+        <div className="relative">
+          <input
+            type="text"
+            placeholder="Buscar por nombre, marca o categoría..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className={`w-full px-4 py-3 pl-11 rounded-xl border text-sm transition-all focus:ring-2 focus:ring-blue-500/50 ${inputBg}`}
+          />
+          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-lg text-gray-400">🔍</span>
+          {search && (
+            <button
+              onClick={() => setSearch("")}
+              className={`absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full ${dark ? "hover:bg-gray-600" : "hover:bg-gray-200"} text-gray-400 hover:text-gray-600 transition-colors`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
 
       {/* WEIGHT FILTER */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         <span className={`text-xs font-medium ${textSecondary}`}>⚖️ TIPO:</span>
         <button
           onClick={() => setFiltroPeso(!filtroPeso)}
@@ -121,6 +149,38 @@ export function ProductList({ products = [], categories = [], subcategories = []
           }`}
         >
           {filtroPeso ? "Por peso (kg)" : "Todos"}
+        </button>
+        
+        <span className={`text-xs font-medium ${textSecondary} ml-2`}>📦 ESTADO:</span>
+        <button
+          onClick={() => setFiltroEnUso("todos")}
+          className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+            filtroEnUso === "todos"
+              ? "bg-green-500 text-white"
+              : dark ? "bg-gray-700 text-gray-300 hover:bg-gray-600" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+          }`}
+        >
+          Todos
+        </button>
+        <button
+          onClick={() => setFiltroEnUso("enUso")}
+          className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+            filtroEnUso === "enUso"
+              ? "bg-green-500 text-white"
+              : dark ? "bg-gray-700 text-gray-300 hover:bg-gray-600" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+          }`}
+        >
+          ✓ En uso
+        </button>
+        <button
+          onClick={() => setFiltroEnUso("sinUsar")}
+          className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+            filtroEnUso === "sinUsar"
+              ? "bg-green-500 text-white"
+              : dark ? "bg-gray-700 text-gray-300 hover:bg-gray-600" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+          }`}
+        >
+          Sin usar
         </button>
       </div>
 
@@ -262,6 +322,11 @@ export function ProductList({ products = [], categories = [], subcategories = []
                 ⚖️ Por peso (kg)
               </span>
             )}
+            {filtroEnUso !== "todos" && (
+              <span className="px-2 py-1 rounded-full text-xs bg-green-500/20 text-green-400">
+                📦 {filtroEnUso === "enUso" ? "En uso" : "Sin usar"}
+              </span>
+            )}
             {selectedCategory && (
               <span className="px-2 py-1 rounded-full text-xs bg-purple-500/20 text-purple-400">
                 📁 {selectedCategory}
@@ -317,7 +382,7 @@ export function ProductList({ products = [], categories = [], subcategories = []
           </div>
         ) : (
           <div className="divide-y divide-gray-200 dark:divide-gray-700 max-h-[60vh] overflow-y-auto">
-            {filteredProducts.map((p) => {
+              {filteredProducts.map((p) => {
               const subcat = subcategories.find(s => s.id === p.subcategory_id);
               return (
                 <div
@@ -326,6 +391,11 @@ export function ProductList({ products = [], categories = [], subcategories = []
                 >
                   <div className="flex gap-2 md:gap-3 items-start md:items-center mb-2 md:mb-0 min-w-0 flex-1">
                     <span className={`text-xs ${textSecondary} shrink-0 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded`}>#{p.id}</span>
+                    {p.enUso && (
+                      <span className={`text-xs shrink-0 px-1.5 py-0.5 rounded ${dark ? "bg-green-500/30 text-green-400" : "bg-green-100 text-green-700"}`}>
+                        ✓
+                      </span>
+                    )}
                     <div className="min-w-0 flex-1">
                       <p className={`font-medium truncate ${textPrimary}`}>{p.name}</p>
                       <div className="flex flex-wrap gap-1 mt-1.5">
