@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../../../services/supabaseClient";
 import { useProfile } from "../../../hooksSB/useProfile";
-import { useAppContext } from "../../../contexto/Context";
 
 export function useAdminUsers() {
   const { profile } = useProfile();
@@ -13,7 +12,7 @@ export function useAdminUsers() {
     let mounted = true;
 
     async function loadUsers() {
-      if (!profile?.id || profile.role !== "admin") {
+      if (!profile?.id || (profile.role !== "admin" && profile.role !== "super_admin")) {
         setUsers([]);
         setLoading(false);
         return;
@@ -21,10 +20,38 @@ export function useAdminUsers() {
 
       setLoading(true);
 
+      const isSuperAdmin = profile.role === "super_admin";
+
+      // Super admin ve TODOS los usuarios
+      if (isSuperAdmin) {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("id, role, created_at, name, tenant_id, parent_admin_id")
+          .order("created_at", { ascending: false });
+
+        if (!mounted) return;
+
+        if (error) {
+          setError(error.message);
+          setUsers([]);
+        } else {
+          setUsers(data || []);
+        }
+        setLoading(false);
+        return;
+      }
+
+      // Admin normal: solo ve usuarios de su tenant
+      if (!profile.tenant_id) {
+        setUsers([profile]);
+        setLoading(false);
+        return;
+      }
+
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, role, created_at, name, parent_admin_id")
-        .or(`parent_admin_id.eq.${profile.id},id.eq.${profile.id}`)
+        .select("id, role, created_at, name, tenant_id, parent_admin_id")
+        .eq("tenant_id", profile.tenant_id)
         .order("created_at", { ascending: false });
 
       if (!mounted) return;
@@ -39,7 +66,7 @@ export function useAdminUsers() {
       setLoading(false);
     }
 
-    if (profile?.role === "admin") {
+    if (profile?.role === "admin" || profile?.role === "super_admin") {
       loadUsers();
     }
 

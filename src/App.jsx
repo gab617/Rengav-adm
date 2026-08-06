@@ -15,6 +15,7 @@ import { Users } from "./pages/Admin/components/Users";
 import { AssignProducts } from "./pages/Admin/components/AssignProducts";
 import { UserDetail } from "./pages/Admin/components/userDetail/UserDetail";
 import { ProductsBase } from "./pages/Admin/components/productsBase/ProductsBase";
+import { Tenants } from "./pages/Admin/components/Tenants";
 import { InfoApp } from "./pages/infoApp/InfoApp";
 
 const App = () => {
@@ -66,6 +67,7 @@ const App = () => {
           <Route path="/admin/users" element={<Users />} />
           <Route path="/admin/users/:userId" element={<UserDetail />} />
           <Route path="/admin/prods-base" element={<ProductsBase />} />
+          <Route path="/admin/negocios" element={<Tenants />} />
         </Route>
       </Routes>
     </div>

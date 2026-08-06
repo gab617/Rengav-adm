@@ -3,8 +3,9 @@ import { Outlet, Link, useLocation } from "react-router-dom";
 import { useAppContext } from "../../contexto/Context";
 
 export function AdminLayout() {
-  const { preferencias } = useAppContext();
+  const { preferencias, profile } = useAppContext();
   const dark = preferencias?.theme === "dark";
+  const isSuperAdmin = profile?.role === "super_admin";
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -13,6 +14,9 @@ export function AdminLayout() {
     { path: "/admin/prods-base", label: "Productos", icon: "📦" },
     { path: "/admin/users", label: "Usuarios", icon: "👥" },
     { path: "/admin/assign", label: "Asignar", icon: "🔗" },
+    ...(isSuperAdmin
+      ? [{ path: "/admin/negocios", label: "Negocios", icon: "🏪" }]
+      : []),
   ];
 
   const isActive = (path) => {

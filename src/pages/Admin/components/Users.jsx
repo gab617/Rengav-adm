@@ -256,7 +256,7 @@ function UserExpandedDetail({ user, onClose, invalidateUserCategories }) {
   }, [sales, dateFilter]);
 
   const isOwnProfile = profile?.id === user.id;
-  const canViewAll = profile?.role === "admin";
+  const canViewAll = profile?.role === "admin" || profile?.role === "super_admin";
   const viewingAllData = canViewAll && !isOwnProfile;
 
   const toggleProductSelection = (productId) => {
@@ -925,6 +925,28 @@ export function Users() {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState("");
   const [createSuccess, setCreateSuccess] = useState("");
+  const [tenants, setTenants] = useState([]);
+  const [selectedTenantId, setSelectedTenantId] = useState(profile?.tenant_id || "");
+
+  const isSuperAdmin = profile?.role === "super_admin";
+
+  useEffect(() => {
+    if (!isSuperAdmin) return;
+    setSelectedTenantId((prev) => prev || profile?.tenant_id || "");
+    supabase
+      .from("tenants")
+      .select("id, name")
+      .order("id", { ascending: false })
+      .then(({ data, error }) => {
+        if (!error) setTenants(data || []);
+      });
+  }, [isSuperAdmin, profile?.tenant_id]);
+
+  const tenantsMap = useMemo(() => {
+    const map = {};
+    tenants.forEach((t) => { map[t.id] = t.name; });
+    return map;
+  }, [tenants]);
 
   const dark = preferencias?.theme === "dark";
   const textPrimary = dark ? "text-white" : "text-gray-900";
@@ -938,9 +960,6 @@ export function Users() {
     setCreateSuccess("");
     setCreating(true);
 
-    // Guardar la sesión actual del admin antes de crear el usuario
-    const { data: currentSession } = await supabase.auth.getSession();
-
     try {
       if (!newUser.email || !newUser.password || !newUser.name) {
         throw new Error("Todos los campos son requeridos");
@@ -950,74 +969,69 @@ export function Users() {
         throw new Error("La contraseña debe tener al menos 6 caracteres");
       }
 
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: newUser.email,
-        password: newUser.password,
-      });
+      const targetTenantId = isSuperAdmin
+        ? Number(selectedTenantId)
+        : profile.tenant_id;
 
-      if (authError) throw authError;
-
-      if (authData.user) {
-        const { error: profileError } = await supabase
-          .from("profiles")
-          .upsert({
-            id: authData.user.id,
-            name: newUser.name,
-            role: newUser.role,
-            parent_admin_id: profile.id,
-          });
-
-        if (profileError) throw profileError;
-
-        // Insertar categorías seleccionadas
-        if (newUser.categorias && newUser.categorias.length > 0) {
-          const categoriasData = newUser.categorias.map(catId => ({
-            user_id: authData.user.id,
-            category_id: catId,
-            active: true
-          }));
-          
-          const { error: catError } = await supabase
-            .from("user_categories")
-            .insert(categoriasData);
-          
-          if (catError) {
-            console.error("Error inserting categories:", catError);
-          }
-        }
-
-        // Restaurar la sesión del admin
-        if (currentSession?.session) {
-          await supabase.auth.setSession(currentSession.session);
-        }
-
-        // Actualización optimista: agregar usuario y sus categorías
-        const newUserData = {
-          id: authData.user.id,
-          name: newUser.name,
-          role: newUser.role,
-          created_at: new Date().toISOString()
-        };
-        addUserOptimistic(newUserData);
-        
-        // Agregar categorías al cache
-        if (newUser.categorias?.length > 0) {
-          setUserCategoriesMap((prev) => ({
-            ...prev,
-            [authData.user.id]: newUser.categorias
-          }));
-        }
-
-        setNewUser({ name: "", email: "", password: "", role: "user", categorias: [] });
-        setCreateSuccess("¡Negocio creado exitosamente!");
-        setShowAddForm(false);
+      if (!targetTenantId) {
+        throw new Error("Elegí un negocio destino");
       }
+
+      // El RPC crea el auth user + profile + identidad todo server-side.
+      // No usa signUp, asi que la sesion del admin NO se toca nunca.
+      const { data: newUserId, error: profileError } = await supabase.rpc(
+        "admin_create_user",
+        {
+          p_email: newUser.email,
+          p_password: newUser.password,
+          p_name: newUser.name,
+          p_role: newUser.role,
+          p_tenant_id: targetTenantId,
+          p_parent_admin_id: profile.id,
+        }
+      );
+
+      if (profileError) throw profileError;
+
+      // Insertar categorías seleccionadas
+      if (newUser.categorias && newUser.categorias.length > 0) {
+        const categoriasData = newUser.categorias.map(catId => ({
+          user_id: newUserId,
+          category_id: catId,
+          active: true
+        }));
+        
+        const { error: catError } = await supabase
+          .from("user_categories")
+          .insert(categoriasData);
+        
+        if (catError) {
+          console.error("Error inserting categories:", catError);
+        }
+      }
+
+      // Actualización optimista: agregar usuario y sus categorías
+      const newUserData = {
+        id: newUserId,
+        name: newUser.name,
+        role: newUser.role,
+        created_at: new Date().toISOString()
+      };
+      addUserOptimistic(newUserData);
+      
+      // Agregar categorías al cache
+      if (newUser.categorias?.length > 0) {
+        setUserCategoriesMap((prev) => ({
+          ...prev,
+          [newUserId]: newUser.categorias
+        }));
+      }
+
+      setNewUser({ name: "", email: "", password: "", role: "user", categorias: [] });
+      setCreateSuccess("¡Negocio creado exitosamente!");
+      setShowAddForm(false);
     } catch (err) {
       setCreateError(err.message);
-      // Si hay error, restaurar sesión del admin
-      if (currentSession?.session) {
-        await supabase.auth.setSession(currentSession.session);
-      }
     } finally {
       setCreating(false);
     }
@@ -1028,7 +1042,7 @@ export function Users() {
     u.role?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  if (!profile || profile.role !== "admin") {
+  if (!profile || (profile.role !== "admin" && profile.role !== "super_admin")) {
     return (
       <div className="p-6 text-center text-red-500">
         No tienes acceso
@@ -1110,6 +1124,20 @@ export function Users() {
               <option value="user">Negocio</option>
               <option value="admin">Administrador</option>
             </select>
+            {isSuperAdmin && (
+              <select
+                value={selectedTenantId}
+                onChange={(e) => setSelectedTenantId(e.target.value)}
+                className={`w-full px-3 py-2.5 rounded-lg border text-sm ${inputBg}`}
+              >
+                <option value="">Seleccionar negocio...</option>
+                {tenants.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} (ID {t.id})
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           {/* Selector de categorías */}
@@ -1215,6 +1243,11 @@ export function Users() {
                 }`}>
                   {u.role}
                 </span>
+                {isSuperAdmin && tenantsMap[u.tenant_id] && (
+                  <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-500/20 text-gray-400">
+                    {tenantsMap[u.tenant_id]}
+                  </span>
+                )}
                 {userCategoriesMap[u.id]?.length > 0 && (
                   <div className="flex gap-1">
                     {userCategoriesMap[u.id].slice(0, 2).map(catId => {

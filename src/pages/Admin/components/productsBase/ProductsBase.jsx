@@ -15,7 +15,7 @@ export function ProductsBase() {
     await invalidateProductsBase();
   };
 
-  const { products, loading, creating, createProductBase } = useAdminProductsBase(handleProductCreated);
+  const { products, loading, creating, createProductBase, adminCategoryIds, tieneCatalogoDefinido } = useAdminProductsBase(handleProductCreated);
   const { categories, getSubcategoriesByCategory } = useAdminCategories();
   const { getBrandsByCategory, createBrand, linkBrandToCategory } = useAdminBrands();
 
@@ -235,7 +235,9 @@ export function ProductsBase() {
             required
           >
             <option value="">Seleccionar categoría</option>
-            {categories.map((c) => (
+            {categories
+              .filter(c => !tieneCatalogoDefinido || !adminCategoryIds.length || adminCategoryIds.includes(c.id))
+              .map((c) => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
@@ -298,7 +300,7 @@ export function ProductsBase() {
       )}
 
       <div className={`rounded-xl border overflow-hidden ${bgCard}`}>
-        <ProductList products={products} categories={categories} subcategories={subcategorias} />
+        <ProductList products={products} categories={categories} subcategories={subcategorias} adminCategoryIds={adminCategoryIds} tieneCatalogoDefinido={tieneCatalogoDefinido} />
       </div>
     </div>
   );

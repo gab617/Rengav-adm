@@ -23,7 +23,7 @@ export function useProfile() {
 
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, role")
+        .select("id, role, name, tenant_id, parent_admin_id")
         .eq("id", session.user.id)
         .single();
 

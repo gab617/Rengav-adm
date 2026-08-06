@@ -7,20 +7,39 @@ export function useAdminProductsBase(onProductCreated) {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [adminCategoryIds, setAdminCategoryIds] = useState([]);
+  const [tieneCatalogoDefinido, setTieneCatalogoDefinido] = useState(false);
 
   async function loadProducts() {
     setLoading(true);
 
+    let adminCatIds = [];
+
+    if (profile?.id) {
+      const { data: userCats } = await supabase
+        .from("user_categories")
+        .select("category_id")
+        .eq("user_id", profile.id)
+        .eq("active", true);
+
+      adminCatIds = userCats?.map(uc => uc.category_id) || [];
+      setAdminCategoryIds(adminCatIds);
+      setTieneCatalogoDefinido(adminCatIds.length > 0);
+    }
+
     let relatedUsers = [];
     
-    if (profile?.id && profile.role === "admin") {
-      const { data: relatedData } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("parent_admin_id", profile.id);
-      
-      relatedUsers = relatedData?.map(u => u.id) || [];
-      relatedUsers.push(profile.id);
+    if (profile?.id && (profile.role === "admin" || profile.role === "super_admin")) {
+      if (profile.role === "super_admin") {
+        const { data: allUsers } = await supabase.from("profiles").select("id");
+        relatedUsers = allUsers?.map(u => u.id) || [];
+      } else if (profile.tenant_id) {
+        const { data: tenantUsers } = await supabase
+          .from("profiles")
+          .select("id")
+          .eq("tenant_id", profile.tenant_id);
+        relatedUsers = tenantUsers?.map(u => u.id) || [];
+      }
     }
 
     const { data: productsData, error } = await supabase
@@ -38,28 +57,30 @@ export function useAdminProductsBase(onProductCreated) {
       `)
       .order("name");
 
-    let productsWithUsage = productsData || [];
-    
+    let productsWithFlags = productsData || [];
+
     if (relatedUsers.length > 0) {
       const { data: userProducts } = await supabase
         .from("user_products")
         .select("base_id")
         .in("user_id", relatedUsers);
-      
+
       const usedBaseIds = new Set(userProducts?.map(up => up.base_id).filter(id => id !== null) || []);
-      
-      productsWithUsage = (productsData || []).map(p => ({
+
+      productsWithFlags = (productsData || []).map(p => ({
         ...p,
-        enUso: usedBaseIds.has(p.id)
+        enUso: usedBaseIds.has(p.id),
+        enCatalogo: adminCatIds.includes(p.category_id),
       }));
     } else {
-      productsWithUsage = (productsData || []).map(p => ({
+      productsWithFlags = (productsData || []).map(p => ({
         ...p,
-        enUso: false
+        enUso: false,
+        enCatalogo: adminCatIds.includes(p.category_id),
       }));
     }
 
-    if (!error) setProducts(productsWithUsage);
+    if (!error) setProducts(productsWithFlags);
     setLoading(false);
   }
 
@@ -74,7 +95,7 @@ export function useAdminProductsBase(onProductCreated) {
     subcategory_id,
     type_unit = "unit",
   }) => {
-    if (!name || !category_id ) {
+    if (!name || !category_id) {
       throw new Error("Faltan campos obligatorios");
     }
 
@@ -108,20 +129,22 @@ export function useAdminProductsBase(onProductCreated) {
 
     if (error) throw error;
 
-    const newProduct = { ...data, enUso: false };
-    
-    // Actualización optimista local
+    const newProduct = {
+      ...data,
+      enUso: false,
+      enCatalogo: adminCategoryIds.includes(data.category_id),
+    };
+
     setProducts((prev) =>
       [...prev, newProduct].sort((a, b) =>
         a.name.localeCompare(b.name)
       )
     );
-    
-    // Notificar callback si existe
+
     if (onProductCreated) {
       onProductCreated();
     }
-  }, [onProductCreated]);
+  }, [onProductCreated, adminCategoryIds]);
 
   useEffect(() => {
     loadProducts();
@@ -132,5 +155,7 @@ export function useAdminProductsBase(onProductCreated) {
     loading,
     creating,
     createProductBase,
+    adminCategoryIds,
+    tieneCatalogoDefinido,
   };
 }

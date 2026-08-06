@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, useRef } from "react";
 import { supabase } from "../services/supabaseClient";
 import { useProfile } from "../hooksSB/useProfile";
 
@@ -12,39 +12,45 @@ export function AdminDataProvider({ children }) {
   const [productCounts, setProductCounts] = useState({});
   const [userCategoriesMap, setUserCategoriesMap] = useState({});
   const [isLoaded, setIsLoaded] = useState(false);
+  const loadingRef = useRef(false);
 
-  const getRelatedUserIds = useCallback(async () => {
-    if (!profile?.id || profile.role !== "admin") return null;
+  const getTenantUserIds = useCallback(async () => {
+    if (!profile?.id || (profile.role !== "admin" && profile.role !== "super_admin")) return null;
     
+    if (profile.role === "super_admin") {
+      const { data } = await supabase.from("profiles").select("id");
+      return data?.map(u => u.id) || [];
+    }
+
     const { data } = await supabase
       .from("profiles")
       .select("id")
-      .eq("parent_admin_id", profile.id);
+      .eq("tenant_id", profile.tenant_id);
     
-    const relatedIds = data?.map(u => u.id) || [];
-    relatedIds.push(profile.id);
-    return relatedIds;
+    return data?.map(u => u.id) || [];
   }, [profile]);
 
   const loadInitialData = useCallback(async () => {
-    if (isLoaded) return;
+    if (loadingRef.current || !profile?.id) return;
+    loadingRef.current = true;
 
-    const relatedUserIds = await getRelatedUserIds();
+    const userIds = await getTenantUserIds();
+    const isSuperAdmin = profile?.role === "super_admin";
 
     const [usersRes, productsRes, countsRes, catsRes, userCatsRes] = await Promise.all([
-      relatedUserIds 
-        ? supabase.from("profiles").select("id, name, role, created_at, parent_admin_id").in("id", relatedUserIds).order("created_at", { ascending: false })
-        : supabase.from("profiles").select("id, name, role, created_at").order("created_at", { ascending: false }),
+      userIds && userIds.length > 0
+        ? supabase.from("profiles").select("id, name, role, created_at, tenant_id, parent_admin_id").in("id", userIds).order("created_at", { ascending: false })
+        : supabase.from("profiles").select("id, name, role, created_at, tenant_id, parent_admin_id").order("created_at", { ascending: false }),
       supabase
         .from("products_base")
         .select("id, name, brand_id, category_id, subcategory_id, type_unit, brands(name), categories(name), subcategories(name)")
         .order("name"),
-      relatedUserIds
-        ? supabase.from("user_products").select("user_id").in("user_id", relatedUserIds)
+      userIds && userIds.length > 0
+        ? supabase.from("user_products").select("user_id").in("user_id", userIds)
         : supabase.from("user_products").select("user_id"),
       supabase.from("categories").select("id, name").order("name"),
-      relatedUserIds
-        ? supabase.from("user_categories").select("user_id, category_id").in("user_id", relatedUserIds)
+      userIds && userIds.length > 0
+        ? supabase.from("user_categories").select("user_id, category_id").in("user_id", userIds)
         : supabase.from("user_categories").select("user_id, category_id"),
     ]);
 
@@ -52,14 +58,12 @@ export function AdminDataProvider({ children }) {
     setProductsBase(productsRes.data || []);
     setSystemCategories(catsRes.data || []);
 
-    // Agrupar conteos por usuario
     const counts = {};
     countsRes.data?.forEach((up) => {
       counts[up.user_id] = (counts[up.user_id] || 0) + 1;
     });
     setProductCounts(counts);
 
-    // Agrupar categorías por usuario
     const userCats = {};
     userCatsRes.data?.forEach((uc) => {
       if (!userCats[uc.user_id]) userCats[uc.user_id] = [];
@@ -68,36 +72,32 @@ export function AdminDataProvider({ children }) {
     setUserCategoriesMap(userCats);
 
     setIsLoaded(true);
-  }, [isLoaded, getRelatedUserIds]);
+    loadingRef.current = false;
+  }, [isLoaded, getTenantUserIds, profile?.role]);
 
-  // Invalidar cuando cambia el profile
   useEffect(() => {
     setIsLoaded(false);
-  }, [profile?.id]);
+  }, [profile?.id, profile?.tenant_id]);
 
-  // Forzar recarga cuando cambia el admin logueado
   useEffect(() => {
-    if (profile?.id && profile.role === "admin" && isLoaded) {
+    if (profile?.id && (profile.role === "admin" || profile.role === "super_admin")) {
       loadInitialData();
     }
-  }, [profile?.id]);
+  }, [profile?.id, profile?.tenant_id]);
 
-  // Invalidar usuarios (cuando se crea/edita usuario)
   const invalidateUsers = useCallback(async () => {
-    const relatedUserIds = await getRelatedUserIds();
-    const { data } = relatedUserIds
-      ? await supabase.from("profiles").select("id, name, role, created_at, parent_admin_id").in("id", relatedUserIds).order("created_at", { ascending: false })
-      : await supabase.from("profiles").select("id, name, role, created_at").order("created_at", { ascending: false });
+    const userIds = await getTenantUserIds();
+    const { data } = userIds && userIds.length > 0
+      ? await supabase.from("profiles").select("id, name, role, created_at, tenant_id, parent_admin_id").in("id", userIds).order("created_at", { ascending: false })
+      : await supabase.from("profiles").select("id, name, role, created_at, tenant_id, parent_admin_id").order("created_at", { ascending: false });
     setUsers(data || []);
-  }, [getRelatedUserIds]);
+  }, [getTenantUserIds]);
 
-  // Invalidar categorías del sistema (cuando se crea/edita categoría)
   const invalidateCategories = useCallback(async () => {
     const { data } = await supabase.from("categories").select("id, name").order("name");
     setSystemCategories(data || []);
   }, []);
 
-  // Invalidar productos base (cuando se agrega/edita producto)
   const invalidateProductsBase = useCallback(async () => {
     const { data } = await supabase
       .from("products_base")
@@ -106,14 +106,12 @@ export function AdminDataProvider({ children }) {
     setProductsBase(data || []);
   }, []);
 
-  // Invalidar productos de un usuario específico
   const invalidateUserProducts = useCallback(async (userId) => {
     const [countsRes, userProductsRes] = await Promise.all([
       supabase.from("user_products").select("user_id"),
       supabase.from("user_products").select("base_id, precio_venta, active, id").eq("user_id", userId),
     ]);
 
-    // Actualizar conteos
     const counts = {};
     countsRes.data?.forEach((up) => {
       counts[up.user_id] = (counts[up.user_id] || 0) + 1;
@@ -123,17 +121,14 @@ export function AdminDataProvider({ children }) {
     return userProductsRes.data || [];
   }, []);
 
-  // Actualizar conteo de un solo usuario (más eficiente)
   const updateUserCount = useCallback((userId, count) => {
     setProductCounts((prev) => ({ ...prev, [userId]: count }));
   }, []);
 
-  // Agregar usuario directamente (actualización optimista)
   const addUserOptimistic = useCallback((newUser) => {
     setUsers((prev) => [newUser, ...prev]);
   }, []);
 
-  // Invalidar categorías de un usuario específico
   const invalidateUserCategories = useCallback(async (userId) => {
     const { data } = await supabase
       .from("user_categories")
@@ -147,21 +142,14 @@ export function AdminDataProvider({ children }) {
   }, []);
 
   const value = {
-    // Datos
     users,
     productsBase,
     systemCategories,
     productCounts,
     userCategoriesMap,
     isLoaded,
-    
-    // Funciones
     setUserCategoriesMap,
-    
-    // Cargar datos iniciales
     loadInitialData,
-    
-    // Invalidaciones
     invalidateUsers,
     invalidateCategories,
     invalidateProductsBase,

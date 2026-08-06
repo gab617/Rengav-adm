@@ -6,6 +6,7 @@ import { useAppContext } from "../../../../contexto/Context";
 export function AdminDashboard() {
   const { preferencias, profile } = useAppContext();
   const dark = preferencias?.theme === "dark";
+  const isSuperAdmin = profile?.role === "super_admin";
 
   const [stats, setStats] = useState({
     totalUsers: 0,
@@ -19,28 +20,42 @@ export function AdminDashboard() {
   });
 
   useEffect(() => {
-    if (!profile?.id || profile.role !== "admin") return;
+    if (!profile?.id || (profile.role !== "admin" && profile.role !== "super_admin")) return;
 
     async function loadStats() {
       try {
-        const { data: relatedUsers } = await supabase
-          .from("profiles")
-          .select("id")
-          .eq("parent_admin_id", profile.id);
+        let userIds = [];
 
-        let userIds = relatedUsers?.map(u => u.id) || [];
-        
-        userIds.push(profile.id);
+        if (isSuperAdmin) {
+          const { data } = await supabase.from("profiles").select("id");
+          userIds = data?.map(u => u.id) || [];
+        } else if (profile.tenant_id) {
+          const { data } = await supabase
+            .from("profiles")
+            .select("id")
+            .eq("tenant_id", profile.tenant_id);
+          userIds = data?.map(u => u.id) || [];
+        }
 
-        console.log("userIds:", userIds);
+        if (userIds.length === 0) {
+          setStats({
+            totalUsers: 0,
+            totalProductsBase: 0,
+            totalCategories: 0,
+            totalBrands: 0,
+            usuariosRecientes: [],
+            productosRecientes: [],
+            loading: false,
+            error: null,
+          });
+          return;
+        }
 
-        const countsPromise = userIds.length > 0
-          ? Promise.all([
-              supabase.from("user_products").select("id", { count: "exact", head: true }).in("user_id", userIds),
-              supabase.from("user_categories").select("category_id").in("user_id", userIds),
-              supabase.from("user_products").select("base_id").in("user_id", userIds).not("base_id", "is", null),
-            ])
-          : Promise.resolve([{ count: 0 }, { data: [] }, { data: [] }]);
+        const countsPromise = Promise.all([
+          supabase.from("user_products").select("id", { count: "exact", head: true }).in("user_id", userIds),
+          supabase.from("user_categories").select("category_id").in("user_id", userIds),
+          supabase.from("user_products").select("base_id").in("user_id", userIds).not("base_id", "is", null),
+        ]);
 
         const [{ count: productsCount }, { data: userCategories }, { data: productsWithBase }] = await countsPromise;
         
@@ -58,21 +73,21 @@ export function AdminDashboard() {
           uniqueBrands = new Set(basesWithBrands?.map(b => b.brand_id).filter(b => b !== null) || []).size;
         }
 
-        console.log("productsCount:", productsCount);
-        console.log("uniqueCategories:", uniqueCategories.size);
-        console.log("uniqueBrands:", uniqueBrands);
+        let queryRecientes;
+        if (isSuperAdmin) {
+          queryRecientes = supabase.from("profiles").select("id, name, role, created_at").order("created_at", { ascending: false }).limit(5);
+        } else {
+          queryRecientes = supabase.from("profiles").select("id, name, role, created_at").eq("tenant_id", profile.tenant_id).order("created_at", { ascending: false }).limit(5);
+        }
 
-        const { data: recientesUsers } = await supabase
-          .from("profiles")
-          .select("id, name, role, created_at")
-          .eq("parent_admin_id", profile.id)
-          .order("created_at", { ascending: false })
-          .limit(5);
-
-        let usuariosConAdmin = recientesUsers || [];
-        const adminAlreadyInList = usuariosConAdmin.find(u => u.id === profile.id);
-        if (!adminAlreadyInList) {
-          usuariosConAdmin = [{ id: profile.id, name: profile.name || "Mi cuenta", role: profile.role, created_at: profile.created_at }, ...usuariosConAdmin];
+        let recientesUsers = [];
+        if (isSuperAdmin) {
+          const { data } = await queryRecientes;
+          recientesUsers = data || [];
+        } else {
+          const { data } = await queryRecientes;
+          const adminInList = data?.find(u => u.id === profile.id);
+          recientesUsers = adminInList ? data : [{ id: profile.id, name: profile.name || "Mi cuenta", role: profile.role, created_at: profile.created_at }, ...(data || [])];
         }
 
         setStats({
@@ -80,7 +95,7 @@ export function AdminDashboard() {
           totalProductsBase: productsCount || 0,
           totalCategories: uniqueCategories.size,
           totalBrands: uniqueBrands,
-          usuariosRecientes: usuariosConAdmin,
+          usuariosRecientes: recientesUsers.slice(0, 5),
           productosRecientes: [],
           loading: false,
           error: null,
@@ -95,7 +110,7 @@ export function AdminDashboard() {
     }
 
     loadStats();
-  }, [profile]);
+  }, [profile, isSuperAdmin]);
 
   const textPrimary = dark ? "text-white" : "text-gray-900";
   const textSecondary = dark ? "text-gray-400" : "text-gray-500";

@@ -1,35 +1,47 @@
 import { useMemo, useState, useEffect } from "react";
 import { useAppContext } from "../../../../../contexto/Context";
 
-export function ProductList({ products = [], categories = [], subcategories = [] }) {
-  const { preferencias } = useAppContext();
+export function ProductList({ products = [], categories = [], subcategories = [], adminCategoryIds = [], tieneCatalogoDefinido = false }) {
+  const { preferencias, profile } = useAppContext();
   const dark = preferencias?.theme === "dark";
 
   const [search, setSearch] = useState("");
-  const [searchDebounced, setSearchDebounced] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedSubcategory, setSelectedSubcategory] = useState("");
   const [selectedBrand, setSelectedBrand] = useState("");
   const [filtroPeso, setFiltroPeso] = useState(false);
-  const [filtroEnUso, setFiltroEnUso] = useState("todos"); // todos, enUso, sinUsar
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setSearchDebounced(search);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [search]);
+  const [filtroEnUso, setFiltroEnUso] = useState("todos");
+  const [vistaCatalogo, setVistaCatalogo] = useState(tieneCatalogoDefinido ? "catalogo" : "completo");
+  const [brandSortBy, setBrandSortBy] = useState("count-desc");
 
   const removeAccents = (str) => {
     if (!str) return "";
     return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   };
 
-  const normalizeSearch = removeAccents(searchDebounced.toLowerCase());
+  const normalizeSearch = removeAccents(search.toLowerCase());
+
+  const baseProducts = useMemo(() => {
+    if (vistaCatalogo === "catalogo") {
+      return products.filter((p) => p.enCatalogo === true);
+    }
+    return products;
+  }, [products, vistaCatalogo]);
+
+  const productsForBrandsCount = selectedCategory
+    ? baseProducts.filter((p) =>
+        removeAccents(p.categories?.name?.toLowerCase()) === removeAccents(selectedCategory.toLowerCase())
+      ).length
+    : baseProducts.length;
 
   const uniqueBrands = useMemo(() => {
+    const productsForBrands = selectedCategory
+      ? baseProducts.filter((p) => 
+          removeAccents(p.categories?.name?.toLowerCase()) === removeAccents(selectedCategory.toLowerCase()))
+      : baseProducts;
+
     const brands = {};
-    products.forEach((p) => {
+    productsForBrands.forEach((p) => {
       if (p.brands?.id && p.brands?.name) {
         if (!brands[p.brands.id]) {
           brands[p.brands.id] = { name: p.brands.name, count: 0 };
@@ -39,18 +51,35 @@ export function ProductList({ products = [], categories = [], subcategories = []
     });
     return Object.entries(brands)
       .map(([id, data]) => ({ id: parseInt(id), ...data }))
-      .sort((a, b) => b.count - a.count);
-  }, [products]);
+      .filter(b => b.count > 0)
+      .sort((a, b) => {
+        if (brandSortBy === "name-asc") return a.name.localeCompare(b.name);
+        if (brandSortBy === "name-desc") return b.name.localeCompare(a.name);
+        if (brandSortBy === "count-asc") return a.count - b.count;
+        return b.count - a.count;
+      });
+  }, [baseProducts, selectedCategory, brandSortBy]);
 
   const subcategoriesForCategory = useMemo(() => {
     if (!selectedCategory) return [];
     const cat = categories.find(c => c.name === selectedCategory);
     if (!cat) return [];
-    return subcategories.filter(s => s.category_id === cat.id || s.id_categoria === cat.id);
-  }, [selectedCategory, categories, subcategories]);
+    const subcatMap = {};
+    baseProducts.forEach(p => {
+      if (p.category_id === cat.id && p.subcategories?.id) {
+        const s = p.subcategories;
+        subcatMap[s.id] = { id: s.id, nombre: s.name, name: s.name, category_id: cat.id };
+      }
+    });
+    return Object.values(subcatMap);
+  }, [selectedCategory, categories, baseProducts]);
 
   const filteredProducts = useMemo(() => {
     let filtered = [...products];
+
+    if (vistaCatalogo === "catalogo") {
+      filtered = filtered.filter((p) => p.enCatalogo === true);
+    }
 
     if (filtroPeso) {
       filtered = filtered.filter((p) => p.type_unit === "weight");
@@ -66,10 +95,6 @@ export function ProductList({ products = [], categories = [], subcategories = []
       filtered = filtered.filter((p) => 
         removeAccents(p.categories?.name?.toLowerCase()) === removeAccents(selectedCategory.toLowerCase())
       );
-    }
-
-    if (selectedSubcategory) {
-      filtered = filtered.filter((p) => p.subcategory_id === parseInt(selectedSubcategory));
     }
 
     if (selectedBrand) {
@@ -88,7 +113,12 @@ export function ProductList({ products = [], categories = [], subcategories = []
     }
 
     return filtered;
-  }, [products, search, selectedCategory, selectedSubcategory, selectedBrand, filtroPeso, filtroEnUso]);
+  }, [products, search, selectedCategory, selectedBrand, filtroPeso, filtroEnUso, vistaCatalogo]);
+
+  const productsWithSubcatFilter = useMemo(() => {
+    if (!selectedSubcategory) return filteredProducts;
+    return filteredProducts.filter((p) => p.subcategory_id === parseInt(selectedSubcategory));
+  }, [filteredProducts, selectedSubcategory]);
 
   const handleSelectCategory = (catName) => {
     setSelectedCategory(catName);
@@ -111,10 +141,36 @@ export function ProductList({ products = [], categories = [], subcategories = []
   const rowHover = dark ? "hover:bg-gray-700" : "hover:bg-gray-50";
   const borderColor = dark ? "border-gray-700" : "border-gray-200";
 
-  const hasActiveFilters = selectedCategory || selectedSubcategory || selectedBrand || search || filtroPeso || filtroEnUso !== "todos";
+  const hasActiveFilters = selectedCategory || selectedSubcategory || selectedBrand || search || filtroPeso || filtroEnUso !== "todos" || vistaCatalogo === "catalogo";
 
     return (
       <div className="space-y-4">
+        {/* TABS: Mi catálogo / Completo */}
+        {tieneCatalogoDefinido && (
+          <div className={`flex gap-1 p-1 rounded-xl ${dark ? "bg-gray-800" : "bg-gray-100"}`}>
+            <button
+              onClick={() => setVistaCatalogo("catalogo")}
+              className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
+                vistaCatalogo === "catalogo"
+                  ? "bg-blue-500 text-white shadow"
+                  : `${textSecondary} hover:${textPrimary}`
+              }`}
+            >
+              📋 Mi catálogo ({products.filter(p => p.enCatalogo).length})
+            </button>
+            <button
+              onClick={() => setVistaCatalogo("completo")}
+              className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
+                vistaCatalogo === "completo"
+                  ? "bg-blue-500 text-white shadow"
+                  : `${textSecondary} hover:${textPrimary}`
+              }`}
+            >
+              🌐 Catálogo completo ({products.length})
+            </button>
+          </div>
+        )}
+
         {/* SEARCH */}
         <div className="relative">
           <input
@@ -189,6 +245,21 @@ export function ProductList({ products = [], categories = [], subcategories = []
         <div className="space-y-2">
           <div className={`flex items-center justify-between ${textSecondary}`}>
             <span className="text-xs font-medium">🏷️ FILTRAR POR MARCA</span>
+            <div className="flex gap-1">
+              {[["count-desc", "▼"], ["count-asc", "▲"], ["name-asc", "A-Z"], ["name-desc", "Z-A"]].map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => setBrandSortBy(key)}
+                  className={`text-[10px] px-1.5 py-0.5 rounded transition-all ${
+                    brandSortBy === key
+                      ? "bg-blue-500 text-white"
+                      : dark ? "hover:bg-gray-700" : "hover:bg-gray-200"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             {selectedBrand && (
               <button onClick={() => setSelectedBrand("")} className="text-xs text-blue-500 hover:underline">
                 Limpiar marca
@@ -204,7 +275,7 @@ export function ProductList({ products = [], categories = [], subcategories = []
                   : dark ? "bg-gray-700 text-gray-300 hover:bg-gray-600" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
               }`}
             >
-              Todas ({products.length})
+              Todas ({productsForBrandsCount})
             </button>
             {uniqueBrands.map((brand) => (
               <button
@@ -247,8 +318,13 @@ export function ProductList({ products = [], categories = [], subcategories = []
             >
               Todas
             </button>
-            {categories.map((cat) => {
-              const count = products.filter((p) => p.categories?.name === cat.name).length;
+            {categories
+              .map((cat) => {
+                const count = baseProducts.filter((p) => p.categories?.name === cat.name).length;
+                return { ...cat, count };
+              })
+              .filter(cat => cat.count > 0)
+              .map((cat) => {
               return (
                 <button
                   key={cat.id}
@@ -261,7 +337,7 @@ export function ProductList({ products = [], categories = [], subcategories = []
                         : "bg-purple-50 text-purple-600 hover:bg-purple-100"
                   }`}
                 >
-                  {cat.name} ({count})
+                  {cat.name} ({cat.count})
                 </button>
               );
             })}
@@ -291,8 +367,10 @@ export function ProductList({ products = [], categories = [], subcategories = []
             >
               Todas
             </button>
-            {subcategoriesForCategory.map((sub) => {
-              const count = filteredProducts.filter((p) => p.subcategory_id === sub.id).length;
+            {subcategoriesForCategory
+              .map((sub) => ({ ...sub, count: filteredProducts.filter((p) => p.subcategory_id === sub.id).length }))
+              .filter(sub => sub.count > 0)
+              .map((sub) => {
               return (
                 <button
                   key={sub.id}
@@ -305,7 +383,7 @@ export function ProductList({ products = [], categories = [], subcategories = []
                         : "bg-green-50 text-green-600 hover:bg-green-100"
                   }`}
                 >
-                  {sub.nombre || sub.name} ({count})
+                  {sub.nombre || sub.name} ({sub.count})
                 </button>
               );
             })}
@@ -317,6 +395,11 @@ export function ProductList({ products = [], categories = [], subcategories = []
       {hasActiveFilters && (
         <div className={`p-2 rounded-lg flex items-center justify-between ${dark ? "bg-gray-800" : "bg-gray-100"}`}>
           <div className="flex flex-wrap gap-2">
+            {vistaCatalogo === "catalogo" && (
+              <span className="px-2 py-1 rounded-full text-xs bg-blue-500/20 text-blue-400">
+                📋 Mi catálogo
+              </span>
+            )}
             {filtroPeso && (
               <span className="px-2 py-1 rounded-full text-xs bg-blue-500/20 text-blue-400">
                 ⚖️ Por peso (kg)
@@ -355,8 +438,13 @@ export function ProductList({ products = [], categories = [], subcategories = []
       {/* RESULTS COUNT */}
       <div className="flex items-center justify-between">
         <span className={`text-sm ${textSecondary}`}>
-          {filteredProducts.length} productos
-          {hasActiveFilters && <span className="ml-1 text-xs">(de {products.length})</span>}
+          {productsWithSubcatFilter.length} productos
+          {vistaCatalogo === "completo" && tieneCatalogoDefinido && (
+            <span className="ml-1 text-xs">
+              ({products.filter(p => p.enCatalogo).length} en catálogo)
+            </span>
+          )}
+          {hasActiveFilters && <span className="ml-1 text-xs">(de {vistaCatalogo === "catalogo" ? products.filter(p => p.enCatalogo).length : products.length})</span>}
         </span>
         {hasActiveFilters && (
           <button
@@ -370,7 +458,7 @@ export function ProductList({ products = [], categories = [], subcategories = []
 
       {/* PRODUCTS LIST */}
       <div className={`rounded-xl border overflow-hidden ${borderColor}`}>
-        {filteredProducts.length === 0 ? (
+        {productsWithSubcatFilter.length === 0 ? (
           <div className={`p-6 text-center ${textSecondary}`}>
             <div className="text-4xl mb-2">🔍</div>
             <p>No se encontraron productos</p>
@@ -382,18 +470,23 @@ export function ProductList({ products = [], categories = [], subcategories = []
           </div>
         ) : (
           <div className="divide-y divide-gray-200 dark:divide-gray-700 max-h-[60vh] overflow-y-auto">
-              {filteredProducts.map((p) => {
-              const subcat = subcategories.find(s => s.id === p.subcategory_id);
+              {productsWithSubcatFilter.map((p) => {
+              const subcat = p.subcategories;
               return (
                 <div
                   key={p.id}
                   className={`flex flex-col md:flex-row md:justify-between md:items-center px-3 md:px-4 py-3 text-sm ${rowHover}`}
                 >
-                  <div className="flex gap-2 md:gap-3 items-start md:items-center mb-2 md:mb-0 min-w-0 flex-1">
+                    <div className="flex gap-2 md:gap-3 items-start md:items-center mb-2 md:mb-0 min-w-0 flex-1">
                     <span className={`text-xs ${textSecondary} shrink-0 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded`}>#{p.id}</span>
                     {p.enUso && (
                       <span className={`text-xs shrink-0 px-1.5 py-0.5 rounded ${dark ? "bg-green-500/30 text-green-400" : "bg-green-100 text-green-700"}`}>
                         ✓
+                      </span>
+                    )}
+                    {!p.enCatalogo && vistaCatalogo === "completo" && (
+                      <span className={`text-xs shrink-0 px-1.5 py-0.5 rounded ${dark ? "bg-yellow-500/30 text-yellow-400" : "bg-yellow-100 text-yellow-700"}`}>
+                        ⚠️
                       </span>
                     )}
                     <div className="min-w-0 flex-1">
