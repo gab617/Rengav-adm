@@ -3,7 +3,9 @@ import { useAppContext } from "../../../contexto/Context";
 import { EditProduct } from "./EditProduct";
 import { DeleteProduct } from "./DeleteProduct";
 import { Balanza } from "./liProductComponents/Balanza";
+import { ProductModal } from "./ProductModal";
 import { toast } from "react-toastify";
+import { supabase } from "../../../services/supabaseClient";
 
 function capitalizarMayus(texto) {
   if (!texto) return "";
@@ -19,16 +21,20 @@ export function LiProduct({
   const {
     actualizarProducto,
     eliminarProducto,
+    eliminarProductoCarrito,
     agregarProductoCarrito,
     preferencias,
     carrito,
     actualizarStockEnCarrito,
+    profile,
   } = useAppContext();
 
   const dark = preferencias?.theme === "dark";
+  const esAdmin = profile?.role === "admin" || profile?.role === "super_admin";
 
   const [isEditing, setIsEditing] = useState(false);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
+  const [showProductModal, setShowProductModal] = useState(false);
   const [editedProduct, setEditedProduct] = useState({
     ...prod,
     nombre:
@@ -44,13 +50,14 @@ export function LiProduct({
     });
     setIsEditing(false);
     setShowConfirmDelete(false);
+    setShowProductModal(false);
   }, [prod.id]);
 
   const esPeso = prod.products_base?.type_unit === "weight";
   const enCarrito = carrito.some((item) => item.id === prod.id);
   const cantidadEnCarrito = carrito
     .filter((item) => item.id === prod.id)
-    .reduce((acc, item) => acc + (esPeso ? Number(item.cantidad) : 1), 0);
+    .reduce((acc, item) => acc + Number(item.cantidad), 0);
 
   const precioVenta = parseFloat(prod.precio_venta) || 0;
   const precioCompra = parseFloat(prod.precio_compra) || 0;
@@ -134,6 +141,13 @@ export function LiProduct({
 
   const sinStock = prod.stock <= 0;
 
+  const imagenPrincipal = prod.imagenes?.[0] || prod.products_base?.image_url || null;
+  const publicUrl = (path) => {
+    if (!path) return null;
+    if (path.startsWith("http")) return path;
+    return supabase.storage.from("product-images").getPublicUrl(path).data.publicUrl;
+  };
+
   const borderClass = sinStock
     ? "border-red-500"
     : enCarrito
@@ -203,10 +217,26 @@ export function LiProduct({
                 <div className={`w-2 h-2 rounded-full ${dark ? "bg-yellow-500" : "bg-yellow-400"} animate-pulse`} />
               </div>
             )}
-            <div
-              className="hidden md:block w-6 h-6 rounded-md shrink-0"
-              style={{ backgroundColor: color }}
-            ></div>
+            {imagenPrincipal ? (
+              <div
+                className="flex w-10 h-10 rounded-md shrink-0 items-center justify-center overflow-hidden transition-all duration-200 cursor-pointer md:group-hover:scale-110 md:group-hover:shadow-lg"
+                style={{ backgroundColor: color }}
+                onClick={() => setShowProductModal(true)}
+                title="Ver detalle"
+              >
+                <img
+                  src={publicUrl(imagenPrincipal)}
+                  alt=""
+                  onError={(e) => { e.currentTarget.style.display = "none"; }}
+                  className="w-full h-full object-contain"
+                />
+              </div>
+            ) : (
+              <div
+                className="block w-6 h-6 rounded-md shrink-0"
+                style={{ backgroundColor: color }}
+              ></div>
+            )}
 
             <div className="flex flex-col sm:flex-row sm:items-center w-full truncate">
               <div className="flex gap-1 items-center">
@@ -305,6 +335,18 @@ export function LiProduct({
             </div>
 
             <div className="flex gap-1">
+              {enCarrito && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    eliminarProductoCarrito(prod.id);
+                  }}
+                  title="Quitar del carrito"
+                  className="px-2 py-1 md:px-2 md:py-1 text-base md:text-lg rounded bg-red-500 hover:bg-red-600 text-white transition-colors"
+                >
+                  ✕
+                </button>
+              )}
               <button
                 className={`
                 px-2 py-1 md:px-[.3em] md:p-[.2em]
@@ -327,28 +369,47 @@ export function LiProduct({
                 {sinPrecios ? "⚠️" : enCarrito ? "➕" : "🛒"}
               </button>
 
-              <button
-                className="px-2 py-1 md:px-2 md:py-1 text-base md:text-lg bg-blue-500 hover:bg-blue-400 text-white rounded-lg transition-colors"
-                onClick={() => setIsEditing(!isEditing)}
-                title="Editar producto"
-              >
-                ✏️
-              </button>
+              {esAdmin && (
+                <button
+                  className="px-2 py-1 md:px-2 md:py-1 text-base md:text-lg bg-blue-500 hover:bg-blue-400 text-white rounded-lg transition-colors"
+                  onClick={() => setIsEditing(!isEditing)}
+                  title="Editar producto"
+                >
+                  ✏️
+                </button>
+              )}
 
-              <button
-                className={`px-2 py-1 md:px-2 md:py-1 text-sm md:text-base rounded-lg transition-all opacity-50 hover:opacity-100 ${
-                  dark ? "hover:bg-red-600 text-gray-500" : "hover:bg-red-100 text-gray-400 hover:text-red-500"
-                }`}
-                onClick={() => setShowConfirmDelete(true)}
-                title="Eliminar producto"
-              >
-                🗑️
-              </button>
+              {esAdmin && (
+                <button
+                  className={`px-2 py-1 md:px-2 md:py-1 text-sm md:text-base rounded-lg transition-all opacity-50 hover:opacity-100 ${
+                    dark ? "hover:bg-red-600 text-gray-500" : "hover:bg-red-100 text-gray-400 hover:text-red-500"
+                  }`}
+                  onClick={() => setShowConfirmDelete(true)}
+                  title="Eliminar producto"
+                >
+                  🗑️
+                </button>
+              )}
             </div>
           </div>
         </div>
       ) : (
         <div className="w-full flex flex-col">
+          {imagenPrincipal && (
+            <div
+              className="h-10 mb-1.5 overflow-hidden rounded-lg border cursor-pointer transition-all duration-300 ease-out md:group-hover:h-24 md:group-hover:shadow-lg"
+              style={{ borderColor: dark ? "#374151" : "#e5e7eb", backgroundColor: dark ? "#111827" : "#f9fafb" }}
+              onClick={() => setShowProductModal(true)}
+              title="Ver detalle"
+            >
+              <img
+                src={publicUrl(imagenPrincipal)}
+                alt={prod.products_base?.name || "Producto"}
+                onError={(e) => { e.currentTarget.style.display = "none"; }}
+                className="w-full h-full object-contain transition-transform duration-300 md:group-hover:scale-105"
+              />
+            </div>
+          )}
           <div className="flex flex-col items-start justify-between gap-2 mb-2">
             <div className="w-full min-w-0 overflow-hidden">
               <div className="flex items-start gap-1.5">
@@ -370,6 +431,18 @@ export function LiProduct({
             </div>
           </div>
           <div className="flex items-center gap-1 shrink-0">
+              {enCarrito && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    eliminarProductoCarrito(prod.id);
+                  }}
+                  title="Quitar del carrito"
+                  className="w-9 h-9 rounded-xl flex items-center justify-center text-base font-bold transition-all shadow-md bg-red-500 hover:bg-red-600 text-white shrink-0"
+                >
+                  ✕
+                </button>
+              )}
               <button
                 className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg font-bold transition-all shadow-md ${
                   enCarrito
@@ -395,24 +468,28 @@ export function LiProduct({
                   pesoSeleccionado ? pesoSeleccionado.toFixed(2) : "⚖️"
                 ) : enCarrito ? "➕" : "🛒"}
               </button>
-              <button
-                className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm transition-all ${
-                  dark ? "bg-blue-600 hover:bg-blue-500 text-white" : "bg-blue-500 hover:bg-blue-400 text-white"
-                }`}
-                onClick={() => setIsEditing(!isEditing)}
-                title="Editar producto"
-              >
-                ✏️
-              </button>
-              <button
-                className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs transition-all opacity-50 hover:opacity-100 ${
-                  dark ? "hover:bg-red-600 text-gray-500" : "hover:bg-red-100 text-gray-400 hover:text-red-500"
-                }`}
-                onClick={() => setShowConfirmDelete(true)}
-                title="Eliminar producto"
-              >
-                🗑️
-              </button>
+              {esAdmin && (
+                <button
+                  className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm transition-all ${
+                    dark ? "bg-blue-600 hover:bg-blue-500 text-white" : "bg-blue-500 hover:bg-blue-400 text-white"
+                  }`}
+                  onClick={() => setIsEditing(!isEditing)}
+                  title="Editar producto"
+                >
+                  ✏️
+                </button>
+              )}
+              {esAdmin && (
+                <button
+                  className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs transition-all opacity-50 hover:opacity-100 ${
+                    dark ? "hover:bg-red-600 text-gray-500" : "hover:bg-red-100 text-gray-400 hover:text-red-500"
+                  }`}
+                  onClick={() => setShowConfirmDelete(true)}
+                  title="Eliminar producto"
+                >
+                  🗑️
+                </button>
+              )}
             </div>
 
           {enCarrito && (
@@ -498,6 +575,14 @@ export function LiProduct({
           <DeleteProduct
             handleDelete={handleDelete}
             setShowConfirmDelete={setShowConfirmDelete}
+            imagenesCount={prod.imagenes?.length || 0}
+          />
+        )}
+        {showProductModal && (
+          <ProductModal
+            prod={prod}
+            color={color}
+            onClose={() => setShowProductModal(false)}
           />
         )}
       </div>

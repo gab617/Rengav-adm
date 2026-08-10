@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useRef } from "react";
 import { useAppContext } from "../../../contexto/Context";
+import { supabase } from "../../../services/supabaseClient";
 import "./LiPedido.css";
 
 export function LiPedido({ prod, categoria, enPedido }) {
@@ -14,15 +15,8 @@ export function LiPedido({ prod, categoria, enPedido }) {
   } = useAppContext();
 
   const dark = preferencias?.theme === "dark";
-  const [esMobile, setEsMobile] = useState(window.innerWidth < 768);
   const [justAdded, setJustAdded] = useState(false);
   const timeoutRef = useRef(null);
-
-  useEffect(() => {
-    const handleResize = () => setEsMobile(window.innerWidth < 768);
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
 
   function capitalizarMayus(texto) {
     if (!texto) return "";
@@ -33,7 +27,6 @@ export function LiPedido({ prod, categoria, enPedido }) {
   const cantidad = pedidoExistente ? pedidoExistente.cantidad : 0;
 
   const bgBase = dark ? `${categoria.color}30` : `${categoria.color}40`;
-  const bgHover = dark ? `${categoria.color}50` : categoria.color;
   const bgEnPedido = dark
     ? "bg-green-500/10 border-green-500/40"
     : "bg-green-50 border-green-300";
@@ -96,6 +89,13 @@ export function LiPedido({ prod, categoria, enPedido }) {
   const precio = parseFloat(prod.precio_compra || prod.precio || 0);
   const stock = prod.stock ?? prod.cantidad_stock ?? 0;
 
+  const imagenPrincipal = prod.imagenes?.[0] || prod.products_base?.image_url || null;
+  const publicUrl = (path) => {
+    if (!path) return null;
+    if (path.startsWith("http")) return path;
+    return supabase.storage.from("product-images").getPublicUrl(path).data.publicUrl;
+  };
+
   return (
     <div
       className={`flex flex-col md:flex-row w-full gap-2 rounded-xl border transition-all duration-300 mb-2 ${
@@ -119,6 +119,26 @@ export function LiPedido({ prod, categoria, enPedido }) {
           className={`flex justify-between flex-col md:flex-row md:items-center text-sm md:text-base font-semibold p-3 md:p-4 ${textPrimary}`}
         >
           <div className="flex flex  items-center gap-2 min-w-0">
+            {imagenPrincipal ? (
+              <div
+                className="w-9 h-9 rounded-lg shrink-0 overflow-hidden border"
+                style={{ backgroundColor: categoria.color }}
+              >
+                <img
+                  src={publicUrl(imagenPrincipal)}
+                  alt=""
+                  onError={(e) => { e.currentTarget.style.display = "none"; }}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            ) : (
+              <div
+                className="w-9 h-9 rounded-lg shrink-0 flex items-center justify-center text-base"
+                style={{ backgroundColor: `${categoria.color}30` }}
+              >
+                📦
+              </div>
+            )}
             {justAdded && (
               <span className="text-green-500 text-xs animate-bounce">✓</span>
             )}

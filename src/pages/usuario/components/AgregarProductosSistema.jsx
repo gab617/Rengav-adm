@@ -2,11 +2,13 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useAppContext } from "../../../contexto/Context";
 import { useAuth } from "../../../contexto/AuthContext";
 import { useProductosSistema } from "../../../hooksSB/useProductosSistema";
+import { supabase } from "../../../services/supabaseClient";
 
 export function AgregarProductosSistema({ onClose }) {
   const { user } = useAuth();
-  const { preferencias, categorias, subcategorias, products, agregarProductoBase } = useAppContext();
+  const { preferencias, categorias, subcategorias, products, agregarProductoBase, actualizarProducto, profile } = useAppContext();
   const dark = preferencias?.theme === "dark";
+  const esAdmin = profile?.role === "admin" || profile?.role === "super_admin";
   const [esMobile, setEsMobile] = useState(window.innerWidth < 768);
   const [loaded, setLoaded] = useState(false);
 
@@ -84,6 +86,7 @@ export function AgregarProductosSistema({ onClose }) {
           id: p.base_id,
           name: p.products_base?.name,
           brand_name: p.products_base?.brand,
+          image_url: p.products_base?.image_url,
           category_id: p.products_base?.category_id,
           subcategory_id: p.products_base?.subcategory_id,
           infoUsuario: p,
@@ -96,6 +99,7 @@ export function AgregarProductosSistema({ onClose }) {
           id: p.base_id,
           name: p.products_base?.name,
           brand_name: p.products_base?.brand,
+          image_url: p.products_base?.image_url,
           category_id: p.products_base?.category_id,
           subcategory_id: p.products_base?.subcategory_id,
           infoUsuario: p,
@@ -123,7 +127,7 @@ export function AgregarProductosSistema({ onClose }) {
   
   // Historial de productos agregados
   const [historialAgregados, setHistorialAgregados] = useState([]);
-  
+
   // Formulario para un solo producto
   const [formSingle, setFormSingle] = useState({
     precio_compra: "",
@@ -227,6 +231,25 @@ export function AgregarProductosSistema({ onClose }) {
           descripcion: formSingle.descripcion || "",
         }
       };
+    });
+  };
+
+  // Selección de producto YA asignado (para ver/editar sus datos)
+  const toggleAssignedSelection = (producto) => {
+    const info = producto.infoUsuario;
+    if (!info?.id) return;
+    if (selectedProductsMap[producto.id]) {
+      setSelectedProductsMap({});
+      return;
+    }
+    setSelectedProductsMap({
+      [producto.id]: {
+        producto,
+        precio_compra: info.precio_compra ?? "",
+        precio_venta: info.precio_venta ?? "",
+        stock: info.stock ?? "",
+        descripcion: info.descripcion ?? "",
+      },
     });
   };
 
@@ -374,6 +397,24 @@ export function AgregarProductosSistema({ onClose }) {
     setSubcategoriaActiva("todas");
   };
 
+  // Guardar cambios de un producto YA asignado
+  const handleActualizar = async () => {
+    const [selectedItem] = Object.values(selectedProductsMap);
+    const info = selectedItem?.producto?.infoUsuario;
+    if (!info?.id) return;
+
+    setSubmitting(true);
+    await actualizarProducto(info.id, {
+      precio_compra: parseFloat(selectedItem.precio_compra) || 0,
+      precio_venta: parseFloat(selectedItem.precio_venta) || 0,
+      stock: parseInt(selectedItem.stock) || 0,
+      descripcion: selectedItem.descripcion || null,
+    });
+    setSubmitting(false);
+    setSelectedProductsMap({});
+    alert("✅ Producto actualizado");
+  };
+
   // Estilos
   const textPrimary = dark ? "text-white" : "text-gray-900";
   const textSecondary = dark ? "text-gray-400" : "text-gray-500";
@@ -381,6 +422,13 @@ export function AgregarProductosSistema({ onClose }) {
   const bgCard = dark ? "bg-gray-800" : "bg-white";
   const borderColor = dark ? "border-gray-700" : "border-gray-200";
   const inputBg = dark ? "bg-gray-700 text-white" : "bg-gray-50 text-gray-900";
+
+  // Resolver URL pública de una imagen (path de storage o URL externa)
+  const publicUrl = (path) => {
+    if (!path) return null;
+    if (path.startsWith("http")) return path;
+    return supabase.storage.from("product-images").getPublicUrl(path).data.publicUrl;
+  };
 
   const selectedCount = Object.keys(selectedProductsMap).length;
   const isSingleSelection = selectedCount === 1;
@@ -519,7 +567,7 @@ export function AgregarProductosSistema({ onClose }) {
             </div>
             
             {/* Bulk inputs */}
-            {isMultiSelection && (
+            {isMultiSelection && esAdmin && (
               <div className="flex flex-wrap gap-2 items-center">
                 <div className="flex items-center gap-1">
                   <input
@@ -704,19 +752,29 @@ export function AgregarProductosSistema({ onClose }) {
                   const isInactive = producto.isInactive;
                   const isSelected = selectedProductsMap[producto.id] !== undefined;
 
+                  const isClickable =
+                    (activeTab === "disponibles" && !isInactive) ||
+                    (activeTab === "asignados" && !!infoUsuario);
+
                   const cardClasses = isSelected
                     ? `border-green-500 ${dark ? "bg-green-500/20" : "bg-green-50"}`
                     : isInactive
                       ? `${bgCard} ${borderColor} opacity-50`
-                      : `${bgCard} ${borderColor} hover:border-blue-400`;
+                      : `${bgCard} ${borderColor} ${isClickable ? "hover:border-blue-400" : ""}`;
 
                   return (
                     <div
                       key={producto.id}
-                      onClick={() => activeTab === "disponibles" && !isInactive && toggleProductSelection(producto)}
-                      className={`p-3 rounded-xl border cursor-pointer transition-all ${cardClasses} ${
-                        activeTab === "disponibles" && !isInactive ? "cursor-pointer" : ""
-                      } ${isInactive && activeTab === "yaAsignados" ? "cursor-default" : ""}`}
+                      onClick={() => {
+                        if (activeTab === "disponibles" && !isInactive) {
+                          toggleProductSelection(producto);
+                        } else if (activeTab === "asignados" && infoUsuario) {
+                          toggleAssignedSelection(producto);
+                        }
+                      }}
+                      className={`p-3 rounded-xl border transition-all ${cardClasses} ${
+                        isClickable ? "cursor-pointer" : "cursor-default"
+                      }`}
                     >
                       <div className="flex items-start gap-3">
                         {/* INDICADOR DE SELECCIÓN */}
@@ -775,6 +833,27 @@ export function AgregarProductosSistema({ onClose }) {
                                 • Venta: ${parseFloat(infoUsuario.precio_venta || 0).toLocaleString()}
                                 • Stock: {infoUsuario.stock ?? 0}
                               </span>
+                              {(infoUsuario.imagenes?.length > 0 || producto.image_url) && (
+                                <div className="flex gap-1.5 mt-2 flex-wrap">
+                                  {(infoUsuario.imagenes?.length > 0 ? infoUsuario.imagenes : [producto.image_url])
+                                    .slice(0, 4)
+                                    .map((path, idx) => (
+                                      <img
+                                        key={path + idx}
+                                        src={publicUrl(path)}
+                                        alt={`Imagen ${idx + 1}`}
+                                        onError={(e) => { e.currentTarget.style.display = "none"; }}
+                                        className="w-10 h-10 rounded-lg object-cover border"
+                                        style={{ borderColor: dark ? "#4b5563" : "#e5e7eb" }}
+                                      />
+                                    ))}
+                                  {infoUsuario.imagenes?.length > 4 && (
+                                    <span className={`self-center text-[10px] font-medium ${textSecondary}`}>
+                                      +{infoUsuario.imagenes.length - 4}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
@@ -803,7 +882,15 @@ export function AgregarProductosSistema({ onClose }) {
                   const pv = parseFloat(data.precio_venta) || 0;
                   const ganancia = pv - pc;
                   const gananciaNegativa = pc > 0 && pv > 0 && pc > pv;
-                  
+
+                  const infoUsuario = product?.infoUsuario;
+                  const fuentesImagen =
+                    infoUsuario?.imagenes?.length > 0
+                      ? infoUsuario.imagenes
+                      : product?.image_url
+                        ? [product.image_url]
+                        : [];
+
                   return (
                     <>
                       <div>
@@ -816,69 +903,100 @@ export function AgregarProductosSistema({ onClose }) {
                         </p>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>P. Compra</label>
-                          <input
-                            type="number"
-                            value={data.precio_compra || ""}
-                            onChange={(e) => updateProductValue(product.id, "precio_compra", e.target.value)}
-                            placeholder="0"
-                            className={`w-full px-2 py-1.5 rounded-lg border ${inputBg} text-sm`}
-                          />
-                        </div>
-                        <div>
-                          <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>P. Venta</label>
-                          <input
-                            type="number"
-                            value={data.precio_venta || ""}
-                            onChange={(e) => updateProductValue(product.id, "precio_venta", e.target.value)}
-                            placeholder="0"
-                            className={`w-full px-2 py-1.5 rounded-lg border ${inputBg} text-sm`}
-                          />
-                        </div>
-                      </div>
-
-                      {pv > 0 && pc > 0 && (
-                        <div className={`p-2 rounded-lg text-xs ${gananciaNegativa ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" : "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"}`}>
-                          {gananciaNegativa ? (
-                            <span>⚠️ Ganancia: -${Math.abs(ganancia).toLocaleString()} por unidad</span>
-                          ) : (
-                            <span>✓ Ganancia: ${ganancia.toLocaleString()} por unidad</span>
-                          )}
+                      {fuentesImagen.length > 0 && (
+                        <div className="space-y-2">
+                          {fuentesImagen.map((path, idx) => (
+                            <img
+                              key={path + idx}
+                              src={publicUrl(path)}
+                              alt={`Imagen ${idx + 1}`}
+                              onError={(e) => { e.currentTarget.style.display = "none"; }}
+                              className="w-full h-auto rounded-xl border"
+                              style={{ borderColor: dark ? "#4b5563" : "#e5e7eb" }}
+                            />
+                          ))}
                         </div>
                       )}
 
-                      <div>
-                        <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>Stock</label>
-                        <input
-                          type="number"
-                          value={data.stock === 0 || data.stock === "" ? "" : data.stock}
-                          onChange={(e) => updateProductValue(product.id, "stock", e.target.value)}
-                          placeholder="0"
-                          className={`w-full px-2 py-1.5 rounded-lg border ${inputBg} text-sm`}
-                        />
-                      </div>
+                      {esAdmin && (
+                        <>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>P. Compra</label>
+                              <input
+                                type="number"
+                                value={data.precio_compra || ""}
+                                onChange={(e) => updateProductValue(product.id, "precio_compra", e.target.value)}
+                                placeholder="0"
+                                className={`w-full px-2 py-1.5 rounded-lg border ${inputBg} text-sm`}
+                              />
+                            </div>
+                            <div>
+                              <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>P. Venta</label>
+                              <input
+                                type="number"
+                                value={data.precio_venta || ""}
+                                onChange={(e) => updateProductValue(product.id, "precio_venta", e.target.value)}
+                                placeholder="0"
+                                className={`w-full px-2 py-1.5 rounded-lg border ${inputBg} text-sm`}
+                              />
+                            </div>
+                          </div>
 
-                      <div>
-                        <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>Descripción (opcional)</label>
-                        <textarea
-                          value={data.descripcion || ""}
-                          onChange={(e) => updateProductValue(product.id, "descripcion", e.target.value)}
-                          placeholder="Descripción..."
-                          className={`w-full px-2 py-1.5 rounded-lg border ${inputBg} text-sm resize-none`}
-                          rows={2}
-                        />
-                      </div>
+                          {pv > 0 && pc > 0 && (
+                            <div className={`p-2 rounded-lg text-xs ${gananciaNegativa ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" : "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"}`}>
+                              {gananciaNegativa ? (
+                                <span>⚠️ Ganancia: -${Math.abs(ganancia).toLocaleString()} por unidad</span>
+                              ) : (
+                                <span>✓ Ganancia: ${ganancia.toLocaleString()} por unidad</span>
+                              )}
+                            </div>
+                          )}
+
+                          <div>
+                            <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>Stock</label>
+                            <input
+                              type="number"
+                              value={data.stock === 0 || data.stock === "" ? "" : data.stock}
+                              onChange={(e) => updateProductValue(product.id, "stock", e.target.value)}
+                              placeholder="0"
+                              className={`w-full px-2 py-1.5 rounded-lg border ${inputBg} text-sm`}
+                            />
+                          </div>
+
+                          <div>
+                            <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>Descripción (opcional)</label>
+                            <textarea
+                              value={data.descripcion || ""}
+                              onChange={(e) => updateProductValue(product.id, "descripcion", e.target.value)}
+                              placeholder="Descripción..."
+                              className={`w-full px-2 py-1.5 rounded-lg border ${inputBg} text-sm resize-none`}
+                              rows={2}
+                            />
+                          </div>
+                        </>
+                      )}
 
                       <button
-                        onClick={handleAgregar}
-                        disabled={submitting}
+                        onClick={activeTab === "asignados" ? (esAdmin ? handleActualizar : null) : (esAdmin ? handleAgregar : handleAgregarBulkSimple)}
+                        disabled={submitting || (activeTab === "asignados" && !esAdmin)}
                         className={`w-full py-2 text-white rounded-lg font-medium disabled:opacity-50 transition-colors text-sm ${
-                          gananciaNegativa ? "bg-yellow-600 hover:bg-yellow-500" : "bg-green-500 hover:bg-green-600"
+                          activeTab === "asignados"
+                            ? "bg-blue-500 hover:bg-blue-600"
+                            : gananciaNegativa && esAdmin
+                              ? "bg-yellow-600 hover:bg-yellow-500"
+                              : "bg-green-500 hover:bg-green-600"
                         }`}
                       >
-                        {submitting ? "..." : gananciaNegativa ? "⚠️ Agregar con pérdida" : "✓ Agregar"}
+                        {submitting
+                          ? "..."
+                          : activeTab === "asignados"
+                            ? "💾 Guardar cambios"
+                            : esAdmin
+                              ? gananciaNegativa
+                                ? "⚠️ Agregar con pérdida"
+                                : "✓ Agregar"
+                              : "✓ Agregar sin precios"}
                       </button>
                     </>
                   );
@@ -894,59 +1012,61 @@ export function AgregarProductosSistema({ onClose }) {
                 </div>
 
                 {/* Bulk inputs in sidebar */}
-                <div className={`p-3 rounded-lg border ${borderColor}`}>
-                  <p className={`text-xs font-medium mb-2 ${textSecondary}`}>Aplicar a todos:</p>
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        placeholder="P. Venta"
-                        value={bulkPrecioVenta}
-                        onChange={(e) => setBulkPrecioVenta(e.target.value)}
-                        className={`flex-1 px-2 py-1 rounded border text-xs ${inputBg} ${borderColor}`}
-                      />
-                      <button
-                        onClick={() => { applyBulkToAll("precio_venta", bulkPrecioVenta); }}
-                        disabled={!bulkPrecioVenta}
-                        className="px-2 py-1 bg-purple-500 text-white rounded text-xs disabled:opacity-40"
-                      >
-                        Apply
-                      </button>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        placeholder="P. Compra"
-                        value={bulkPrecioCompra}
-                        onChange={(e) => setBulkPrecioCompra(e.target.value)}
-                        className={`flex-1 px-2 py-1 rounded border text-xs ${inputBg} ${borderColor}`}
-                      />
-                      <button
-                        onClick={() => { applyBulkToAll("precio_compra", bulkPrecioCompra); }}
-                        disabled={!bulkPrecioCompra}
-                        className="px-2 py-1 bg-blue-500 text-white rounded text-xs disabled:opacity-40"
-                      >
-                        Apply
-                      </button>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        placeholder="Stock"
-                        value={bulkStock}
-                        onChange={(e) => setBulkStock(e.target.value)}
-                        className={`flex-1 px-2 py-1 rounded border text-xs ${inputBg} ${borderColor}`}
-                      />
-                      <button
-                        onClick={() => { applyBulkToAll("stock", bulkStock); }}
-                        disabled={!bulkStock && bulkStock !== "0"}
-                        className="px-2 py-1 bg-green-500 text-white rounded text-xs disabled:opacity-40"
-                      >
-                        Apply
-                      </button>
+                {esAdmin && (
+                  <div className={`p-3 rounded-lg border ${borderColor}`}>
+                    <p className={`text-xs font-medium mb-2 ${textSecondary}`}>Aplicar a todos:</p>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          placeholder="P. Venta"
+                          value={bulkPrecioVenta}
+                          onChange={(e) => setBulkPrecioVenta(e.target.value)}
+                          className={`flex-1 px-2 py-1 rounded border text-xs ${inputBg} ${borderColor}`}
+                        />
+                        <button
+                          onClick={() => { applyBulkToAll("precio_venta", bulkPrecioVenta); }}
+                          disabled={!bulkPrecioVenta}
+                          className="px-2 py-1 bg-purple-500 text-white rounded text-xs disabled:opacity-40"
+                        >
+                          Apply
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          placeholder="P. Compra"
+                          value={bulkPrecioCompra}
+                          onChange={(e) => setBulkPrecioCompra(e.target.value)}
+                          className={`flex-1 px-2 py-1 rounded border text-xs ${inputBg} ${borderColor}`}
+                        />
+                        <button
+                          onClick={() => { applyBulkToAll("precio_compra", bulkPrecioCompra); }}
+                          disabled={!bulkPrecioCompra}
+                          className="px-2 py-1 bg-blue-500 text-white rounded text-xs disabled:opacity-40"
+                        >
+                          Apply
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          placeholder="Stock"
+                          value={bulkStock}
+                          onChange={(e) => setBulkStock(e.target.value)}
+                          className={`flex-1 px-2 py-1 rounded border text-xs ${inputBg} ${borderColor}`}
+                        />
+                        <button
+                          onClick={() => { applyBulkToAll("stock", bulkStock); }}
+                          disabled={!bulkStock && bulkStock !== "0"}
+                          className="px-2 py-1 bg-green-500 text-white rounded text-xs disabled:opacity-40"
+                        >
+                          Apply
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
 
                 <div className={`max-h-48 overflow-y-auto rounded-lg border ${borderColor}`}>
                   {Object.entries(selectedProductsMap).map(([id, item], index) => (
@@ -973,11 +1093,11 @@ export function AgregarProductosSistema({ onClose }) {
                 </div>
 
                 <button
-                  onClick={hasAnyData ? handleAgregar : handleAgregarBulkSimple}
+                  onClick={esAdmin && hasAnyData ? handleAgregar : handleAgregarBulkSimple}
                   disabled={submitting}
                   className="w-full py-2 bg-green-500 text-white rounded-lg font-medium disabled:opacity-50 hover:bg-green-600 transition-colors text-sm"
                 >
-                  {submitting ? "..." : hasAnyData ? `✓ Agregar ${selectedCount} con precios` : `✓ Agregar ${selectedCount}`}
+                  {submitting ? "..." : esAdmin && hasAnyData ? `✓ Agregar ${selectedCount} con precios` : `✓ Agregar ${selectedCount}`}
                 </button>
               </div>
             )}
@@ -1015,38 +1135,61 @@ export function AgregarProductosSistema({ onClose }) {
                             {gananciaNegativa ? `⚠️ -$${Math.abs(ganancia).toLocaleString()}/u` : `✓ +$${ganancia.toLocaleString()}/u`}
                           </p>
                         )}
-                        <div className="flex gap-1">
-                          <input
-                            type="number"
-                            value={data.precio_compra || ""}
-                            onChange={(e) => updateProductValue(product.id, "precio_compra", e.target.value)}
-                            placeholder="Comp"
-                            className={`flex-1 min-w-0 px-1.5 py-1 rounded border ${inputBg} text-xs`}
-                          />
-                          <input
-                            type="number"
-                            value={data.precio_venta || ""}
-                            onChange={(e) => updateProductValue(product.id, "precio_venta", e.target.value)}
-                            placeholder="Vent"
-                            className={`flex-1 min-w-0 px-1.5 py-1 rounded border ${inputBg} text-xs`}
-                          />
-                          <input
-                            type="number"
-                            value={data.stock === 0 || data.stock === "" ? "" : data.stock}
-                            onChange={(e) => updateProductValue(product.id, "stock", e.target.value)}
-                            placeholder="Stk"
-                            className={`w-12 px-1.5 py-1 rounded border ${inputBg} text-xs`}
-                          />
-                          <button
-                            onClick={handleAgregar}
-                            disabled={submitting}
-                            className={`px-2 py-1 text-white rounded font-medium text-xs disabled:opacity-50 ${
-                              gananciaNegativa ? "bg-yellow-600" : "bg-green-500"
-                            }`}
-                          >
-                            ✓
-                          </button>
-                        </div>
+                        {esAdmin && (
+                          <div className="flex gap-1">
+                            <input
+                              type="number"
+                              value={data.precio_compra || ""}
+                              onChange={(e) => updateProductValue(product.id, "precio_compra", e.target.value)}
+                              placeholder="Comp"
+                              className={`flex-1 min-w-0 px-1.5 py-1 rounded border ${inputBg} text-xs`}
+                            />
+                            <input
+                              type="number"
+                              value={data.precio_venta || ""}
+                              onChange={(e) => updateProductValue(product.id, "precio_venta", e.target.value)}
+                              placeholder="Vent"
+                              className={`flex-1 min-w-0 px-1.5 py-1 rounded border ${inputBg} text-xs`}
+                            />
+                            <input
+                              type="number"
+                              value={data.stock === 0 || data.stock === "" ? "" : data.stock}
+                              onChange={(e) => updateProductValue(product.id, "stock", e.target.value)}
+                              placeholder="Stk"
+                              className={`w-12 px-1.5 py-1 rounded border ${inputBg} text-xs`}
+                            />
+                            <button
+                              onClick={activeTab === "asignados" ? handleActualizar : handleAgregar}
+                              disabled={submitting}
+                              className={`px-2 py-1 text-white rounded font-medium text-xs disabled:opacity-50 ${
+                                activeTab === "asignados"
+                                  ? "bg-blue-500"
+                                  : gananciaNegativa
+                                    ? "bg-yellow-600"
+                                    : "bg-green-500"
+                              }`}
+                            >
+                              {activeTab === "asignados" ? "💾" : "✓"}
+                            </button>
+                          </div>
+                        )}
+                        {!esAdmin && (
+                          <div className="flex justify-end gap-1">
+                            {activeTab === "asignados" ? (
+                              <span className={`text-[10px] px-1 ${textSecondary}`}>
+                                Sin permisos para editar
+                              </span>
+                            ) : (
+                              <button
+                                onClick={handleAgregarBulkSimple}
+                                disabled={submitting}
+                                className="px-3 py-1 bg-green-500 text-white rounded font-medium text-xs disabled:opacity-50"
+                              >
+                                {submitting ? "..." : "✓ Agregar sin precios"}
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </>
                     );
                   })()}
@@ -1066,42 +1209,44 @@ export function AgregarProductosSistema({ onClose }) {
                       ✕
                     </button>
                   </div>
-                  <div className="flex gap-1">
-                    <input
-                      type="number"
-                      placeholder="Venta"
-                      value={bulkPrecioVenta}
-                      onChange={(e) => setBulkPrecioVenta(e.target.value)}
-                      className={`flex-1 min-w-0 px-1.5 py-1 rounded border ${inputBg} text-xs`}
-                    />
-                    <input
-                      type="number"
-                      placeholder="Compra"
-                      value={bulkPrecioCompra}
-                      onChange={(e) => setBulkPrecioCompra(e.target.value)}
-                      className={`flex-1 min-w-0 px-1.5 py-1 rounded border ${inputBg} text-xs`}
-                    />
-                    <input
-                      type="number"
-                      placeholder="Stock"
-                      value={bulkStock}
-                      onChange={(e) => setBulkStock(e.target.value)}
-                      className={`w-12 px-1.5 py-1 rounded border ${inputBg} text-xs`}
-                    />
-                    <button
-                      onClick={() => { applyBulkToAll("precio_venta", bulkPrecioVenta); applyBulkToAll("precio_compra", bulkPrecioCompra); applyBulkToAll("stock", bulkStock); }}
-                      className="px-2 py-1 bg-purple-500 text-white rounded text-xs"
-                    >
-                      Apply
-                    </button>
-                  </div>
+                  {esAdmin && (
+                    <div className="flex gap-1">
+                      <input
+                        type="number"
+                        placeholder="Venta"
+                        value={bulkPrecioVenta}
+                        onChange={(e) => setBulkPrecioVenta(e.target.value)}
+                        className={`flex-1 min-w-0 px-1.5 py-1 rounded border ${inputBg} text-xs`}
+                      />
+                      <input
+                        type="number"
+                        placeholder="Compra"
+                        value={bulkPrecioCompra}
+                        onChange={(e) => setBulkPrecioCompra(e.target.value)}
+                        className={`flex-1 min-w-0 px-1.5 py-1 rounded border ${inputBg} text-xs`}
+                      />
+                      <input
+                        type="number"
+                        placeholder="Stock"
+                        value={bulkStock}
+                        onChange={(e) => setBulkStock(e.target.value)}
+                        className={`w-12 px-1.5 py-1 rounded border ${inputBg} text-xs`}
+                      />
+                      <button
+                        onClick={() => { applyBulkToAll("precio_venta", bulkPrecioVenta); applyBulkToAll("precio_compra", bulkPrecioCompra); applyBulkToAll("stock", bulkStock); }}
+                        className="px-2 py-1 bg-purple-500 text-white rounded text-xs"
+                      >
+                        Apply
+                      </button>
+                    </div>
+                  )}
                   <div className="flex justify-end gap-1">
                     <button
-                      onClick={hasAnyData ? handleAgregar : handleAgregarBulkSimple}
+                      onClick={esAdmin && hasAnyData ? handleAgregar : handleAgregarBulkSimple}
                       disabled={submitting}
                       className="px-3 py-1 bg-green-500 text-white rounded font-medium text-xs disabled:opacity-50"
                     >
-                      {submitting ? "..." : hasAnyData ? "✓ Agregar c/precios" : "✓ Agregar"}
+                      {submitting ? "..." : esAdmin && hasAnyData ? "✓ Agregar c/precios" : "✓ Agregar"}
                     </button>
                   </div>
                 </div>
@@ -1116,7 +1261,6 @@ export function AgregarProductosSistema({ onClose }) {
             </div>
           )}
         </div>
-
       </div>
     </div>
   );

@@ -2,15 +2,17 @@ import { useEffect, useState, useCallback } from "react";
 import { supabase } from "../../../services/supabaseClient";
 import { useProfile } from "../../../hooksSB/useProfile";
 
-export function useAdminProductsBase(onProductCreated) {
+export function useAdminProductsBase(onProductCreated, tenantId) {
   const { profile } = useProfile();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [adminCategoryIds, setAdminCategoryIds] = useState([]);
   const [tieneCatalogoDefinido, setTieneCatalogoDefinido] = useState(false);
+  const [baseGallery, setBaseGallery] = useState({});
+  const [tenantGallery, setTenantGallery] = useState({});
 
-  async function loadProducts() {
+  const loadProducts = useCallback(async () => {
     setLoading(true);
 
     let adminCatIds = [];
@@ -51,6 +53,7 @@ export function useAdminProductsBase(onProductCreated) {
         brand_id,
         category_id,
         subcategory_id,
+        image_url,
         brands ( id, name ),
         categories ( id, name ),
         subcategories ( id, name )
@@ -58,14 +61,25 @@ export function useAdminProductsBase(onProductCreated) {
       .order("name");
 
     let productsWithFlags = productsData || [];
+    const galleryMap = {};
 
     if (relatedUsers.length > 0) {
       const { data: userProducts } = await supabase
         .from("user_products")
-        .select("base_id")
+        .select("base_id, imagenes")
         .in("user_id", relatedUsers);
 
       const usedBaseIds = new Set(userProducts?.map(up => up.base_id).filter(id => id !== null) || []);
+
+      userProducts?.forEach((up) => {
+        if (!up.base_id) return;
+        if (!galleryMap[up.base_id]) galleryMap[up.base_id] = [];
+        (up.imagenes || []).forEach((p) => {
+          if (p && !galleryMap[up.base_id].includes(p)) {
+            galleryMap[up.base_id].push(p);
+          }
+        });
+      });
 
       productsWithFlags = (productsData || []).map(p => ({
         ...p,
@@ -80,13 +94,65 @@ export function useAdminProductsBase(onProductCreated) {
       }));
     }
 
+    (productsData || []).forEach((p) => {
+      if (p.image_url && !p.image_url.startsWith("http")) {
+        galleryMap[p.id] = [
+          p.image_url,
+          ...(galleryMap[p.id] || []).filter((x) => x !== p.image_url),
+        ];
+      }
+    });
+    setBaseGallery(galleryMap);
+
     if (!error) setProducts(productsWithFlags);
     setLoading(false);
-  }
+  }, [profile]);
 
   useEffect(() => {
     loadProducts();
-  }, [profile]);
+  }, [loadProducts]);
+
+  const loadTenantGallery = useCallback(async () => {
+    if (!tenantId) {
+      setTenantGallery({});
+      return;
+    }
+
+    const { data: tenantUsers } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("tenant_id", tenantId);
+
+    const tenantUserIds = tenantUsers?.map((u) => u.id) || [];
+
+    if (!tenantUserIds.length) {
+      setTenantGallery({});
+      return;
+    }
+
+    const { data: tenantProducts } = await supabase
+      .from("user_products")
+      .select("base_id, imagenes")
+      .in("user_id", tenantUserIds);
+
+    const map = {};
+
+    tenantProducts?.forEach((up) => {
+      if (!up.base_id) return;
+      if (!map[up.base_id]) map[up.base_id] = [];
+      (up.imagenes || []).forEach((p) => {
+        if (p && !map[up.base_id].includes(p)) {
+          map[up.base_id].push(p);
+        }
+      });
+    });
+
+    setTenantGallery(map);
+  }, [tenantId]);
+
+  useEffect(() => {
+    loadTenantGallery();
+  }, [loadTenantGallery]);
 
   const createProductBase = useCallback(async ({
     name,
@@ -95,6 +161,10 @@ export function useAdminProductsBase(onProductCreated) {
     subcategory_id,
     type_unit = "unit",
   }) => {
+    if (profile?.role !== "super_admin") {
+      throw new Error("Solo el super admin puede crear productos base");
+    }
+
     if (!name || !category_id) {
       throw new Error("Faltan campos obligatorios");
     }
@@ -119,6 +189,7 @@ export function useAdminProductsBase(onProductCreated) {
         brand_id,
         category_id,
         subcategory_id,
+        image_url,
         brands ( id, name ),
         categories ( id, name ),
         subcategories ( id, name )
@@ -144,18 +215,99 @@ export function useAdminProductsBase(onProductCreated) {
     if (onProductCreated) {
       onProductCreated();
     }
-  }, [onProductCreated, adminCategoryIds]);
+  }, [onProductCreated, adminCategoryIds, profile?.role]);
 
-  useEffect(() => {
-    loadProducts();
-  }, []);
+  const updateProductBaseImage = useCallback(async (productId, imageUrl) => {
+    if (profile?.role !== "super_admin") {
+      throw new Error("Solo el super admin puede modificar el catálogo global");
+    }
+
+    const { error } = await supabase
+      .from("products_base")
+      .update({ image_url: imageUrl })
+      .eq("id", productId);
+
+    if (error) throw error;
+
+    setProducts((prev) =>
+      prev.map((p) => (p.id === productId ? { ...p, image_url: imageUrl } : p))
+    );
+
+    if (onProductCreated) {
+      onProductCreated();
+    }
+  }, [onProductCreated, profile?.role]);
+
+  const updateProductBase = useCallback(async ({
+    id,
+    name,
+    category_id,
+    subcategory_id,
+    brand_id,
+    type_unit,
+    newImageFile,
+    removeImage,
+  }) => {
+    if (profile?.role !== "super_admin") {
+      throw new Error("Solo el super admin puede modificar el catálogo global");
+    }
+
+    const actual = products.find((p) => p.id === id);
+
+    let image_url;
+    if (newImageFile) {
+      const path = `base/${id}/${Date.now()}-${newImageFile.name.replace(/[^\w.-]/g, "_")}`;
+      const { error: uploadErr } = await supabase.storage
+        .from("product-images")
+        .upload(path, newImageFile, { contentType: newImageFile.type });
+      if (uploadErr) throw uploadErr;
+      image_url = path;
+    } else if (removeImage) {
+      image_url = null;
+    }
+
+    const payload = {
+      name,
+      category_id: Number(category_id),
+      subcategory_id: subcategory_id ? Number(subcategory_id) : null,
+      brand_id: brand_id ? Number(brand_id) : null,
+      type_unit,
+    };
+    if (image_url !== undefined) payload.image_url = image_url;
+
+    const { error } = await supabase
+      .from("products_base")
+      .update(payload)
+      .eq("id", id);
+
+    if (error) throw error;
+
+    if (
+      image_url !== undefined &&
+      actual?.image_url &&
+      actual.image_url !== image_url &&
+      actual.image_url.startsWith("base/")
+    ) {
+      await supabase.storage.from("product-images").remove([actual.image_url]);
+    }
+
+    await loadProducts();
+
+    if (onProductCreated) {
+      onProductCreated();
+    }
+  }, [onProductCreated, profile?.role, products, loadProducts]);
 
   return {
     products,
     loading,
     creating,
     createProductBase,
+    updateProductBaseImage,
+    updateProductBase,
     adminCategoryIds,
     tieneCatalogoDefinido,
+    baseGallery,
+    tenantGallery,
   };
 }

@@ -146,7 +146,7 @@ export function ProductosCategorizados({ productosPorCategoria }) {
               {/* SIN SUBCATEGORÍA */}
               {productosSinSubcategoria.length > 0 && (
                 <div
-                  className={`shadow-md rounded-lg p-4 mb-2 transition-colors ${
+                  className={`shadow-md rounded-lg p-1.5 md:p-4 mb-2 transition-colors ${
                     dark
                       ? "bg-gray-800/90 text-white"
                       : "bg-white/85 text-gray-900"
@@ -156,8 +156,8 @@ export function ProductosCategorizados({ productosPorCategoria }) {
                     Productos sin subcategoría
                   </h3>
                   <ul
-                    className={`grid ${gridCols} gap-2 ${
-                      vista === "listado" ? "divide-y" : ""
+                    className={`grid ${gridCols} items-start gap-2 ${
+                      vista === "listado" ? "divide-y gap-1" : ""
                     }`}
                   >
                     {productosSinSubcategoria.map((prod) => (
@@ -180,18 +180,18 @@ export function ProductosCategorizados({ productosPorCategoria }) {
                   productos.length > 0 && (
                     <div
                       key={subcategoria.id}
-                      className={`shadow-md rounded-lg p-[.3.em] md:p-4 mb-2 transition-colors ${
+                      className={`shadow-md rounded-lg p-1 md:p-4 mb-2 transition-colors ${
                         dark
                           ? "bg-gray-800/90 text-white"
                           : "bg-white/85 text-gray-900"
                       }`}
                     >
-                      <h3 className="px-2 py-1 text-xl font-semibold mb-1">
+                      <h3 className="px-1 md:px-2 py-1 text-xl font-semibold mb-1">
                         {subcategoria.nombre}
                       </h3>
                       <ul
-                        className={`grid ${gridCols} gap-2 ${
-                          vista === "listado" ? "divide-y" : ""
+                        className={`grid ${gridCols} items-start gap-2 ${
+                          vista === "listado" ? "divide-y gap-1" : ""
                         }`}
                       >
                         {productos.map((prod) => (

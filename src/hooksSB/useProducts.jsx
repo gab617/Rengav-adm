@@ -35,6 +35,7 @@ export const useProducts = (
       "custom_id",
       "user_id",
       "active",
+      "imagenes",
     ];
 
     const cleaned = {};
@@ -66,6 +67,7 @@ export const useProducts = (
             stock,
             proveedor_nombre,
             active,
+            imagenes,
             products_base (
               id,
               name,
@@ -112,17 +114,54 @@ export const useProducts = (
         const isCustom = p.custom_id !== null;
 
         if (isCustom) {
+          const custom = p.user_custom_products;
+
+          if (!custom) {
+            return {
+              ...p,
+              tipo: "custom",
+              products_base: {
+                id: null,
+                name: "Producto (sin datos)",
+                brand: null,
+                image_url: null,
+                category_id: null,
+                subcategory_id: null,
+                brand_text: null,
+              },
+            };
+          }
+
           return {
             ...p,
             tipo: "custom",
             products_base: {
-              id: p.user_custom_products.id,
-              name: p.user_custom_products.name,
-              brand: resolveBrandName(p.user_custom_products.brand_id),
-              image_url: p.user_custom_products.image_url,
-              category_id: p.user_custom_products.category_id,
-              subcategory_id: p.user_custom_products.subcategory_id,
-              brand_text: p.user_custom_products.brand_text,
+              id: custom.id,
+              name: custom.name,
+              brand: resolveBrandName(custom.brand_id),
+              image_url: custom.image_url,
+              category_id: custom.category_id,
+              subcategory_id: custom.subcategory_id,
+              brand_text: custom.brand_text,
+            },
+          };
+        }
+
+        const base = p.products_base;
+
+        if (!base) {
+          return {
+            ...p,
+            tipo: "base",
+            products_base: {
+              id: null,
+              name: "Producto (sin datos)",
+              brand: null,
+              image_url: null,
+              category_id: null,
+              subcategory_id: null,
+              brand_text: null,
+              type_unit: null,
             },
           };
         }
@@ -131,14 +170,14 @@ export const useProducts = (
           ...p,
           tipo: "base",
           products_base: {
-            id: p.products_base.id,
-            name: p.products_base.name,
-            brand: resolveBrandName(p.products_base.brand_id),
-            image_url: p.products_base.image_url,
-            category_id: p.products_base.category_id,
-            subcategory_id: p.products_base.subcategory_id,
+            id: base.id,
+            name: base.name,
+            brand: resolveBrandName(base.brand_id),
+            image_url: base.image_url,
+            category_id: base.category_id,
+            subcategory_id: base.subcategory_id,
             brand_text: null,
-            type_unit: p.products_base.type_unit
+            type_unit: base.type_unit
           },
         };
       };
@@ -172,33 +211,113 @@ export const useProducts = (
     proveedor,
     stock,
     userId,
+    imagenes,
+    tenantId,
     unifiedBrands, // 👈 pasar o tomar del contexto
   }) => {
     setLoadingProductosFetch(true);
 
     try {
+      if (!userId) {
+        throw new Error(
+          "No hay usuario logueado (userId vacío). Recargá la página."
+        );
+      }
+
+      const { data: sesionDiag } = await supabase.auth.getSession();
+      console.log("[crearCustomProduct] userId enviado:", userId);
+      console.log(
+        "[crearCustomProduct] sesion.user.id:",
+        sesionDiag?.session?.user?.id ?? null
+      );
+
       /* ----------------------------------
        1️⃣ CREAR PRODUCTO CUSTOM BASE
+       Insert SIN .select(): PostgREST con return=representation
+       aplica la SELECT policy a la fila devuelta, y durante un
+       INSERT...RETURNING el subquery de custom_belongs_to_tenant
+       no ve la fila recién insertada (MVCC) → 42501 + rollback.
     ---------------------------------- */
-      const { data: customProd, error: err1 } = await supabase
+      const { error: err1 } = await supabase
         .from("user_custom_products")
         .insert([
           {
             user_id: userId,
-            name,
+            name: name.trim(),
             brand_id: brandId || null,
             brand_text: brandText || null,
             category_id: categoryId,
             subcategory_id: subcategoryId || null,
           },
-        ])
-        .select()
-        .single();
+        ]);
 
       if (err1) throw err1;
 
+      /* 1.1️⃣ Recuperar el custom recién creado (request aparte:
+         la fila ya está commiteada y la SELECT policy la ve). */
+      const { data: customRow, error: errFetch } = await supabase
+        .from("user_custom_products")
+        .select(
+          "id, name, brand_id, brand_text, category_id, subcategory_id, image_url"
+        )
+        .eq("user_id", userId)
+        .eq("name", name.trim())
+        .order("id", { ascending: false })
+        .limit(1);
+
+      if (errFetch) throw errFetch;
+
+      const customProd = customRow?.[0];
+      if (!customProd?.id) {
+        throw new Error("No se pudo recuperar el custom recién creado");
+      }
+      console.log("[crearCustomProduct] custom creado id:", customProd.id);
+
       /* ----------------------------------
-       2️⃣ CREAR PRODUCTO USUARIO
+        1.5️⃣ MOVER IMÁGENES PENDIENTES AL PRODUCTO
+    ---------------------------------- */
+      let imagenesFinales = [];
+      if (imagenes?.length && tenantId) {
+        const bucket = supabase.storage.from("product-images");
+        for (const path of imagenes) {
+          const fileName = path.split("/").pop();
+          const nuevoPath = `${tenantId}/${customProd.id}/${fileName}`;
+          const { error: errMove } = await bucket.move(path, nuevoPath);
+          if (!errMove) {
+            imagenesFinales.push(nuevoPath);
+          } else {
+            console.warn("No se pudo mover la imagen:", errMove.message);
+          }
+        }
+      }
+
+      /* ----------------------------------
+        1.6️⃣ GUARDAR LA PRINCIPAL EN LA FICHA COMPARTIDA
+        (user_custom_products.image_url) para que cualquier user
+        del negocio al que se asigne el custom vea la imagen.
+    ---------------------------------- */
+      if (imagenesFinales.length) {
+        console.log(
+          "[crearCustomProduct] UPDATE image_url del custom",
+          customProd.id
+        );
+        const { error: errImg } = await supabase
+          .from("user_custom_products")
+          .update({ image_url: imagenesFinales[0] })
+          .eq("id", customProd.id);
+
+        if (errImg) {
+          console.warn(
+            "No se pudo guardar la imagen de la ficha del custom:",
+            errImg.message
+          );
+        } else {
+          customProd.image_url = imagenesFinales[0];
+        }
+      }
+
+      /* ----------------------------------
+        2️⃣ CREAR PRODUCTO USUARIO
     ---------------------------------- */
       const { data: newProduct, error: err2 } = await supabase
         .from("user_products")
@@ -212,6 +331,9 @@ export const useProducts = (
             proveedor_nombre: proveedor || null,
             stock: Number(stock),
             active: true,
+            ...(imagenesFinales.length
+              ? { imagenes: imagenesFinales }
+              : {}),
           },
         ])
         .select()
@@ -232,6 +354,7 @@ export const useProducts = (
     ---------------------------------- */
       const productFull = {
         ...newProduct,
+        imagenes: imagenesFinales.length ? imagenesFinales : [],
         tipo: "custom",
         products_base: {
           name: customProd.name,
@@ -254,6 +377,12 @@ export const useProducts = (
       return productFull;
     } catch (error) {
       console.error("Error creando producto:", error.message);
+      console.error(
+        "[crearCustomProduct] code:",
+        error.code,
+        "| details:",
+        error.details
+      );
       setError(error.message);
       throw error;
     } finally {
@@ -351,6 +480,9 @@ export const useProducts = (
   const eliminarProducto = async (id) => {
     setLoadingFor(id, true);
     try {
+      const aEliminar = products.find((p) => p.id === id);
+      const imagenesAEliminar = aEliminar?.imagenes || [];
+
       const { error } = await supabase
         .from("user_products")
         .delete()
@@ -379,6 +511,20 @@ export const useProducts = (
         }
 
         throw error;
+      }
+
+      if (imagenesAEliminar.length > 0) {
+        const { error: errStorage } = await supabase
+          .storage
+          .from("product-images")
+          .remove(imagenesAEliminar);
+
+        if (errStorage) {
+          console.warn(
+            "No se pudieron limpiar las imágenes del storage:",
+            errStorage.message
+          );
+        }
       }
 
       setProducts((prev) => prev.filter((p) => p.id !== id));

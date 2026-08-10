@@ -9,7 +9,7 @@ export function Productos() {
   const dark = preferencias?.theme === "dark";
 
   return (
-    <div className={`p-1 min-h-screen transition-colors ${dark ? "bg-gray-900" : "bg-gray-50"}`}>
+    <div className={`p-0.5 md:p-1 min-h-screen transition-colors ${dark ? "bg-gray-900" : "bg-gray-50"}`}>
       <div className="sm:flex flex-wrap gap-4">
         {/* Lista de productos ocupa el espacio disponible */}
         <div className="flex-1 transition-colors">

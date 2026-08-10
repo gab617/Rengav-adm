@@ -1,19 +1,23 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { supabase } from "../../../services/supabaseClient";
 import { useAppContext } from "../../../contexto/Context";
 import { useAdminData } from "../../../hooks/useAdminData";
+import { AssignCustomProducts } from "./AssignCustomProducts";
+import { EditPorSucursales } from "./EditPorSucursales";
 
 export function AssignProducts() {
-  const { preferencias } = useAppContext();
+  const { preferencias, profile } = useAppContext();
   const dark = preferencias?.theme === "dark";
+  const esSuperAdmin = profile?.role === "super_admin";
   const { 
     users: cachedUsers, 
     productsBase: cachedProducts, 
-    systemCategories: cachedSystemCats,
+    systemCategories: cachedSystemCats, 
     productCounts: cachedCounts,
     isLoaded,
     loadInitialData,
-    invalidateUserProducts
+    invalidateUserProducts,
+    updateUserCount
   } = useAdminData();
 
   const [users, setUsers] = useState(cachedUsers);
@@ -35,17 +39,34 @@ export function AssignProducts() {
   const [asignando, setAsignando] = useState(false);
   const [eliminando, setEliminando] = useState(false);
   const [activeTab, setActiveTab] = useState("asignar");
+  const [mode, setMode] = useState("base");
   const [notification, setNotification] = useState(null);
   const [showBrandFilter, setShowBrandFilter] = useState(false);
   const [showCategoryFilter, setShowCategoryFilter] = useState(false);
   const [showSubcategoryFilter, setShowSubcategoryFilter] = useState(false);
   const [filtroPeso, setFiltroPeso] = useState(false);
   const [userCategories, setUserCategories] = useState([]);
+  const [editDataBase, setEditDataBase] = useState({});
+  const [tenants, setTenants] = useState([]);
 
   const showNotification = (msg, type = "success") => {
     setNotification({ msg, type });
     setTimeout(() => setNotification(null), 2500);
   };
+
+  const publicUrl = (path) => {
+    if (!path) return null;
+    if (path.startsWith("http")) return path;
+    return supabase.storage.from("product-images").getPublicUrl(path).data.publicUrl;
+  };
+
+  const handleCustomCountChange = useCallback((userId, count) => {
+    setUserProductCounts((prev) => {
+      if (prev[userId] === count) return prev;
+      return { ...prev, [userId]: count };
+    });
+    updateUserCount(userId, count);
+  }, [updateUserCount]);
 
   useEffect(() => {
     async function load() {
@@ -84,6 +105,113 @@ export function AssignProducts() {
     }
   }, [cachedUsers, isLoaded]);
 
+  // Cargar tenants para agrupar (superadmin)
+  useEffect(() => {
+    if (!esSuperAdmin) return;
+    supabase
+      .from("tenants")
+      .select("id, name")
+      .order("id", { ascending: false })
+      .then(({ data }) => setTenants(data || []))
+      .catch(() => {});
+  }, [esSuperAdmin]);
+
+  const tenantsMap = useMemo(() => {
+    const m = {};
+    tenants.forEach((t) => {
+      m[t.id] = t.name;
+    });
+    return m;
+  }, [tenants]);
+
+  const rolPriority = (role) => {
+    if (role === "super_admin") return 0;
+    if (role === "admin") return 1;
+    return 2;
+  };
+
+  const usuariosAgrupados = useMemo(() => {
+    if (!esSuperAdmin) return null;
+    const groups = new Map();
+    users.forEach((u) => {
+      const tId = u.tenant_id;
+      const tName = tId ? tenantsMap[tId] || "Negocio desconocido" : "Sin negocio";
+      if (!groups.has(tName)) groups.set(tName, []);
+      groups.get(tName).push(u);
+    });
+    return [...groups.entries()]
+      .map(([name, list]) => ({
+        name,
+        users: list.sort(
+          (a, b) =>
+            rolPriority(a.role) - rolPriority(b.role) ||
+            a.name.localeCompare(b.name)
+        ),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [esSuperAdmin, users, tenantsMap]);
+
+  const usuariosOrdenados = useMemo(() => {
+    if (esSuperAdmin) return users;
+    return [...users].sort(
+      (a, b) =>
+        rolPriority(a.role) - rolPriority(b.role) ||
+        a.name.localeCompare(b.name)
+    );
+  }, [esSuperAdmin, users]);
+
+  const rolInfo = (role) => {
+    if (role === "super_admin")
+      return { cls: "bg-purple-500/20 text-purple-500", label: "Super Admin", short: "SA", nameCls: "text-purple-500" };
+    if (role === "admin")
+      return { cls: "bg-red-500/20 text-red-500", label: "Admin", short: "AD", nameCls: "text-red-500" };
+    return { cls: "bg-blue-500/20 text-blue-500", label: "Usuario", short: "US", nameCls: "text-blue-500" };
+  };
+
+  const renderUsuarioItem = (user) => {
+    const isSelected = selectedUser?.id === user.id;
+    const count = userProductCounts[user.id] || 0;
+    const ri = rolInfo(user.role);
+    return (
+      <button
+        key={user.id}
+        onClick={() => {
+          setSelectedUser(user);
+          setActiveTab("asignar");
+          setSearch("");
+        }}
+        className={`w-full p-1.5 md:p-2 rounded-xl border text-left transition-all ${
+          isSelected
+            ? "border-blue-500 bg-blue-500/10 ring-2 ring-blue-500"
+            : `${baseCard} hover:border-blue-400`
+        }`}
+      >
+        <div className="flex justify-between items-center gap-1">
+          <span className={`font-medium truncate text-sm ${ri.nameCls}`}>
+            {user.name}
+          </span>
+          <span
+            className={`text-[10px] px-1 py-0.5 rounded-full shrink-0 ${ri.cls}`}
+            title={ri.label}
+          >
+            {ri.short}
+          </span>
+          <span
+            className={`text-xs px-1.5 py-0.5 rounded-full shrink-0 ${
+              count > 0
+                ? "bg-green-500/20 text-green-500"
+                : dark
+                ? "bg-gray-700 text-gray-400"
+                : "bg-gray-100 text-gray-500"
+            }`}
+          >
+            {count}
+          </span>
+        </div>
+      </button>
+    );
+  };
+
   const loadAssignedProducts = async () => {
     if (!selectedUser) {
       setUserProducts(new Set());
@@ -97,7 +225,7 @@ export function AssignProducts() {
 
     const { data } = await supabase
       .from("user_products")
-      .select("base_id, precio_venta, active, id")
+      .select("base_id, precio_venta, precio_compra, stock, descripcion, active, id")
       .eq("user_id", currentUserId);
 
     if (selectedUser?.id !== currentUserId) return;
@@ -113,6 +241,9 @@ const ids = new Set();
       productData.push({ 
         base_id: baseIdStr, 
         precio_venta: up.precio_venta,
+        precio_compra: up.precio_compra,
+        stock: up.stock,
+        descripcion: up.descripcion,
         active: up.active !== false,
         id: up.id
       });
@@ -179,6 +310,9 @@ const ids = new Set();
       productData.push({ 
         base_id: baseIdStr, 
         precio_venta: up.precio_venta,
+        precio_compra: up.precio_compra,
+        stock: up.stock,
+        descripcion: up.descripcion,
         active: up.active !== false,
         id: up.id
       });
@@ -191,6 +325,52 @@ const ids = new Set();
       [currentUserId]: newProducts?.length || 0,
     }));
   };
+
+  // Edición de datos de productos base asignados (precios/stock/descripción)
+  useEffect(() => {
+    const next = {};
+    assignedProductsData.forEach((ap) => {
+      next[ap.id] = {
+        precio_venta: ap.precio_venta ?? 0,
+        precio_compra: ap.precio_compra ?? 0,
+        stock: ap.stock ?? 0,
+        descripcion: ap.descripcion ?? "",
+      };
+    });
+    setEditDataBase(next);
+  }, [assignedProductsData]);
+
+  const updateEditFieldBase = (upId, field, value) => {
+    setEditDataBase((prev) => ({
+      ...prev,
+      [upId]: { ...prev[upId], [field]: value },
+    }));
+  };
+
+  async function handleSaveEditBase(upId) {
+    const data = editDataBase[upId];
+    if (!data) return;
+
+    try {
+      const { error } = await supabase
+        .from("user_products")
+        .update({
+          precio_venta: Number(data.precio_venta) || 0,
+          precio_compra: Number(data.precio_compra) || 0,
+          stock: Number(data.stock) || 0,
+          descripcion: data.descripcion || null,
+        })
+        .eq("id", upId);
+
+      if (error) throw error;
+
+      showNotification("Producto actualizado", "success");
+      await reloadUserProducts();
+    } catch (err) {
+      console.error("Error actualizando producto:", err);
+      showNotification("Error al actualizar el producto", "error");
+    }
+  }
 
   const uniqueBrands = useMemo(() => {
     const brands = {};
@@ -293,6 +473,7 @@ const ids = new Set();
         ...ap,
         name: baseProduct?.name || "Producto desconocido",
         brand: baseProduct?.brands?.name || "Sin marca",
+        image_url: baseProduct?.image_url || null,
       });
     }
 
@@ -579,54 +760,82 @@ const ids = new Set();
       </div>
 
       <div className="flex flex-col lg:flex-row">
-        <div className={`lg:w-72 w-full p-2 md:p-4 lg:border-r ${dark ? "border-gray-800 bg-gray-900" : "border-gray-200 bg-white"} border-b lg:border-b-0 max-h-48 lg:max-h-none overflow-y-auto`}>
-          <h2 className={`font-semibold mb-3 ${textPrimary}`}>👥 Usuarios</h2>
+        <div className={`lg:w-56 w-full p-2 lg:p-3 lg:border-r ${dark ? "border-gray-800 bg-gray-900" : "border-gray-200 bg-white"} border-b lg:border-b-0 max-h-48 lg:max-h-none overflow-y-auto`}>
+          <h2 className={`font-semibold mb-2 ${textPrimary}`}>👥 Usuarios</h2>
 
-          <div className="space-y-2 max-h-32 lg:max-h-96 overflow-y-auto">
-            {users.map((user) => {
-              const isSelected = selectedUser?.id === user.id;
-              const count = userProductCounts[user.id] || 0;
+          <div className="flex gap-2 mb-3">
+            <button
+              onClick={() => setMode("base")}
+              className={`flex-1 py-2 px-2 rounded-lg text-xs md:text-sm font-medium transition-all ${
+                mode === "base"
+                  ? "bg-blue-500 text-white shadow"
+                  : `${baseCard} ${textSecondary} hover:${textPrimary}`
+              }`}
+            >
+              📦 Base
+            </button>
+            <button
+              onClick={() => setMode("custom")}
+              className={`flex-1 py-2 px-2 rounded-lg text-xs md:text-sm font-medium transition-all ${
+                mode === "custom"
+                  ? "bg-purple-500 text-white shadow"
+                  : `${baseCard} ${textSecondary} hover:${textPrimary}`
+              }`}
+            >
+              ⭐ Custom
+            </button>
+            <button
+              onClick={() => setMode("sucursales")}
+              className={`flex-1 py-2 px-2 rounded-lg text-xs md:text-sm font-medium transition-all ${
+                mode === "sucursales"
+                  ? "bg-teal-500 text-white shadow"
+                  : `${baseCard} ${textSecondary} hover:${textPrimary}`
+              }`}
+            >
+              🌐 Sucursales
+            </button>
+          </div>
 
-              return (
-                <button
-                  key={user.id}
-                  onClick={() => {
-                    setSelectedUser(user);
-                    setActiveTab("asignar");
-                    setSearch("");
-                  }}
-                  className={`w-full p-2 md:p-3 rounded-xl border text-left transition-all ${
-                    isSelected
-                      ? "border-blue-500 bg-blue-500/10 ring-2 ring-blue-500"
-                      : `${baseCard} hover:border-blue-400`
-                  }`}
-                >
-                  <div className="flex justify-between items-center">
-                    <span className={`font-medium truncate text-sm ${textPrimary}`}>{user.name}</span>
-                    <span
-                      className={`text-xs px-1.5 md:px-2 py-0.5 md:py-1 rounded-full shrink-0 ${
-                        count > 0
-                          ? "bg-green-500/20 text-green-500"
-                          : dark
-                          ? "bg-gray-700 text-gray-400"
-                          : "bg-gray-100 text-gray-500"
-                      }`}
-                    >
-                      {count}
-                    </span>
+          <div className="max-h-32 lg:max-h-[calc(100vh-280px)] overflow-y-auto">
+            {esSuperAdmin && usuariosAgrupados ? (
+              <div className="space-y-2">
+                {usuariosAgrupados.map((grupo) => (
+                  <div key={grupo.name}>
+                    <p className={`text-[10px] font-semibold uppercase tracking-wide px-1 mb-1 ${textSecondary}`}>
+                      {grupo.name}
+                      <span className="ml-1 normal-case font-normal">
+                        ({grupo.users.length})
+                      </span>
+                    </p>
+                    <div className="space-y-1.5">
+                      {grupo.users.map((user) => renderUsuarioItem(user))}
+                    </div>
                   </div>
-                </button>
-              );
-            })}
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                {usuariosOrdenados.map((user) => renderUsuarioItem(user))}
+              </div>
+            )}
           </div>
         </div>
 
-        <div className="flex-1 p-2 md:p-4 pb-20 lg:pb-4">
-          {!selectedUser ? (
+        <div className="flex-1 min-w-0 p-2 md:p-4 pb-20 lg:pb-4">
+          {mode === "sucursales" ? (
+            <EditPorSucursales dark={dark} />
+          ) : !selectedUser ? (
             <div className={`flex flex-col items-center justify-center h-48 lg:h-64 ${textSecondary}`}>
               <div className="text-4xl md:text-6xl mb-3 md:mb-4">👆</div>
               <p className="text-sm md:text-base">Selecciona un usuario</p>
             </div>
+          ) : mode === "custom" ? (
+            <AssignCustomProducts
+              key={selectedUser.id}
+              selectedUser={selectedUser}
+              dark={dark}
+              onCountChange={handleCustomCountChange}
+            />
           ) : (
             <>
               <div className={`flex gap-1 md:gap-2 mb-3 md:mb-4 p-1 rounded-xl ${dark ? "bg-gray-800" : "bg-gray-100"}`}>
@@ -1041,6 +1250,21 @@ const ids = new Set();
                                     <span className="text-white text-xs">✓</span>
                                   </div>
                                 )}
+                                {prod.image_url ? (
+                                  <img
+                                    src={publicUrl(prod.image_url)}
+                                    alt={prod.name}
+                                    onError={(e) => { e.currentTarget.style.display = "none"; }}
+                                    className="w-10 h-10 rounded-lg object-cover border flex-shrink-0"
+                                    style={{ borderColor: dark ? "#4b5563" : "#e5e7eb" }}
+                                  />
+                                ) : (
+                                  <div
+                                    className={`w-10 h-10 rounded-lg border flex-shrink-0 flex items-center justify-center text-lg ${dark ? "bg-gray-700 border-gray-600" : "bg-gray-100 border-gray-200"}`}
+                                  >
+                                    📦
+                                  </div>
+                                )}
                                 <div className="flex-1 min-w-0">
                                   {/* Primera línea: nombre + badges */}
                                   <div className="flex flex-wrap items-center gap-1">
@@ -1212,28 +1436,119 @@ const ids = new Set();
                           </h3>
                           {productosActivos.map((prod) => {
                             const isSelected = selectedToDelete.has(prod.base_id);
+                            const upId = prod.id;
+                            const ed = editDataBase[upId] || {};
+                            const compra = Number(ed.precio_compra) || 0;
+                            const venta = Number(ed.precio_venta) || 0;
+                            const compraMayorVenta = compra > 0 && venta > 0 && compra > venta;
                             return (
                               <div
                                 key={prod.base_id}
                                 onClick={() => toggleProductToDelete(prod.base_id)}
-                                className={`p-4 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${
+                                className={`p-4 rounded-xl border cursor-pointer transition-all ${
                                   isSelected ? "border-red-500 bg-red-500/10 ring-2 ring-red-500" : `${baseCard} hover:border-red-400`
                                 }`}
                               >
-                                <div className="flex items-center gap-3">
-                                  <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
-                                    isSelected ? "border-red-500 bg-red-500" : "border-gray-400"
-                                  }`}>
-                                    {isSelected && <span className="text-white text-xs">✓</span>}
+                                <div className="flex items-center justify-between gap-3">
+                                  <div className="flex items-center gap-3 min-w-0">
+                                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
+                                      isSelected ? "border-red-500 bg-red-500" : "border-gray-400"
+                                    }`}>
+                                      {isSelected && <span className="text-white text-xs">✓</span>}
+                                    </div>
+                                    {prod.image_url ? (
+                                      <img
+                                        src={publicUrl(prod.image_url)}
+                                        alt={prod.name}
+                                        onError={(e) => { e.currentTarget.style.display = "none"; }}
+                                        className="w-10 h-10 rounded-lg object-cover border flex-shrink-0"
+                                        style={{ borderColor: dark ? "#4b5563" : "#e5e7eb" }}
+                                      />
+                                    ) : (
+                                      <div
+                                        className={`w-10 h-10 rounded-lg border flex-shrink-0 flex items-center justify-center text-lg ${dark ? "bg-gray-700 border-gray-600" : "bg-gray-100 border-gray-200"}`}
+                                      >
+                                        📦
+                                      </div>
+                                    )}
+                                    <div className="min-w-0">
+                                      <p className={`font-medium truncate ${textPrimary}`}>{prod.name}</p>
+                                      <p className={`text-xs ${textSecondary}`}>{prod.brand}</p>
+                                    </div>
                                   </div>
-                                  <div>
-                                    <p className={`font-medium ${textPrimary}`}>{prod.name}</p>
-                                    <p className={`text-xs ${textSecondary}`}>{prod.brand}</p>
+                                  <div className="text-right shrink-0">
+                                    <p className={`font-bold ${textPrimary}`}>${prod.precio_venta}</p>
+                                    <p className={`text-xs ${textSecondary}`}>ID: {prod.base_id}</p>
                                   </div>
                                 </div>
-                                <div className="text-right">
-                                  <p className={`font-bold ${textPrimary}`}>${prod.precio_venta}</p>
-                                  <p className={`text-xs ${textSecondary}`}>ID: {prod.base_id}</p>
+
+                                <div
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="mt-3 pt-3 border-t border-gray-600/20 grid grid-cols-2 md:grid-cols-4 gap-2"
+                                >
+                                  <div>
+                                    <label className={`block text-[10px] mb-0.5 ${textSecondary}`}>Compra</label>
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      value={ed?.precio_compra ?? ""}
+                                      onChange={(e) => updateEditFieldBase(upId, "precio_compra", e.target.value)}
+                                      className={`w-full p-1.5 rounded border text-xs text-right ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className={`block text-[10px] mb-0.5 ${textSecondary}`}>Venta</label>
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      value={ed?.precio_venta ?? ""}
+                                      onChange={(e) => updateEditFieldBase(upId, "precio_venta", e.target.value)}
+                                      className={`w-full p-1.5 rounded border text-xs text-right ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className={`block text-[10px] mb-0.5 ${textSecondary}`}>Stock</label>
+                                    <input
+                                      type="number"
+                                      value={ed?.stock ?? ""}
+                                      onChange={(e) => updateEditFieldBase(upId, "stock", e.target.value)}
+                                      className={`w-full p-1.5 rounded border text-xs text-right ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
+                                    />
+                                  </div>
+                                  <div className="col-span-2 md:col-span-4">
+                                    <label className={`block text-[10px] mb-0.5 ${textSecondary}`}>Descripción</label>
+                                    <input
+                                      type="text"
+                                      value={ed?.descripcion ?? ""}
+                                      onChange={(e) => updateEditFieldBase(upId, "descripcion", e.target.value)}
+                                      placeholder="Descripción del producto"
+                                      className={`w-full p-1.5 rounded border text-xs ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
+                                    />
+                                  </div>
+                                </div>
+
+                                {compraMayorVenta && (
+                                  <div
+                                    className={`mt-2 px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2 ${
+                                      dark
+                                        ? "bg-red-500/20 text-red-400"
+                                        : "bg-red-50 text-red-600"
+                                    }`}
+                                  >
+                                    ⚠️ El precio de compra (${compra}) es mayor que el de venta (${venta})
+                                  </div>
+                                )}
+
+                                <div
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="mt-2 flex justify-end"
+                                >
+                                  <button
+                                    onClick={() => handleSaveEditBase(upId)}
+                                    className="px-4 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-500 transition-colors"
+                                  >
+                                    💾 Guardar
+                                  </button>
                                 </div>
                               </div>
                             );
@@ -1255,6 +1570,21 @@ const ids = new Set();
                                 <div className="w-6 h-6 rounded-full bg-red-500 flex items-center justify-center opacity-50">
                                   <span className="text-white text-xs">✗</span>
                                 </div>
+                                {prod.image_url ? (
+                                  <img
+                                    src={publicUrl(prod.image_url)}
+                                    alt={prod.name}
+                                    onError={(e) => { e.currentTarget.style.display = "none"; }}
+                                    className="w-10 h-10 rounded-lg object-cover border flex-shrink-0 opacity-60"
+                                    style={{ borderColor: dark ? "#4b5563" : "#e5e7eb" }}
+                                  />
+                                ) : (
+                                  <div
+                                    className={`w-10 h-10 rounded-lg border flex-shrink-0 flex items-center justify-center text-lg opacity-60 ${dark ? "bg-gray-700 border-gray-600" : "bg-gray-100 border-gray-200"}`}
+                                  >
+                                    📦
+                                  </div>
+                                )}
                                 <div>
                                   <p className={`font-medium line-through opacity-60 ${textPrimary}`}>{prod.name}</p>
                                   <p className={`text-xs opacity-60 ${textSecondary}`}>{prod.brand}</p>

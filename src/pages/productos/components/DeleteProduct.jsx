@@ -1,6 +1,6 @@
 import React from "react";
 
-export function DeleteProduct({ handleDelete, setShowConfirmDelete }) {
+export function DeleteProduct({ handleDelete, setShowConfirmDelete, imagenesCount = 0 }) {
   return (
     <div
       className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm"
@@ -18,6 +18,11 @@ export function DeleteProduct({ handleDelete, setShowConfirmDelete }) {
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             Esta acción no se puede deshacer
           </p>
+          {imagenesCount > 0 && (
+            <p className="text-sm text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/30 rounded-lg px-2 py-1.5 mt-2">
+              Se eliminarán también {imagenesCount} imagen(es) del producto. Irreversible.
+            </p>
+          )}
         </div>
 
         <div className="flex gap-2">

@@ -7,7 +7,7 @@ import { ToastContainer } from "react-toastify";
 export function CarritoDrawer() {
   const [open, setOpen] = useState(false);
   const [mostrarMiniResumen, setMostrarMiniResumen] = useState(false);
-  const { preferencias, carrito, calcularTotal } = useAppContext();
+  const { preferencias, carrito, calcularTotal, limpiarCarrito } = useAppContext();
   const dark = preferencias?.theme === "dark";
   const drawerRef = useRef(null);
   const overlayRef = useRef(null);
@@ -124,13 +124,13 @@ export function CarritoDrawer() {
     <>
       {/* MINI RESUMEN FLOTANTE - Solo mobile, cuando hay productos */}
       {mostrarMiniResumen && !open && (
-        <button
+        <div
           onClick={() => setOpen(true)}
           className={`
             lg:hidden
             fixed bottom-[1rem] left-[70%] -translate-x-1/2 z-30
-            px-[2.5em] py-3 rounded-full shadow-2xl
-            flex items-center gap-3
+            pl-4 pr-2 py-2.5 rounded-full shadow-2xl
+            flex items-center gap-3 cursor-pointer
             animate-bounce-subtle
             transition-all duration-300
             hover:scale-105 active:scale-95
@@ -141,12 +141,22 @@ export function CarritoDrawer() {
           `}
         >
           <img src="./cart.png" alt="carrito" className="w-6 h-6" />
-          <span className="font-bold">
+          <span className="font-bold whitespace-nowrap">
             {carrito.length} {carrito.length === 1 ? "producto" : "productos"}
           </span>
           <span className="opacity-75">|</span>
-          <span className="font-bold">${totalFormateado}</span>
-        </button>
+          <span className="font-bold whitespace-nowrap">${totalFormateado}</span>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              limpiarCarrito();
+            }}
+            title="Vaciar carrito"
+            className="w-8 h-8 rounded-full bg-red-600 hover:bg-red-500 text-white text-sm font-bold shadow-lg flex items-center justify-center shrink-0 active:scale-90 transition-transform"
+          >
+            ✕
+          </button>
+        </div>
       )}
 
       {/* OVERLAY */}

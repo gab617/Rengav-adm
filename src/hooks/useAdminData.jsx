@@ -43,7 +43,7 @@ export function AdminDataProvider({ children }) {
         : supabase.from("profiles").select("id, name, role, created_at, tenant_id, parent_admin_id").order("created_at", { ascending: false }),
       supabase
         .from("products_base")
-        .select("id, name, brand_id, category_id, subcategory_id, type_unit, brands(name), categories(name), subcategories(name)")
+        .select("id, name, brand_id, category_id, subcategory_id, type_unit, image_url, brands(name), categories(name), subcategories(name)")
         .order("name"),
       userIds && userIds.length > 0
         ? supabase.from("user_products").select("user_id").in("user_id", userIds)
@@ -101,7 +101,7 @@ export function AdminDataProvider({ children }) {
   const invalidateProductsBase = useCallback(async () => {
     const { data } = await supabase
       .from("products_base")
-      .select("id, name, brand_id, category_id, subcategory_id, type_unit, brands(name), categories(name), subcategories(name)")
+      .select("id, name, brand_id, category_id, subcategory_id, type_unit, image_url, brands(name), categories(name), subcategories(name)")
       .order("name");
     setProductsBase(data || []);
   }, []);
@@ -109,7 +109,7 @@ export function AdminDataProvider({ children }) {
   const invalidateUserProducts = useCallback(async (userId) => {
     const [countsRes, userProductsRes] = await Promise.all([
       supabase.from("user_products").select("user_id"),
-      supabase.from("user_products").select("base_id, precio_venta, active, id").eq("user_id", userId),
+      supabase.from("user_products").select("base_id, precio_venta, precio_compra, stock, descripcion, active, id").eq("user_id", userId),
     ]);
 
     const counts = {};
@@ -122,7 +122,10 @@ export function AdminDataProvider({ children }) {
   }, []);
 
   const updateUserCount = useCallback((userId, count) => {
-    setProductCounts((prev) => ({ ...prev, [userId]: count }));
+    setProductCounts((prev) => {
+      if (prev[userId] === count) return prev;
+      return { ...prev, [userId]: count };
+    });
   }, []);
 
   const addUserOptimistic = useCallback((newUser) => {

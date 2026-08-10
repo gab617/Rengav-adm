@@ -927,6 +927,9 @@ export function Users() {
   const [createSuccess, setCreateSuccess] = useState("");
   const [tenants, setTenants] = useState([]);
   const [selectedTenantId, setSelectedTenantId] = useState(profile?.tenant_id || "");
+  const [roleFilter, setRoleFilter] = useState("");
+  const [tenantFilter, setTenantFilter] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
 
   const isSuperAdmin = profile?.role === "super_admin";
 
@@ -1015,6 +1018,7 @@ export function Users() {
         id: newUserId,
         name: newUser.name,
         role: newUser.role,
+        tenant_id: targetTenantId,
         created_at: new Date().toISOString()
       };
       addUserOptimistic(newUserData);
@@ -1037,10 +1041,68 @@ export function Users() {
     }
   };
 
-  const filteredUsers = users.filter(u =>
-    u.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    u.role?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const hasActiveFilters = searchTerm || roleFilter || tenantFilter || categoryFilter;
+
+  const clearFilters = () => {
+    setSearchTerm("");
+    setRoleFilter("");
+    setTenantFilter("");
+    setCategoryFilter("");
+  };
+
+  const filteredUsers = users
+    .filter(u => {
+      if (searchTerm) {
+        const q = searchTerm.toLowerCase();
+        if (!u.name?.toLowerCase().includes(q) && !u.role?.toLowerCase().includes(q)) return false;
+      }
+      if (roleFilter && u.role !== roleFilter) return false;
+      if (tenantFilter === "sin_tenant") {
+        if (u.tenant_id != null) return false;
+      } else if (tenantFilter && String(u.tenant_id) !== tenantFilter) {
+        return false;
+      }
+      if (categoryFilter === "with" && !(userCategoriesMap[u.id]?.length > 0)) return false;
+      if (categoryFilter === "without" && (userCategoriesMap[u.id]?.length > 0)) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      const order = { super_admin: 0, admin: 1, user: 2 };
+      const ra = order[a.role] ?? 3;
+      const rb = order[b.role] ?? 3;
+      if (ra !== rb) return ra - rb;
+      return (a.name || "").localeCompare(b.name || "");
+    });
+
+  // Agrupa los usuarios por tenant (solo para super_admin)
+  const tenantGroups = useMemo(() => {
+    if (!isSuperAdmin) return [];
+
+    const groupsMap = {};
+    filteredUsers.forEach(u => {
+      const key = u.tenant_id ?? "sin_tenant";
+      if (!groupsMap[key]) groupsMap[key] = [];
+      groupsMap[key].push(u);
+    });
+
+    const groups = Object.entries(groupsMap).map(([tenantId, users]) => ({
+      tenantId,
+      name: tenantId === "sin_tenant"
+        ? "Sin negocio"
+        : (tenantsMap[tenantId] || `Negocio ${tenantId}`),
+      users,
+      usersCount: users.length,
+      admins: users.filter(u => u.role === "admin").length,
+    }));
+
+    groups.sort((a, b) => {
+      if (a.tenantId === "sin_tenant") return 1;
+      if (b.tenantId === "sin_tenant") return -1;
+      return a.name.localeCompare(b.name);
+    });
+
+    return groups;
+  }, [filteredUsers, isSuperAdmin, tenantsMap]);
 
   if (!profile || (profile.role !== "admin" && profile.role !== "super_admin")) {
     return (
@@ -1058,6 +1120,72 @@ export function Users() {
     );
   }
 
+  const renderUserCard = (u) => (
+    <div key={u.id} className={`rounded-xl border ${bgCard} overflow-hidden`}>
+      {/* USER ROW */}
+      <div
+        className="p-3 md:p-4 flex items-center justify-between cursor-pointer hover:bg-opacity-50 transition"
+        onClick={() => setExpandedUser(expandedUser === u.id ? null : u.id)}
+      >
+        <div className="flex items-center gap-3">
+          <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${
+            u.role === "admin"
+              ? "bg-red-500/20 text-red-500"
+              : "bg-blue-500/20 text-blue-500"
+          }`}>
+            {u.name?.charAt(0)?.toUpperCase() || "?"}
+          </div>
+          <div>
+            <p className={`font-medium ${textPrimary}`}>{u.name}</p>
+            <p className={`text-xs ${textSecondary}`}>
+              {shortId(u.id)} · {new Date(u.created_at).toLocaleDateString("es-AR")}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+            u.role === "admin"
+              ? "bg-red-500/20 text-red-400"
+              : "bg-blue-500/20 text-blue-400"
+          }`}>
+            {u.role}
+          </span>
+          {isSuperAdmin && tenantsMap[u.tenant_id] && (
+            <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-500/20 text-gray-400">
+              {tenantsMap[u.tenant_id]}
+            </span>
+          )}
+          {userCategoriesMap[u.id]?.length > 0 && (
+            <div className="flex gap-1">
+              {userCategoriesMap[u.id].slice(0, 2).map(catId => {
+                const cat = systemCategories.find(c => c.id === catId);
+                return cat ? (
+                  <span key={catId} className="px-1.5 py-0.5 rounded text-xs bg-purple-500/20 text-purple-400">
+                    {cat.name}
+                  </span>
+                ) : null;
+              })}
+              {userCategoriesMap[u.id].length > 2 && (
+                <span className={`text-xs ${textSecondary}`}>+{userCategoriesMap[u.id].length - 2}</span>
+              )}
+            </div>
+          )}
+          <span className={`text-2xl ${textSecondary} transition-transform ${expandedUser === u.id ? "rotate-180" : ""}`}>
+            ▼
+          </span>
+        </div>
+      </div>
+
+      {/* EXPANDED DETAIL */}
+      {expandedUser === u.id && (
+        <div className={`border-t ${dark ? "border-gray-700" : "border-gray-200"}`}>
+          <UserExpandedDetail key={u.id} user={u} onClose={() => setExpandedUser(null)} invalidateUserCategories={invalidateUserCategories} />
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className={`p-1 sm:p-2 md:p-4 space-y-2 sm:space-y-4 ${dark ? "bg-gray-900" : "bg-gray-50"} min-h-screen pb-20 md:pb-0`}>
       {/* HEADER */}
@@ -1066,9 +1194,6 @@ export function Users() {
           🏪 Negocios / Usuarios
         </h1>
         <div className="flex items-center gap-2">
-          <span className={`text-xs md:text-sm ${textSecondary}`}>
-            {users.length} negocios
-          </span>
           <button
             onClick={() => setShowAddForm(!showAddForm)}
             className={`px-3 py-1.5 rounded-lg font-medium text-sm transition-all flex items-center gap-1 ${
@@ -1081,6 +1206,26 @@ export function Users() {
           </button>
         </div>
       </div>
+
+      {/* STATS RESUMEN (solo super admin) */}
+      {isSuperAdmin && (
+        <div className="grid grid-cols-3 gap-2">
+          <div className={`p-2.5 rounded-xl border ${bgCard} text-center`}>
+            <p className="text-xl font-bold text-blue-500">{tenantGroups.length}</p>
+            <p className={`text-[11px] ${textSecondary}`}>Negocios</p>
+          </div>
+          <div className={`p-2.5 rounded-xl border ${bgCard} text-center`}>
+            <p className={`text-xl font-bold ${textPrimary}`}>{users.length}</p>
+            <p className={`text-[11px] ${textSecondary}`}>Usuarios</p>
+          </div>
+          <div className={`p-2.5 rounded-xl border ${bgCard} text-center`}>
+            <p className="text-xl font-bold text-red-500">
+              {users.filter(u => u.role === "admin").length}
+            </p>
+            <p className={`text-[11px] ${textSecondary}`}>Admins</p>
+          </div>
+        </div>
+      )}
 
       {/* ADD USER FORM */}
       {showAddForm && (
@@ -1201,88 +1346,105 @@ export function Users() {
         </form>
       )}
 
-      {/* SEARCH */}
-      <input
-        type="text"
-        placeholder="Buscar usuario..."
-        value={searchTerm}
-        onChange={(e) => setSearchTerm(e.target.value)}
-        className={`w-full p-2.5 md:p-3 rounded-xl border ${dark ? "bg-gray-800 border-gray-700 text-white" : "bg-white border-gray-200"} ${textPrimary}`}
-      />
+      {/* FILTROS */}
+      <div className={`p-2.5 md:p-3 rounded-xl border ${bgCard} space-y-2`}>
+        <div className="flex flex-wrap gap-2 items-center">
+          <input
+            type="text"
+            placeholder="Buscar por nombre o rol..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className={`flex-1 min-w-[160px] px-3 py-2 rounded-lg border text-sm ${dark ? "bg-gray-800 border-gray-700 text-white" : "bg-white border-gray-200"} ${textPrimary}`}
+          />
+          <select
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value)}
+            className={`px-2.5 py-2 rounded-lg border text-sm ${dark ? "bg-gray-800 border-gray-700 text-white" : "bg-white border-gray-300"}`}
+          >
+            <option value="">Rol: todos</option>
+            <option value="super_admin">Super admin</option>
+            <option value="admin">Admin</option>
+            <option value="user">Negocio</option>
+          </select>
+          {isSuperAdmin && (
+            <select
+              value={tenantFilter}
+              onChange={(e) => setTenantFilter(e.target.value)}
+              className={`px-2.5 py-2 rounded-lg border text-sm ${dark ? "bg-gray-800 border-gray-700 text-white" : "bg-white border-gray-300"}`}
+            >
+              <option value="">Negocio: todos</option>
+              <option value="sin_tenant">🚫 Sin negocio</option>
+              {tenants.map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+          )}
+          <select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            className={`px-2.5 py-2 rounded-lg border text-sm ${dark ? "bg-gray-800 border-gray-700 text-white" : "bg-white border-gray-300"}`}
+          >
+            <option value="">Categorías: todas</option>
+            <option value="with">Con categorías</option>
+            <option value="without">Sin categorías</option>
+          </select>
+          {hasActiveFilters && (
+            <button
+              onClick={clearFilters}
+              className={`px-3 py-2 rounded-lg text-sm font-medium ${dark ? "bg-gray-700 text-gray-300 hover:bg-gray-600" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+            >
+              ✕ Limpiar
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* USERS LIST */}
-      <div className="space-y-3 pb-20 md:pb-0">
-        {filteredUsers.map(u => (
-          <div key={u.id} className={`rounded-xl border ${bgCard} overflow-hidden`}>
-            {/* USER ROW */}
-            <div
-              className="p-3 md:p-4 flex items-center justify-between cursor-pointer hover:bg-opacity-50 transition"
-              onClick={() => setExpandedUser(expandedUser === u.id ? null : u.id)}
-            >
-              <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${
-                  u.role === "admin"
-                    ? "bg-red-500/20 text-red-500"
-                    : "bg-blue-500/20 text-blue-500"
-                }`}>
-                  {u.name?.charAt(0)?.toUpperCase() || "?"}
+      {isSuperAdmin ? (
+        <div className="space-y-5 pb-20 md:pb-0">
+          {tenantGroups.map(group => (
+            <div key={group.tenantId}>
+              {/* TENANT HEADER */}
+              <div className={`flex items-center justify-between gap-2 mb-3 px-3 py-2.5 rounded-xl border ${dark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}>
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-base shrink-0 ${
+                    group.tenantId === "sin_tenant" ? "bg-yellow-500/20" : "bg-blue-500/20"
+                  }`}>
+                    {group.tenantId === "sin_tenant" ? "🚫" : "🏪"}
+                  </div>
+                  <div className="min-w-0">
+                    <p className={`font-bold text-sm md:text-base truncate ${textPrimary}`}>
+                      {group.name}
+                    </p>
+                    <p className={`text-[11px] ${textSecondary}`}>
+                      {group.admins > 0 ? `${group.admins} admin` : "Sin admin"} · {group.usersCount - group.admins} negocio
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className={`font-medium ${textPrimary}`}>{u.name}</p>
-                  <p className={`text-xs ${textSecondary}`}>
-                    {shortId(u.id)} · {new Date(u.created_at).toLocaleDateString("es-AR")}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                  u.role === "admin"
-                    ? "bg-red-500/20 text-red-400"
+                <span className={`shrink-0 px-2.5 py-1 rounded-full text-xs font-semibold ${
+                  group.tenantId === "sin_tenant"
+                    ? "bg-yellow-500/20 text-yellow-500"
                     : "bg-blue-500/20 text-blue-400"
                 }`}>
-                  {u.role}
+                  {group.usersCount} {group.usersCount === 1 ? "usuario" : "usuarios"}
                 </span>
-                {isSuperAdmin && tenantsMap[u.tenant_id] && (
-                  <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-500/20 text-gray-400">
-                    {tenantsMap[u.tenant_id]}
-                  </span>
-                )}
-                {userCategoriesMap[u.id]?.length > 0 && (
-                  <div className="flex gap-1">
-                    {userCategoriesMap[u.id].slice(0, 2).map(catId => {
-                      const cat = systemCategories.find(c => c.id === catId);
-                      return cat ? (
-                        <span key={catId} className="px-1.5 py-0.5 rounded text-xs bg-purple-500/20 text-purple-400">
-                          {cat.name}
-                        </span>
-                      ) : null;
-                    })}
-                    {userCategoriesMap[u.id].length > 2 && (
-                      <span className={`text-xs ${textSecondary}`}>+{userCategoriesMap[u.id].length - 2}</span>
-                    )}
-                  </div>
-                )}
-                <span className={`text-2xl ${textSecondary} transition-transform ${expandedUser === u.id ? "rotate-180" : ""}`}>
-                  ▼
-                </span>
+              </div>
+              <div className={`space-y-3 ${dark ? "border-l-2 border-gray-700 pl-3" : "border-l-2 border-blue-200 pl-3"}`}>
+                {group.users.map(u => renderUserCard(u))}
               </div>
             </div>
-
-            {/* EXPANDED DETAIL */}
-            {expandedUser === u.id && (
-              <div className={`border-t ${dark ? "border-gray-700" : "border-gray-200"}`}>
-                <UserExpandedDetail key={u.id} user={u} onClose={() => setExpandedUser(null)} invalidateUserCategories={invalidateUserCategories} />
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-3 pb-20 md:pb-0">
+          {filteredUsers.map(u => renderUserCard(u))}
+        </div>
+      )}
 
       {filteredUsers.length === 0 && (
         <div className={`text-center py-12 ${textSecondary}`}>
           <div className="text-5xl mb-4">🔍</div>
-          <p>No se encontraron usuarios</p>
+          <p>{hasActiveFilters ? "No hay usuarios que coincidan con los filtros" : "No se encontraron usuarios"}</p>
         </div>
       )}
     </div>

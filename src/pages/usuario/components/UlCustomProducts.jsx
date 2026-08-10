@@ -1,9 +1,12 @@
 import React, { useState, useMemo } from "react";
 import { useAppContext } from "../../../contexto/Context";
+import { EditProduct } from "../../productos/components/EditProduct";
+import { supabase } from "../../../services/supabaseClient";
 
 export function UlCustomProducts({ customProducts }) {
-  const { categorias, subcategorias, preferencias } = useAppContext();
+  const { categorias, subcategorias, preferencias, actualizarProducto, profile } = useAppContext();
   const dark = preferencias?.theme === "dark";
+  const esAdmin = profile?.role === "admin" || profile?.role === "super_admin";
 
   const [viewType, setViewType] = useState(
     preferencias?.view_custom_products === "list" ? "list" : "grid"
@@ -13,8 +16,54 @@ export function UlCustomProducts({ customProducts }) {
   const [categoriaActiva, setCategoriaActiva] = useState("todas");
   const [subcategoriaActiva, setSubcategoriaActiva] = useState("todas");
   const [marcaActiva, setMarcaActiva] = useState("");
-  const [expandedAll, setExpandedAll] = useState(false);
   const [expandedItems, setExpandedItems] = useState({});
+  const [editingProduct, setEditingProduct] = useState(null);
+  const [editedProduct, setEditedProduct] = useState(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  const publicUrl = (path) => {
+    if (!path) return null;
+    if (path.startsWith("http")) return path;
+    return supabase.storage.from("product-images").getPublicUrl(path).data.publicUrl;
+  };
+
+  const openEdit = (prod) => {
+    setEditingProduct(prod);
+    setEditedProduct({
+      ...prod,
+      nombre: prod.user_custom_products?.name || prod.products_base?.name || "",
+    });
+  };
+
+  const handleEditChange = (e) => {
+    const { name, value } = e.target;
+    if (name === "stock" && Number(value) < 0) return;
+    setEditedProduct((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleEditSubmit = async () => {
+    if (!editingProduct || !editedProduct) return;
+    setSavingEdit(true);
+    try {
+      const payload = { ...editedProduct };
+      if (payload.stock < 0) payload.stock = 0;
+      delete payload.products_base;
+      delete payload.id;
+      await actualizarProducto(editingProduct.id, payload);
+      setEditingProduct(null);
+      setEditedProduct(null);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const handleEditCancel = () => {
+    if (savingEdit) return;
+    setEditingProduct(null);
+    setEditedProduct(null);
+  };
 
   // Marcas únicas con contadores
   const marcasDisponibles = useMemo(() => {
@@ -116,7 +165,6 @@ export function UlCustomProducts({ customProducts }) {
   };
 
   const toggleOne = (id) => {
-    if (expandedAll) return;
     setExpandedItems((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
@@ -329,8 +377,9 @@ export function UlCustomProducts({ customProducts }) {
                 }
               >
                 {productos.map((prod) => {
-                  const isExpanded = expandedAll || expandedItems[prod.id];
+                  const isExpanded = expandedItems[prod.id];
                   const subcat = subcategorias.find((s) => s.id === prod.products_base?.subcategory_id);
+                  const imagenPrincipal = prod.imagenes?.[0] || prod.products_base?.image_url || null;
 
                   return (
                     <div
@@ -341,18 +390,45 @@ export function UlCustomProducts({ customProducts }) {
                     >
                       {/* HEADER */}
                       <div
-                        className="flex items-center justify-between cursor-pointer"
+                        className="flex items-center justify-between cursor-pointer gap-2"
                         onClick={() => toggleOne(prod.id)}
                       >
                         <div className="flex items-center gap-2 min-w-0 flex-1">
+                          {imagenPrincipal ? (
+                            <img
+                              src={publicUrl(imagenPrincipal)}
+                              alt=""
+                              onError={(e) => { e.currentTarget.style.display = "none"; }}
+                              className="w-9 h-9 rounded-lg object-cover border shrink-0"
+                            />
+                          ) : (
+                            <div className={`w-9 h-9 rounded-lg border shrink-0 flex items-center justify-center text-base ${dark ? "bg-gray-600/50 border-gray-600" : "bg-gray-100 border-gray-200"}`}>
+                              📦
+                            </div>
+                          )}
                           <span className={`text-lg ${isExpanded ? "rotate-90 transition-transform" : ""}`}>
                             ▶
                           </span>
                           <h4 className={`font-semibold truncate ${textPrimary}`}>
-                            {prod.user_custom_products?.name}
+                            {prod.user_custom_products?.name || prod.products_base?.name}
                           </h4>
                         </div>
                         <div className="flex items-center gap-1">
+                          {esAdmin && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openEdit(prod);
+                              }}
+                              title="Editar producto"
+                              className={`px-2 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                                dark ? "bg-blue-600 text-white hover:bg-blue-500" : "bg-blue-500 text-white hover:bg-blue-400"
+                              }`}
+                            >
+                              ✏️ Editar
+                            </button>
+                          )}
                           {subcat && (
                             <span className={`text-xs px-1.5 py-0.5 rounded ${
                               dark ? "bg-gray-600/50 text-gray-400" : "bg-gray-100 text-gray-500"
@@ -415,6 +491,16 @@ export function UlCustomProducts({ customProducts }) {
             </div>
           );
         })
+      )}
+
+      {/* MODAL EDICIÓN */}
+      {editingProduct && editedProduct && (
+        <EditProduct
+          editedProduct={editedProduct}
+          handleChange={handleEditChange}
+          handleSubmit={handleEditSubmit}
+          handleCancel={handleEditCancel}
+        />
       )}
     </div>
   );

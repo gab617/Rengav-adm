@@ -1,5 +1,6 @@
-import React, { useMemo } from "react";
+import React from "react";
 import { useAppContext } from "../../../contexto/Context";
+import { ProductImagesEditor } from "../../usuario/components/ProductImagesEditor";
 
 export function EditProduct({
   editedProduct,
@@ -7,7 +8,7 @@ export function EditProduct({
   handleSubmit,
   handleCancel,
 }) {
-  const { preferencias } = useAppContext();
+  const { preferencias, profile } = useAppContext();
   const dark = preferencias?.theme === "dark";
 
   const precioVenta = parseFloat(editedProduct.precio_venta) || 0;
@@ -163,6 +164,18 @@ export function EditProduct({
               onChange={handleChange}
               rows={3}
               className={`w-full p-3 border rounded-lg text-base ${inputBg}`}
+            />
+          </div>
+
+          <div className={`p-3 rounded-xl border ${dark ? "border-gray-600 bg-gray-900/50" : "border-gray-200 bg-gray-50"}`}>
+            <ProductImagesEditor
+              tenantId={profile?.tenant_id}
+              productId={editedProduct.id}
+              imagenes={editedProduct.imagenes || []}
+              onImagenesChange={(imgs) =>
+                handleChange({ target: { name: "imagenes", value: imgs } })
+              }
+              dark={dark}
             />
           </div>
         </div>

@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "../../../services/supabaseClient";
 import { useAppContext } from "../../../contexto/Context";
 import { toast, ToastContainer } from "react-toastify";
+import { ProductImagesEditor } from "../../usuario/components/ProductImagesEditor";
 
 export function FormCustomProduct({ userId }) {
   const {
@@ -13,6 +14,7 @@ export function FormCustomProduct({ userId }) {
     crearCustomProduct,
     loadingBrands,
     unifiedBrands,
+    profile,
   } = useAppContext();
   const dark = preferencias?.theme === "dark";
   console.log(unifiedBrands);
@@ -37,6 +39,7 @@ export function FormCustomProduct({ userId }) {
   const [precioVenta, setPrecioVenta] = useState("");
   const [proveedor, setProveedor] = useState("");
   const [stock, setStock] = useState("");
+  const [imagenes, setImagenes] = useState([]);
 
   // subcategorías filtradas según categoría seleccionada
   const [subcategoriasFiltradas, setSubcategoriasFiltradas] = useState([]);
@@ -95,6 +98,7 @@ export function FormCustomProduct({ userId }) {
     setPrecioVenta("");
     setProveedor("");
     setStock("");
+    setImagenes([]);
   }
 
   async function handleSubmit(e) {
@@ -121,6 +125,8 @@ export function FormCustomProduct({ userId }) {
         proveedor,
         stock,
         userId,
+        imagenes,
+        tenantId: profile?.tenant_id,
       });
 
       toast.success("✨ Producto creado con éxito", {
@@ -332,6 +338,22 @@ export function FormCustomProduct({ userId }) {
               placeholder="Proveedor (opcional)"
               className={inputClass}
             />
+
+            <div
+              className={`p-3 rounded-xl border ${
+                dark
+                  ? "border-gray-600 bg-gray-900/50"
+                  : "border-gray-200 bg-gray-50"
+              }`}
+            >
+              <ProductImagesEditor
+                tenantId={profile?.tenant_id}
+                productId="pending"
+                imagenes={imagenes}
+                onImagenesChange={setImagenes}
+                dark={dark}
+              />
+            </div>
 
             <button className={buttonPrimary}>Crear Producto</button>
           </motion.form>

@@ -160,6 +160,7 @@ export const useProductosSistema = (userId, categorias = [], productosActuales =
           stock,
           descripcion,
           active,
+          imagenes,
           products_base (
             id,
             name,

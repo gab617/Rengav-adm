@@ -25,12 +25,10 @@ dist-ssr
 .idea
 .DS_Store
 
-# Ad-hoc SQL scripts (aplicados a mano en el SQL editor de Supabase)
-supabase/
-
 # Misc
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+comercioFrontWEB\supabase

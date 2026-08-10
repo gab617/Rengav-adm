@@ -8,6 +8,25 @@ export function AdminLayout() {
   const isSuperAdmin = profile?.role === "super_admin";
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem("adminSidebarCollapsed") === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleCollapsed = () => {
+    setCollapsed((c) => {
+      const next = !c;
+      try {
+        localStorage.setItem("adminSidebarCollapsed", String(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  };
 
   const navItems = [
     { path: "/admin", label: "Dashboard", icon: "📊" },
@@ -64,17 +83,39 @@ export function AdminLayout() {
       <div className="flex flex-1 overflow-hidden">
         {/* SIDEBAR DESKTOP */}
         <aside className={`
-          hidden lg:flex w-64 border-r shrink-0 p-4 flex-col
+          hidden lg:flex border-r shrink-0 flex-col transition-all duration-300
+          ${collapsed ? "w-16 p-2" : "w-56 p-4"}
           ${bgDark} ${borderColor}
         `}>
-          <div className="mb-6">
-            <h2 className={`text-xl font-bold flex items-center gap-2 ${textPrimary}`}>
-              <span>⚙️</span>
-              <span>Panel Admin</span>
-            </h2>
-            <p className={`text-xs mt-1 ${textSecondary}`}>
-              Gestión del sistema
-            </p>
+          <div className={`flex items-center mb-6 ${collapsed ? "justify-center" : "justify-between"}`}>
+            {!collapsed && (
+              <div className="min-w-0">
+                <h2 className={`text-xl font-bold flex items-center gap-2 ${textPrimary}`}>
+                  <span>⚙️</span>
+                  <span>Panel Admin</span>
+                </h2>
+                <p className={`text-xs mt-1 ${textSecondary}`}>
+                  Gestión del sistema
+                </p>
+              </div>
+            )}
+            <button
+              onClick={toggleCollapsed}
+              title={collapsed ? "Expandir menú" : "Colapsar menú"}
+              className={`p-2 rounded-lg transition-all ${
+                dark
+                  ? "text-gray-200 bg-gray-700/60 hover:bg-gray-600"
+                  : "text-gray-500 bg-gray-100 hover:bg-gray-200"
+              }`}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                {collapsed ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                )}
+              </svg>
+            </button>
           </div>
 
           <nav className="flex-1 space-y-1">
@@ -82,8 +123,10 @@ export function AdminLayout() {
               <Link
                 key={item.path}
                 to={item.path}
+                title={item.label}
                 className={`
-                  flex items-center gap-3 px-4 py-3 rounded-xl transition-all
+                  flex items-center rounded-xl transition-all
+                  ${collapsed ? "justify-center px-0 py-3" : "gap-3 px-4 py-3"}
                   ${isActive(item.path)
                     ? dark
                       ? "bg-blue-600 text-white shadow-lg shadow-blue-900/30"
@@ -95,7 +138,7 @@ export function AdminLayout() {
                 `}
               >
                 <span className="text-xl">{item.icon}</span>
-                <span className="font-medium">{item.label}</span>
+                {!collapsed && <span className="font-medium">{item.label}</span>}
               </Link>
             ))}
           </nav>
@@ -103,13 +146,15 @@ export function AdminLayout() {
           <div className={`pt-4 border-t ${borderColor}`}>
             <Link
               to="/productos"
+              title="Volver a la app"
               className={`
-                flex items-center gap-2 text-sm
+                flex items-center text-sm
+                ${collapsed ? "justify-center" : "gap-2"}
                 ${dark ? "text-gray-400 hover:text-white" : "text-gray-500 hover:text-gray-700"}
               `}
             >
               <span>←</span>
-              <span>Volver a la app</span>
+              {!collapsed && <span>Volver a la app</span>}
             </Link>
           </div>
         </aside>

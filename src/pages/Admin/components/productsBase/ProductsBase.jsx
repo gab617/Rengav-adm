@@ -1,23 +1,54 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect, useCallback } from "react";
 import { useAdminProductsBase } from "../../hooksAdmin/useAdminProductsBase";
 import { useAdminCategories } from "../../hooksAdmin/useAdminCategories";
 import { useAdminBrands } from "../../hooksAdmin/useAdminBrands";
 import { ProductList } from "./components/ProductList";
+import { AdminCustomProductForm } from "./AdminCustomProductForm";
+import { TenantCustomProducts } from "./TenantCustomProducts";
 import { useAppContext } from "../../../../contexto/Context";
 import { useAdminData } from "../../../../hooks/useAdminData";
+import { supabase } from "../../../../services/supabaseClient";
 
 export function ProductsBase() {
-  const { preferencias, subcategorias } = useAppContext();
+  const { preferencias, subcategorias, profile } = useAppContext();
   const dark = preferencias?.theme === "dark";
+  const esSuperAdmin = profile?.role === "super_admin";
   const { invalidateProductsBase } = useAdminData();
+  const [customsRefreshKey, setCustomsRefreshKey] = useState(0);
+  const [tenants, setTenants] = useState([]);
+  const [selectedTenantId, setSelectedTenantId] = useState("");
+
+  const loadTenants = useCallback(async () => {
+    if (!esSuperAdmin) return;
+    try {
+      const { data, error } = await supabase
+        .from("tenants")
+        .select("id, name")
+        .order("id", { ascending: false });
+      if (error) throw error;
+      setTenants(data || []);
+      if (data?.length) {
+        setSelectedTenantId((prev) => prev || data[0].id);
+      }
+    } catch (err) {
+      console.error("Error cargando negocios:", err.message);
+    }
+  }, [esSuperAdmin]);
+
+  useEffect(() => {
+    loadTenants();
+  }, [loadTenants]);
+
+  const tenantIdCustoms = esSuperAdmin ? selectedTenantId : profile?.tenant_id;
 
   const handleProductCreated = async () => {
     await invalidateProductsBase();
+    setCustomsRefreshKey((k) => k + 1);
   };
 
-  const { products, loading, creating, createProductBase, adminCategoryIds, tieneCatalogoDefinido } = useAdminProductsBase(handleProductCreated);
+  const { products, loading, creating, createProductBase, updateProductBase, adminCategoryIds, tieneCatalogoDefinido, baseGallery, tenantGallery } = useAdminProductsBase(handleProductCreated, tenantIdCustoms);
   const { categories, getSubcategoriesByCategory } = useAdminCategories();
-  const { getBrandsByCategory, createBrand, linkBrandToCategory } = useAdminBrands();
+  const { brands, getBrandsByCategory, createBrand, linkBrandToCategory } = useAdminBrands();
 
   const [name, setName] = useState("");
   const [suggestions, setSuggestions] = useState([]);
@@ -145,23 +176,44 @@ export function ProductsBase() {
             </button>
           </div>
         </div>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className={`px-4 py-2 rounded-xl font-medium transition-all ${
-            showForm
-              ? dark ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-700"
-              : "bg-blue-600 text-white hover:bg-blue-500"
-          }`}
-        >
-          {showForm ? "✕ Cerrar" : "+ Nuevo producto"}
-        </button>
+        <div className="flex items-center gap-3 flex-wrap">
+          {esSuperAdmin && (
+            <div className="flex items-center gap-2">
+              <label className={`text-xs font-medium ${textSecondary}`}>Negocio</label>
+              <select
+                value={selectedTenantId}
+                onChange={(e) => setSelectedTenantId(e.target.value)}
+                className={`px-3 py-2 rounded-lg border text-sm ${inputBg}`}
+              >
+                {tenants.map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          <button
+            onClick={() => setShowForm(!showForm)}
+            className={`px-4 py-2 rounded-xl font-medium transition-all ${
+              showForm
+                ? dark ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-700"
+                : "bg-blue-600 text-white hover:bg-blue-500"
+            }`}
+          >
+            {showForm
+              ? "✕ Cerrar"
+              : esSuperAdmin
+                ? "+ Nuevo producto"
+                : "+ Crear producto"}
+          </button>
+        </div>
       </div>
 
-      {showForm && (
-        <form
-          onSubmit={handleSubmit}
-          className={`space-y-4 p-4 rounded-xl border ${bgCard}`}
-        >
+      {showForm &&
+        (esSuperAdmin ? (
+          <form
+            onSubmit={handleSubmit}
+            className={`space-y-4 p-4 rounded-xl border ${bgCard}`}
+          >
           <h2 className={`font-semibold text-lg ${textPrimary}`}>➕ Agregar Producto Base</h2>
 
           {/* NAME INPUT */}
@@ -297,10 +349,28 @@ export function ProductsBase() {
             {creating ? "Creando..." : "Crear producto"}
           </button>
         </form>
+        ) : (
+          <AdminCustomProductForm
+            products={products}
+            categories={categories}
+            subcategories={subcategorias}
+            onAgregado={handleProductCreated}
+          />
+        ))}
+
+      {tenantIdCustoms && (
+        <TenantCustomProducts
+          key={`tcp-${tenantIdCustoms}`}
+          dark={dark}
+          tenantId={tenantIdCustoms}
+          categories={categories}
+          subcategories={subcategorias}
+          refreshKey={customsRefreshKey}
+        />
       )}
 
       <div className={`rounded-xl border overflow-hidden ${bgCard}`}>
-        <ProductList products={products} categories={categories} subcategories={subcategorias} adminCategoryIds={adminCategoryIds} tieneCatalogoDefinido={tieneCatalogoDefinido} />
+        <ProductList products={products} categories={categories} subcategories={subcategorias} tieneCatalogoDefinido={tieneCatalogoDefinido} baseGallery={baseGallery} tenantGallery={tenantGallery} brands={brands} getBrandsByCategory={getBrandsByCategory} updateProductBase={updateProductBase} />
       </div>
     </div>
   );

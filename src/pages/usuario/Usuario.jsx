@@ -211,7 +211,7 @@ export function Usuario() {
                   📦 Del sistema
                 </button>
               </div>
-              <FormCustomProduct userId={user?.id} />
+              {isAdmin && <FormCustomProduct userId={user?.id} />}
             </div>
 
             {/* LISTA */}
