@@ -28,7 +28,7 @@ export function AdminDataProvider({ children }) {
       .eq("tenant_id", profile.tenant_id);
     
     return data?.map(u => u.id) || [];
-  }, [profile]);
+  }, [profile?.id, profile?.role, profile?.tenant_id]);
 
   const loadInitialData = useCallback(async () => {
     if (loadingRef.current || !profile?.id) return;
@@ -109,7 +109,7 @@ export function AdminDataProvider({ children }) {
   const invalidateUserProducts = useCallback(async (userId) => {
     const [countsRes, userProductsRes] = await Promise.all([
       supabase.from("user_products").select("user_id"),
-      supabase.from("user_products").select("base_id, precio_venta, precio_compra, stock, descripcion, active, id").eq("user_id", userId),
+      supabase.from("user_products").select("base_id, precio_venta, precio_compra, stock, descripcion, active, destacado, id").eq("user_id", userId),
     ]);
 
     const counts = {};

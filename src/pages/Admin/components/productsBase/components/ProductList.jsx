@@ -682,7 +682,7 @@ export function ProductList({ products = [], categories = [], subcategories = []
           <div className={`w-full max-w-lg rounded-xl border shadow-xl ${dark ? "bg-gray-900 border-gray-700" : "bg-white border-gray-200"}`}>
             <div className={`px-5 py-4 border-b flex items-center justify-between ${dark ? "border-gray-700" : "border-gray-200"}`}>
               <h3 className={`font-semibold ${dark ? "text-white" : "text-gray-900"}`}>
-                {esSuperAdmin ? "✏️ Editar producto base" : "👁️ Producto base"}
+                {esSuperAdmin ? "✏️ Editar producto base" : "👁️ Producto del catálogo"}
               </h3>
               <button
                 type="button"

@@ -3,6 +3,7 @@ import { useAppContext } from "../../../contexto/Context";
 import { supabase } from "../../../services/supabaseClient";
 import { useAdminData } from "../../../hooks/useAdminData";
 import { useAdminUsers } from "../hooksAdmin/useAdminUsers"
+import { SucursalSettings } from "./userDetail/tabs/configuracion/SucursalSettings";
 
 function useAdminCategories() {
   const { systemCategories, isLoaded, loadInitialData } = useAdminData();
@@ -454,6 +455,7 @@ function UserExpandedDetail({ user, onClose, invalidateUserCategories }) {
           { id: "resumen", icon: "📈", label: "Resumen" },
           { id: "productos", icon: "📦", label: `Prod (${products.length})` },
           { id: "categorias", icon: "📁", label: `Cats (${userCategorias.length})` },
+          { id: "configuracion", icon: "🎨", label: "Tienda" },
           { id: "ventas", icon: "🧾", label: `Ventas (${sales.length})` },
         ].map(tab => (
           <button
@@ -816,6 +818,21 @@ function UserExpandedDetail({ user, onClose, invalidateUserCategories }) {
                   </button>
                 </div>
               </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeSection === "configuracion" && (
+        <div className="space-y-3">
+          {user.tenant_id ? (
+            <SucursalSettings profile={user} />
+          ) : (
+            <div className={`p-4 rounded-xl ${bgCard}`}>
+              <p className={`text-sm ${textSecondary}`}>
+                Este usuario no pertenece a un negocio, así que no tiene
+                tienda propia para estilizar.
+              </p>
             </div>
           )}
         </div>

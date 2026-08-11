@@ -1,9 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "../../../services/supabaseClient";
 import { useProfile } from "../../../hooksSB/useProfile";
 
 export function useAdminUsers() {
   const { profile } = useProfile();
+  const profileRef = useRef(profile);
+  profileRef.current = profile;
+
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -12,7 +15,9 @@ export function useAdminUsers() {
     let mounted = true;
 
     async function loadUsers() {
-      if (!profile?.id || (profile.role !== "admin" && profile.role !== "super_admin")) {
+      const currentProfile = profileRef.current;
+
+      if (!currentProfile?.id || (currentProfile.role !== "admin" && currentProfile.role !== "super_admin")) {
         setUsers([]);
         setLoading(false);
         return;
@@ -20,13 +25,13 @@ export function useAdminUsers() {
 
       setLoading(true);
 
-      const isSuperAdmin = profile.role === "super_admin";
+      const isSuperAdmin = currentProfile.role === "super_admin";
 
       // Super admin ve TODOS los usuarios
       if (isSuperAdmin) {
         const { data, error } = await supabase
           .from("profiles")
-          .select("id, role, created_at, name, tenant_id, parent_admin_id")
+          .select("id, role, created_at, name, tenant_id, parent_admin_id, slug")
           .order("created_at", { ascending: false });
 
         if (!mounted) return;
@@ -42,16 +47,16 @@ export function useAdminUsers() {
       }
 
       // Admin normal: solo ve usuarios de su tenant
-      if (!profile.tenant_id) {
-        setUsers([profile]);
+      if (!currentProfile.tenant_id) {
+        setUsers([currentProfile]);
         setLoading(false);
         return;
       }
 
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, role, created_at, name, tenant_id, parent_admin_id")
-        .eq("tenant_id", profile.tenant_id)
+        .select("id, role, created_at, name, tenant_id, parent_admin_id, slug")
+        .eq("tenant_id", currentProfile.tenant_id)
         .order("created_at", { ascending: false });
 
       if (!mounted) return;
@@ -73,7 +78,7 @@ export function useAdminUsers() {
     return () => {
       mounted = false;
     };
-  }, [profile]);
+  }, [profile?.id, profile?.role, profile?.tenant_id]);
 
   return { users, loading, error };
 }

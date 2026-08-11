@@ -225,7 +225,7 @@ export function AssignProducts() {
 
     const { data } = await supabase
       .from("user_products")
-      .select("base_id, precio_venta, precio_compra, stock, descripcion, active, id")
+      .select("base_id, precio_venta, precio_compra, stock, descripcion, active, destacado, id")
       .eq("user_id", currentUserId);
 
     if (selectedUser?.id !== currentUserId) return;
@@ -245,6 +245,7 @@ const ids = new Set();
         stock: up.stock,
         descripcion: up.descripcion,
         active: up.active !== false,
+        destacado: up.destacado === true,
         id: up.id
       });
     });
@@ -314,6 +315,7 @@ const ids = new Set();
         stock: up.stock,
         descripcion: up.descripcion,
         active: up.active !== false,
+        destacado: up.destacado === true,
         id: up.id
       });
     });
@@ -689,6 +691,30 @@ const ids = new Set();
     } catch (err) {
       console.error(err);
       showNotification("Error al reactivar", "error");
+    }
+  };
+
+  const handleToggleDestacado = async (prod) => {
+    try {
+      await supabase
+        .from("user_products")
+        .update({ destacado: !prod.destacado })
+        .eq("id", prod.id);
+
+      setAssignedProductsData((prev) =>
+        prev.map((p) =>
+          p.id === prod.id ? { ...p, destacado: !prod.destacado } : p
+        )
+      );
+      showNotification(
+        prod.destacado
+          ? "Producto quitado de destacados"
+          : "Producto marcado como destacado",
+        "success"
+      );
+    } catch (err) {
+      console.error(err);
+      showNotification("Error al cambiar destacado", "error");
     }
   };
 
@@ -1476,9 +1502,30 @@ const ids = new Set();
                                       <p className={`text-xs ${textSecondary}`}>{prod.brand}</p>
                                     </div>
                                   </div>
-                                  <div className="text-right shrink-0">
-                                    <p className={`font-bold ${textPrimary}`}>${prod.precio_venta}</p>
-                                    <p className={`text-xs ${textSecondary}`}>ID: {prod.base_id}</p>
+                                  <div className="text-right shrink-0 flex flex-col items-end gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleToggleDestacado(prod);
+                                      }}
+                                      title={
+                                        prod.destacado
+                                          ? "Quitar de destacados"
+                                          : "Marcar como destacado"
+                                      }
+                                      className={`text-xl leading-none transition-colors ${
+                                        prod.destacado
+                                          ? "text-yellow-400"
+                                          : "text-gray-400 hover:text-yellow-400"
+                                      }`}
+                                    >
+                                      ★
+                                    </button>
+                                    <div className="text-right">
+                                      <p className={`font-bold ${textPrimary}`}>${prod.precio_venta}</p>
+                                      <p className={`text-xs ${textSecondary}`}>ID: {prod.base_id}</p>
+                                    </div>
                                   </div>
                                 </div>
 

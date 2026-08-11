@@ -13,7 +13,7 @@ export function useAdminUser(userId) {
 
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, role, created_at, name")
+        .select("id, role, created_at, name, tenant_id, slug")
         .eq("id", userId)
         .single();
 

@@ -106,7 +106,7 @@ export function useAdminProductsBase(onProductCreated, tenantId) {
 
     if (!error) setProducts(productsWithFlags);
     setLoading(false);
-  }, [profile]);
+  }, [profile?.id, profile?.role, profile?.tenant_id]);
 
   useEffect(() => {
     loadProducts();
@@ -160,6 +160,7 @@ export function useAdminProductsBase(onProductCreated, tenantId) {
     category_id,
     subcategory_id,
     type_unit = "unit",
+    imageFile,
   }) => {
     if (profile?.role !== "super_admin") {
       throw new Error("Solo el super admin puede crear productos base");
@@ -171,7 +172,7 @@ export function useAdminProductsBase(onProductCreated, tenantId) {
 
     setCreating(true);
 
-    const { data, error } = await supabase
+    const { data: inserted, error } = await supabase
       .from("products_base")
       .insert([
         {
@@ -196,9 +197,52 @@ export function useAdminProductsBase(onProductCreated, tenantId) {
       `)
       .single();
 
-    setCreating(false);
+    if (error) {
+      setCreating(false);
+      throw error;
+    }
 
-    if (error) throw error;
+    let data = inserted;
+
+    if (imageFile) {
+      const path = `base/${inserted.id}/${Date.now()}-${imageFile.name.replace(/[^\w.-]/g, "_")}`;
+      const { error: uploadErr } = await supabase.storage
+        .from("product-images")
+        .upload(path, imageFile, { contentType: imageFile.type });
+
+      if (uploadErr) {
+        await supabase.from("products_base").delete().eq("id", inserted.id);
+        setCreating(false);
+        throw uploadErr;
+      }
+
+      const { data: updated, error: imgErr } = await supabase
+        .from("products_base")
+        .update({ image_url: path })
+        .eq("id", inserted.id)
+        .select(`
+          id,
+          name,
+          type_unit,
+          brand_id,
+          category_id,
+          subcategory_id,
+          image_url,
+          brands ( id, name ),
+          categories ( id, name ),
+          subcategories ( id, name )
+        `)
+        .single();
+
+      if (imgErr) {
+        setCreating(false);
+        throw imgErr;
+      }
+
+      data = updated;
+    }
+
+    setCreating(false);
 
     const newProduct = {
       ...data,
@@ -211,6 +255,13 @@ export function useAdminProductsBase(onProductCreated, tenantId) {
         a.name.localeCompare(b.name)
       )
     );
+
+    if (data.image_url && !data.image_url.startsWith("http")) {
+      setBaseGallery((prev) => ({
+        ...prev,
+        [data.id]: [data.image_url],
+      }));
+    }
 
     if (onProductCreated) {
       onProductCreated();
@@ -275,10 +326,23 @@ export function useAdminProductsBase(onProductCreated, tenantId) {
     };
     if (image_url !== undefined) payload.image_url = image_url;
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("products_base")
       .update(payload)
-      .eq("id", id);
+      .eq("id", id)
+      .select(`
+        id,
+        name,
+        type_unit,
+        brand_id,
+        category_id,
+        subcategory_id,
+        image_url,
+        brands ( id, name ),
+        categories ( id, name ),
+        subcategories ( id, name )
+      `)
+      .single();
 
     if (error) throw error;
 
@@ -291,12 +355,37 @@ export function useAdminProductsBase(onProductCreated, tenantId) {
       await supabase.storage.from("product-images").remove([actual.image_url]);
     }
 
-    await loadProducts();
+    setProducts((prev) =>
+      prev.map((p) =>
+        p.id === id
+          ? {
+              ...data,
+              enUso: p.enUso ?? false,
+              enCatalogo: adminCategoryIds.includes(data.category_id),
+            }
+          : p
+      )
+    );
+
+    if (image_url !== undefined) {
+      setBaseGallery((prev) => {
+        const next = { ...prev };
+        if (removeImage) {
+          next[id] = (next[id] || []).filter((x) => x !== actual?.image_url);
+        } else if (image_url) {
+          next[id] = [
+            image_url,
+            ...(next[id] || []).filter((x) => x !== image_url),
+          ];
+        }
+        return next;
+      });
+    }
 
     if (onProductCreated) {
       onProductCreated();
     }
-  }, [onProductCreated, profile?.role, products, loadProducts]);
+  }, [onProductCreated, profile?.role, products, adminCategoryIds]);
 
   return {
     products,

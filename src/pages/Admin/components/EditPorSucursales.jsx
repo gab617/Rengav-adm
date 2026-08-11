@@ -3,6 +3,21 @@ import { supabase } from "../../../services/supabaseClient";
 import { useAppContext } from "../../../contexto/Context";
 import { useAdminData } from "../../../hooks/useAdminData";
 
+function StarToggle({ on, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={on ? "Quitar de destacados" : "Marcar como destacado"}
+      className={`text-lg leading-none transition-colors ${
+        on ? "text-yellow-400" : "text-gray-300 hover:text-yellow-400"
+      }`}
+    >
+      ★
+    </button>
+  );
+}
+
 export function EditPorSucursales({ dark }) {
   const { profile } = useAppContext();
   const { invalidateUserProducts } = useAdminData();
@@ -128,7 +143,7 @@ export function EditPorSucursales({ dark }) {
       const { data: ups } = await supabase
         .from("user_products")
         .select(
-          "id, user_id, base_id, custom_id, precio_venta, precio_compra, stock, active"
+          "id, user_id, base_id, custom_id, precio_venta, precio_compra, stock, active, destacado"
         )
         .in("user_id", userIds);
 
@@ -196,6 +211,7 @@ export function EditPorSucursales({ dark }) {
           precio_compra: up.precio_compra ?? 0,
           stock: up.stock ?? 0,
           active: up.active !== false,
+          destacado: up.destacado === true,
         };
       });
 
@@ -470,9 +486,22 @@ export function EditPorSucursales({ dark }) {
                   {cell && !cell.active && (
                     <p className={`text-[10px] ${textSecondary}`}>inactivo</p>
                   )}
+                  {cell?.destacado && (
+                    <p className="text-[10px] font-medium text-yellow-500">
+                      ⭐ destacado
+                    </p>
+                  )}
                 </div>
                 {cell ? (
                   <div className="flex flex-1 flex-col gap-1">
+                    <div className="flex justify-end">
+                      <StarToggle
+                        on={cell.destacado}
+                        onClick={() =>
+                          updateCell(p.key, u.id, "destacado", !cell.destacado)
+                        }
+                      />
+                    </div>
                     {renderInputsSucursal(p, u, cell)}
                   </div>
                 ) : (
@@ -513,6 +542,7 @@ export function EditPorSucursales({ dark }) {
       precio_venta: precioVenta,
       precio_compra: precioCompra,
       stock: 0,
+      destacado: false,
     };
     if (p.tipo === "base") payload.base_id = p.id;
     else payload.custom_id = p.id;
@@ -534,6 +564,7 @@ export function EditPorSucursales({ dark }) {
         precio_compra: precioCompra,
         stock: 0,
         active: true,
+        destacado: false,
       };
 
       setGrid((prev) => ({
@@ -640,7 +671,8 @@ export function EditPorSucursales({ dark }) {
         if (
           Number(cell.precio_venta) !== Number(orig.precio_venta) ||
           Number(cell.precio_compra) !== Number(orig.precio_compra) ||
-          Number(cell.stock) !== Number(orig.stock)
+          Number(cell.stock) !== Number(orig.stock) ||
+          cell.destacado !== orig.destacado
         ) {
           count++;
         }
@@ -689,9 +721,16 @@ export function EditPorSucursales({ dark }) {
         if (
           pv !== Number(orig.precio_venta) ||
           pc !== Number(orig.precio_compra) ||
-          st !== Number(orig.stock)
+          st !== Number(orig.stock) ||
+          cell.destacado !== orig.destacado
         ) {
-          cambios.push({ id: cell.upId, precio_venta: pv, precio_compra: pc, stock: st });
+          cambios.push({
+            id: cell.upId,
+            precio_venta: pv,
+            precio_compra: pc,
+            stock: st,
+            destacado: cell.destacado,
+          });
           usuariosTocados.add(uid);
         }
       });
@@ -708,6 +747,7 @@ export function EditPorSucursales({ dark }) {
               precio_venta: c.precio_venta,
               precio_compra: c.precio_compra,
               stock: c.stock,
+              destacado: c.destacado,
             })
             .eq("id", c.id)
         )
@@ -1094,7 +1134,19 @@ export function EditPorSucursales({ dark }) {
                                   className={`p-2 ${!cell.active ? "opacity-50" : ""}`}
                                 >
                                   <div className="flex flex-col gap-1">
-                                    <div className="h-6 shrink-0" aria-hidden="true" />
+                                    <div className="h-6 shrink-0 flex items-center justify-end">
+                                      <StarToggle
+                                        on={cell.destacado}
+                                        onClick={() =>
+                                          updateCell(
+                                            p.key,
+                                            u.id,
+                                            "destacado",
+                                            !cell.destacado
+                                          )
+                                        }
+                                      />
+                                    </div>
                                     {renderInputsSucursal(p, u, cell)}
                                   </div>
                                 </td>

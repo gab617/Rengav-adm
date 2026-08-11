@@ -10,7 +10,7 @@ import { useAdminData } from "../../../../hooks/useAdminData";
 import { supabase } from "../../../../services/supabaseClient";
 
 export function ProductsBase() {
-  const { preferencias, subcategorias, profile } = useAppContext();
+  const { preferencias, profile } = useAppContext();
   const dark = preferencias?.theme === "dark";
   const esSuperAdmin = profile?.role === "super_admin";
   const { invalidateProductsBase } = useAdminData();
@@ -43,11 +43,15 @@ export function ProductsBase() {
 
   const handleProductCreated = async () => {
     await invalidateProductsBase();
+  };
+
+  const handleCustomCreated = async () => {
+    await invalidateProductsBase();
     setCustomsRefreshKey((k) => k + 1);
   };
 
   const { products, loading, creating, createProductBase, updateProductBase, adminCategoryIds, tieneCatalogoDefinido, baseGallery, tenantGallery } = useAdminProductsBase(handleProductCreated, tenantIdCustoms);
-  const { categories, getSubcategoriesByCategory } = useAdminCategories();
+  const { categories, subcategories, getSubcategoriesByCategory } = useAdminCategories();
   const { brands, getBrandsByCategory, createBrand, linkBrandToCategory } = useAdminBrands();
 
   const [name, setName] = useState("");
@@ -59,6 +63,8 @@ export function ProductsBase() {
   const [typeUnit, setTypeUnit] = useState("unit"); // unit o weight
   const [showForm, setShowForm] = useState(false);
   const [filtroPeso, setFiltroPeso] = useState(false); // filtrar solo peso
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
 
   // Simple search on change
   const handleNameChange = (value) => {
@@ -80,6 +86,25 @@ export function ProductsBase() {
     setSuggestions([]);
     if (prod.cat && !categoryId) setCategoryId(categories.find(c => c.name === prod.cat)?.id?.toString() || "");
     if (prod.brand && !brandId) setBrandId(products.find(p => p.brands?.name === prod.brand)?.brands?.id?.toString() || "");
+  };
+
+  const handleImageChange = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      alert("El archivo no es una imagen");
+      return;
+    }
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+  };
+
+  const descartarImagen = () => {
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    setImageFile(null);
+    setImagePreview(null);
   };
 
   const filteredSubcategories = useMemo(() => {
@@ -113,6 +138,7 @@ export function ProductsBase() {
         subcategory_id: subcategoryId ? Number(subcategoryId) : null,
         brand_id: brandId ? Number(brandId) : null,
         type_unit: typeUnit,
+        imageFile,
       });
       setName("");
       setSuggestions([]);
@@ -121,6 +147,7 @@ export function ProductsBase() {
       setBrandId("");
       setNewBrandName("");
       setTypeUnit("unit");
+      descartarImagen();
       setShowForm(false);
     } catch (err) {
       alert(err.message);
@@ -341,6 +368,45 @@ export function ProductsBase() {
             </div>
           )}
 
+          {/* IMAGEN */}
+          <div>
+            <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>
+              Imagen del producto
+            </label>
+            <p className={`text-[10px] mb-2 ${textSecondary}`}>
+              Imagen default para el catálogo global. Si no se carga, el
+              producto queda sin imagen hasta que un negocio le asigne una.
+            </p>
+            {imagePreview ? (
+              <div className="flex items-center gap-3">
+                <img
+                  src={imagePreview}
+                  alt="Nueva"
+                  className="w-16 h-16 rounded-lg object-cover border"
+                />
+                <div className="flex flex-col gap-1">
+                  <span className={`text-xs ${textSecondary}`}>
+                    Imagen seleccionada
+                  </span>
+                  <button
+                    type="button"
+                    onClick={descartarImagen}
+                    className="text-xs text-red-500 hover:underline text-left"
+                  >
+                    ✕ Descartar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <label
+                className="w-full py-2.5 rounded-lg border text-sm font-medium text-center cursor-pointer transition-colors hover:bg-blue-500/10 text-blue-500 border-blue-500/50"
+              >
+                📷 Agregar imagen
+                <input type="file" accept="image/*" hidden onChange={handleImageChange} />
+              </label>
+            )}
+          </div>
+
           <button
             type="submit"
             disabled={creating}
@@ -353,8 +419,8 @@ export function ProductsBase() {
           <AdminCustomProductForm
             products={products}
             categories={categories}
-            subcategories={subcategorias}
-            onAgregado={handleProductCreated}
+            subcategories={subcategories}
+            onAgregado={handleCustomCreated}
           />
         ))}
 
@@ -364,13 +430,13 @@ export function ProductsBase() {
           dark={dark}
           tenantId={tenantIdCustoms}
           categories={categories}
-          subcategories={subcategorias}
+          subcategories={subcategories}
           refreshKey={customsRefreshKey}
         />
       )}
 
       <div className={`rounded-xl border overflow-hidden ${bgCard}`}>
-        <ProductList products={products} categories={categories} subcategories={subcategorias} tieneCatalogoDefinido={tieneCatalogoDefinido} baseGallery={baseGallery} tenantGallery={tenantGallery} brands={brands} getBrandsByCategory={getBrandsByCategory} updateProductBase={updateProductBase} />
+        <ProductList products={products} categories={categories} subcategories={subcategories} tieneCatalogoDefinido={tieneCatalogoDefinido} baseGallery={baseGallery} tenantGallery={tenantGallery} brands={brands} getBrandsByCategory={getBrandsByCategory} updateProductBase={updateProductBase} />
       </div>
     </div>
   );

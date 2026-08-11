@@ -110,7 +110,7 @@ export function AdminDashboard() {
     }
 
     loadStats();
-  }, [profile, isSuperAdmin]);
+  }, [profile?.id, profile?.role, profile?.tenant_id, profile?.name, profile?.created_at, isSuperAdmin]);
 
   const textPrimary = dark ? "text-white" : "text-gray-900";
   const textSecondary = dark ? "text-gray-400" : "text-gray-500";

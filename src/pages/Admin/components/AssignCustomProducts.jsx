@@ -99,7 +99,7 @@ export function AssignCustomProducts({ selectedUser, dark, onCountChange }) {
       const [assignedRes, countRes, tenantUpRes] = await Promise.all([
         supabase
           .from("user_products")
-          .select("id, custom_id, precio_venta, precio_compra, stock, descripcion, active, imagenes")
+          .select("id, custom_id, precio_venta, precio_compra, stock, descripcion, active, destacado, imagenes")
           .eq("user_id", selectedUser.id)
           .not("custom_id", "is", null),
         supabase
@@ -187,6 +187,7 @@ export function AssignCustomProducts({ selectedUser, dark, onCountChange }) {
         stock: a.stock ?? 0,
         descripcion: a.descripcion ?? "",
         imagenes: a.imagenes || [],
+        destacado: a.destacado === true,
       };
     });
     setEditData(next);
@@ -198,6 +199,28 @@ export function AssignCustomProducts({ selectedUser, dark, onCountChange }) {
       [upId]: { ...prev[upId], [field]: value },
     }));
   };
+
+  async function handleToggleDestacado(a) {
+    try {
+      await supabase
+        .from("user_products")
+        .update({ destacado: !a.destacado })
+        .eq("id", a.id);
+
+      setAssignedData((prev) =>
+        prev.map((x) => (x.id === a.id ? { ...x, destacado: !a.destacado } : x))
+      );
+      showNotification(
+        a.destacado
+          ? "Producto quitado de destacados"
+          : "Producto marcado como destacado",
+        "success"
+      );
+    } catch (err) {
+      console.error("Error al cambiar destacado:", err);
+      showNotification("Error al cambiar destacado", "error");
+    }
+  }
 
   async function handleSaveEdit(upId) {
     const data = editData[upId];
@@ -243,6 +266,7 @@ export function AssignCustomProducts({ selectedUser, dark, onCountChange }) {
         precio_venta: Number(selected[customId].precio_venta) || 0,
         stock: Number(selected[customId].stock) || 0,
         active: true,
+        destacado: false,
       }));
 
       const { error } = await supabase.from("user_products").insert(rows);
@@ -570,12 +594,26 @@ export function AssignCustomProducts({ selectedUser, dark, onCountChange }) {
                           </p>
                         </div>
                       </div>
-                      <button
-                        onClick={() => toggleActive(a.id, false)}
-                        className="px-3 py-1 bg-red-500 text-white rounded-lg text-xs hover:bg-red-600 transition-colors shrink-0"
-                      >
-                        🚫 Desactivar
-                      </button>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleDestacado(a)}
+                          title={a.destacado ? "Quitar de destacados" : "Marcar como destacado"}
+                          className={`text-xl leading-none transition-colors ${
+                            a.destacado
+                              ? "text-yellow-400"
+                              : "text-gray-400 hover:text-yellow-400"
+                          }`}
+                        >
+                          ★
+                        </button>
+                        <button
+                          onClick={() => toggleActive(a.id, false)}
+                          className="px-3 py-1 bg-red-500 text-white rounded-lg text-xs hover:bg-red-600 transition-colors shrink-0"
+                        >
+                          🚫 Desactivar
+                        </button>
+                      </div>
                     </div>
 
                     <div className="mt-3 pt-3 border-t border-gray-600/20 grid grid-cols-2 md:grid-cols-4 gap-2">

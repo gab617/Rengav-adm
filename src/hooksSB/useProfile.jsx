@@ -42,8 +42,9 @@ export function useProfile() {
 
     // Reaccionar a login/logout/refresh sin recargar la página
     const { data: listener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+      (event, session) => {
         if (!mounted) return;
+        if (event === "TOKEN_REFRESHED") return;
         handleSession(session);
       }
     );
