@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useAppContext } from "../../contexto/Context";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import { stockDelTalle } from "../../utils/talles";
 
 export function Carrito() {
   const {
@@ -19,9 +20,19 @@ export function Carrito() {
 
   const [animatingItems, setAnimatingItems] = useState(new Set());
   const [loading, setLoading] = useState(false);
+  const [showClienteForm, setShowClienteForm] = useState(false);
+  const [clienteData, setClienteData] = useState({
+    cliente_nombre: "",
+    cliente_telefono: "",
+    cliente_email: "",
+    metodo_pago: "efectivo",
+    estado: "confirmado",
+  });
 
   useEffect(() => {
-    const newSet = new Set(carrito.map((p) => p.id_user_product));
+    const newSet = new Set(
+      carrito.map((p) => `${p.id}|${p.talle || ""}`)
+    );
     setAnimatingItems(newSet);
   }, [carrito]);
 
@@ -30,9 +41,18 @@ export function Carrito() {
 
     setLoading(true);
 
+    const metadata = {
+      cliente_nombre: clienteData.cliente_nombre.trim() || null,
+      cliente_telefono: clienteData.cliente_telefono.trim() || null,
+      cliente_email: clienteData.cliente_email.trim() || null,
+      metodo_pago: clienteData.metodo_pago,
+      estado: clienteData.estado,
+    };
+
     const ventaExitosa = await crearVenta(
       carrito,
       actualizarProductosPostVenta,
+      metadata,
     );
 
     setLoading(false);
@@ -42,6 +62,14 @@ export function Carrito() {
         containerId: "carrito-toast",
       });
       limpiarCarrito();
+      setClienteData({
+        cliente_nombre: "",
+        cliente_telefono: "",
+        cliente_email: "",
+        metodo_pago: "efectivo",
+        estado: "confirmado",
+      });
+      setShowClienteForm(false);
     } else {
       toast.error("❌ Hubo un error al procesar la venta.", {
         containerId: "carrito-toast",
@@ -109,6 +137,89 @@ export function Carrito() {
         </div>
       </div>
 
+      {/* MÉTODO DE PAGO + ESTADO — siempre visibles */}
+      <div className={`mt-3 border-t pt-3`}>
+        <div className="flex gap-2">
+          <div className="flex-1">
+            <label className={`block text-[10px] font-medium mb-0.5 ${dark ? "text-gray-400" : "text-gray-500"}`}>
+              Método de pago
+            </label>
+            <select
+              value={clienteData.metodo_pago}
+              onChange={(e) => setClienteData({ ...clienteData, metodo_pago: e.target.value })}
+              className={`w-full px-2 py-1.5 rounded-lg border text-sm font-medium ${
+                dark ? "bg-gray-800 border-gray-600 text-white" : "bg-white border-gray-300"
+              }`}
+            >
+                <option value="efectivo">Efectivo</option>
+              <option value="transferencia">Transferencia</option>
+            </select>
+          </div>
+          <div className="flex-1">
+            <label className={`block text-[10px] font-medium mb-0.5 ${dark ? "text-gray-400" : "text-gray-500"}`}>
+              Estado
+            </label>
+            <select
+              value={clienteData.estado}
+              onChange={(e) => setClienteData({ ...clienteData, estado: e.target.value })}
+              className={`w-full px-2 py-1.5 rounded-lg border text-sm font-medium ${
+                dark ? "bg-gray-800 border-gray-600 text-white" : "bg-white border-gray-300"
+              }`}
+            >
+              <option value="confirmado">✅ Confirmado</option>
+              <option value="pendiente">⏳ Pendiente</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* DATOS DEL CLIENTE (colapsable) */}
+      <div className="mt-3">
+        <button
+          onClick={() => setShowClienteForm(!showClienteForm)}
+          className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+            dark
+              ? "bg-gray-800 text-gray-300 hover:bg-gray-700"
+              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+          }`}
+        >
+          <span>Datos del cliente (opcional)</span>
+          <span>{showClienteForm ? "▲" : "▼"}</span>
+        </button>
+
+        {showClienteForm && (
+          <div className="mt-2 space-y-2">
+            <input
+              type="text"
+              placeholder="Nombre del cliente"
+              value={clienteData.cliente_nombre}
+              onChange={(e) => setClienteData({ ...clienteData, cliente_nombre: e.target.value })}
+              className={`w-full px-3 py-1.5 rounded-lg border text-sm ${
+                dark ? "bg-gray-800 border-gray-600 text-white placeholder-gray-400" : "bg-white border-gray-300 placeholder-gray-400"
+              }`}
+            />
+            <input
+              type="tel"
+              placeholder="Teléfono (opcional)"
+              value={clienteData.cliente_telefono}
+              onChange={(e) => setClienteData({ ...clienteData, cliente_telefono: e.target.value })}
+              className={`w-full px-3 py-1.5 rounded-lg border text-sm ${
+                dark ? "bg-gray-800 border-gray-600 text-white placeholder-gray-400" : "bg-white border-gray-300 placeholder-gray-400"
+              }`}
+            />
+            <input
+              type="email"
+              placeholder="Email (opcional)"
+              value={clienteData.cliente_email}
+              onChange={(e) => setClienteData({ ...clienteData, cliente_email: e.target.value })}
+              className={`w-full px-3 py-1.5 rounded-lg border text-sm ${
+                dark ? "bg-gray-800 border-gray-600 text-white placeholder-gray-400" : "bg-white border-gray-300 placeholder-gray-400"
+              }`}
+            />
+          </div>
+        )}
+      </div>
+
       <div className="mt-2 flex flex-col gap-3 mb-2">
         <button
           onClick={handleConfirmarCompra}
@@ -143,12 +254,13 @@ export function Carrito() {
         {carrito.map((producto) => {
           const esPeso = producto.products_base?.type_unit === "weight";
           const totalItem = producto.cantidad * producto.precio_venta;
+          const stockTalle = stockDelTalle(producto, producto.talle);
 
           return (
             <li
-              key={producto.id_user_product}
+              key={`${producto.id}|${producto.talle || ""}`}
               className={`p-3 rounded-lg transition-all duration-500 ${
-                animatingItems.has(producto.id_user_product)
+                animatingItems.has(`${producto.id}|${producto.talle || ""}`)
                   ? "opacity-100 translate-y-0"
                   : "opacity-0 translate-y-[-10px]"
               }`}
@@ -165,6 +277,17 @@ export function Carrito() {
                   }`}
                 >
                   {producto.products_base.name}
+                  {producto.talle && (
+                    <span
+                      className={`ml-2 text-sm font-bold px-2 py-0.5 rounded-full ${
+                        dark
+                          ? "bg-white/10 text-gray-200"
+                          : "bg-gray-200 text-gray-700"
+                      }`}
+                    >
+                      👕 {producto.talle}
+                    </span>
+                  )}
                 </h3>
 
                 {esPeso ? (
@@ -201,7 +324,11 @@ export function Carrito() {
                           : "bg-gray-100 hover:bg-gray-300"
                       }`}
                       onClick={() =>
-                        actualizarCantidad(producto.id, producto.cantidad - 1)
+                        actualizarCantidad(
+                          producto.id,
+                          producto.cantidad - 1,
+                          producto.talle,
+                        )
                       }
                       disabled={producto.cantidad <= 1}
                     >
@@ -223,15 +350,21 @@ export function Carrito() {
                           : "bg-gray-100 hover:bg-gray-300"
                       }`}
                       onClick={() => {
-                        if (producto.cantidad < producto.stock) {
+                        if (producto.cantidad < stockTalle) {
                           actualizarCantidad(
                             producto.id,
                             producto.cantidad + 1,
+                            producto.talle,
                           );
                         } else {
-                          toast.warning("⚠️ Stock insuficiente.", {
-                            containerId: "carrito-toast",
-                          });
+                          toast.warning(
+                            producto.talle
+                              ? `⚠️ Stock insuficiente para el talle ${producto.talle}.`
+                              : "⚠️ Stock insuficiente.",
+                            {
+                              containerId: "carrito-toast",
+                            },
+                          );
                         }
                       }}
                     >
@@ -242,7 +375,9 @@ export function Carrito() {
 
                 <button
                   className="text-white bg-red-500 dark:bg-red-600 hover:bg-red-600 dark:hover:bg-red-700 px-3 py-1 rounded transition"
-                  onClick={() => eliminarProductoCarrito(producto.id)}
+                  onClick={() =>
+                    eliminarProductoCarrito(producto.id, producto.talle)
+                  }
                 >
                   ✘
                 </button>

@@ -1,6 +1,7 @@
 import { useCallback, useImperativeHandle, useRef, useState } from "react";
 import { supabase } from "../../../../../../services/supabaseClient";
 import { toast } from "react-toastify";
+import { compressBrandingImage } from "../../../../../../utils/compressImage";
 
 export function ImageUpload({
   tenantId,
@@ -28,12 +29,13 @@ export function ImageUpload({
 
     setUploading(true);
     try {
-      const ext = (file.name.split(".").pop() || "png").replace(/[^\w]/g, "");
+      const compressed = await compressBrandingImage(file);
+      const ext = "jpg";
       const path = `${tenantId}/branding/${tipo}-${Date.now()}.${ext}`;
 
       const { error } = await supabase.storage
         .from("product-images")
-        .upload(path, file, { contentType: file.type });
+        .upload(path, compressed, { contentType: "image/jpeg" });
 
       if (error) throw error;
 

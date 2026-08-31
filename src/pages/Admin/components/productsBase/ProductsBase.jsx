@@ -5,6 +5,8 @@ import { useAdminBrands } from "../../hooksAdmin/useAdminBrands";
 import { ProductList } from "./components/ProductList";
 import { AdminCustomProductForm } from "./AdminCustomProductForm";
 import { TenantCustomProducts } from "./TenantCustomProducts";
+import { SizeSelector } from "./components/SizeSelector";
+import { SizePanel } from "./components/SizePanel";
 import { useAppContext } from "../../../../contexto/Context";
 import { useAdminData } from "../../../../hooks/useAdminData";
 import { supabase } from "../../../../services/supabaseClient";
@@ -51,7 +53,7 @@ export function ProductsBase() {
   };
 
   const { products, loading, creating, createProductBase, updateProductBase, adminCategoryIds, tieneCatalogoDefinido, baseGallery, tenantGallery } = useAdminProductsBase(handleProductCreated, tenantIdCustoms);
-  const { categories, subcategories, getSubcategoriesByCategory } = useAdminCategories();
+  const { categories, subcategories, getSubcategoriesByCategory, getSizesByCategory, sizes, categorySizes, reload: reloadCategories } = useAdminCategories();
   const { brands, getBrandsByCategory, createBrand, linkBrandToCategory } = useAdminBrands();
 
   const [name, setName] = useState("");
@@ -65,6 +67,8 @@ export function ProductsBase() {
   const [filtroPeso, setFiltroPeso] = useState(false); // filtrar solo peso
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
+  const [talles, setTalles] = useState([]);
+  const [showSizePanel, setShowSizePanel] = useState(false);
 
   // Simple search on change
   const handleNameChange = (value) => {
@@ -138,6 +142,7 @@ export function ProductsBase() {
         subcategory_id: subcategoryId ? Number(subcategoryId) : null,
         brand_id: brandId ? Number(brandId) : null,
         type_unit: typeUnit,
+        talles,
         imageFile,
       });
       setName("");
@@ -147,6 +152,7 @@ export function ProductsBase() {
       setBrandId("");
       setNewBrandName("");
       setTypeUnit("unit");
+      setTalles([]);
       descartarImagen();
       setShowForm(false);
     } catch (err) {
@@ -205,18 +211,30 @@ export function ProductsBase() {
         </div>
         <div className="flex items-center gap-3 flex-wrap">
           {esSuperAdmin && (
-            <div className="flex items-center gap-2">
-              <label className={`text-xs font-medium ${textSecondary}`}>Negocio</label>
-              <select
-                value={selectedTenantId}
-                onChange={(e) => setSelectedTenantId(e.target.value)}
-                className={`px-3 py-2 rounded-lg border text-sm ${inputBg}`}
+            <>
+              <button
+                onClick={() => setShowSizePanel(!showSizePanel)}
+                className={`px-4 py-2 rounded-xl font-medium transition-all ${
+                  showSizePanel
+                    ? dark ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-700"
+                    : "bg-teal-600 text-white hover:bg-teal-500"
+                }`}
               >
-                {tenants.map((t) => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
-                ))}
-              </select>
-            </div>
+                📏 {showSizePanel ? "Cerrar talles" : "Talles y categorías"}
+              </button>
+              <div className="flex items-center gap-2">
+                <label className={`text-xs font-medium ${textSecondary}`}>Negocio</label>
+                <select
+                  value={selectedTenantId}
+                  onChange={(e) => setSelectedTenantId(e.target.value)}
+                  className={`px-3 py-2 rounded-lg border text-sm ${inputBg}`}
+                >
+                  {tenants.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+              </div>
+            </>
           )}
           <button
             onClick={() => setShowForm(!showForm)}
@@ -234,6 +252,16 @@ export function ProductsBase() {
           </button>
         </div>
       </div>
+
+      {showSizePanel && esSuperAdmin && (
+        <SizePanel
+          dark={dark}
+          categories={categories}
+          sizes={sizes}
+          categorySizes={categorySizes}
+          reloadCategories={reloadCategories}
+        />
+      )}
 
       {showForm &&
         (esSuperAdmin ? (
@@ -309,6 +337,7 @@ export function ProductsBase() {
               setCategoryId(e.target.value);
               setSubcategoryId("");
               setBrandId("");
+              setTalles([]);
             }}
             className={`w-full px-3 py-2.5 rounded-lg border text-sm ${inputBg}`}
             required
@@ -368,6 +397,24 @@ export function ProductsBase() {
             </div>
           )}
 
+          {categoryId && typeUnit === "unit" && (
+            <div>
+              <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>
+                📏 Talles del producto
+              </label>
+              <p className={`text-[10px] mb-2 ${textSecondary}`}>
+                Si el producto se vende con talles (ropa, calzado), elegí cuáles
+                ofrece. Dejá vacío si se vende sin talles.
+              </p>
+              <SizeSelector
+                sizes={getSizesByCategory(categoryId)}
+                selected={talles}
+                onChange={setTalles}
+                dark={dark}
+              />
+            </div>
+          )}
+
           {/* IMAGEN */}
           <div>
             <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>
@@ -420,6 +467,7 @@ export function ProductsBase() {
             products={products}
             categories={categories}
             subcategories={subcategories}
+            getSizesByCategory={getSizesByCategory}
             onAgregado={handleCustomCreated}
           />
         ))}
@@ -431,12 +479,14 @@ export function ProductsBase() {
           tenantId={tenantIdCustoms}
           categories={categories}
           subcategories={subcategories}
+          getSizesByCategory={getSizesByCategory}
+          sizes={sizes}
           refreshKey={customsRefreshKey}
         />
       )}
 
       <div className={`rounded-xl border overflow-hidden ${bgCard}`}>
-        <ProductList products={products} categories={categories} subcategories={subcategories} tieneCatalogoDefinido={tieneCatalogoDefinido} baseGallery={baseGallery} tenantGallery={tenantGallery} brands={brands} getBrandsByCategory={getBrandsByCategory} updateProductBase={updateProductBase} />
+        <ProductList products={products} categories={categories} subcategories={subcategories} getSizesByCategory={getSizesByCategory} sizes={sizes} tieneCatalogoDefinido={tieneCatalogoDefinido} baseGallery={baseGallery} tenantGallery={tenantGallery} brands={brands} getBrandsByCategory={getBrandsByCategory} updateProductBase={updateProductBase} />
       </div>
     </div>
   );

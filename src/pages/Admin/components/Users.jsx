@@ -4,6 +4,7 @@ import { supabase } from "../../../services/supabaseClient";
 import { useAdminData } from "../../../hooks/useAdminData";
 import { useAdminUsers } from "../hooksAdmin/useAdminUsers"
 import { SucursalSettings } from "./userDetail/tabs/configuracion/SucursalSettings";
+import { ContactoPagos } from "./userDetail/tabs/configuracion/ContactoPagos";
 
 function useAdminCategories() {
   const { systemCategories, isLoaded, loadInitialData } = useAdminData();
@@ -54,6 +55,7 @@ function StatCard({ icon, label, value, color = "blue" }) {
 
 function UserExpandedDetail({ user, onClose, invalidateUserCategories }) {
   const { preferencias, profile } = useAppContext();
+  const { systemCategories, userCategoriesMap } = useAdminData();
   const dark = preferencias?.theme === "dark";
   
   const [products, setProducts] = useState([]);
@@ -61,6 +63,8 @@ function UserExpandedDetail({ user, onClose, invalidateUserCategories }) {
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState("resumen");
   const [expandedSale, setExpandedSale] = useState(null);
+  const [detallesCache, setDetallesCache] = useState({});
+  const [cargandoDetalle, setCargandoDetalle] = useState(null);
   const [dateFilter, setDateFilter] = useState("today");
   const [selectedProducts, setSelectedProducts] = useState(new Set());
   const [deactivating, setDeactivating] = useState(false);
@@ -75,7 +79,6 @@ function UserExpandedDetail({ user, onClose, invalidateUserCategories }) {
   const [filterCategories, setFilterCategories] = useState([]); // Para filtros de productos
   const [userCategorias, setUserCategorias] = useState([]);
   const [loadingCategorias, setLoadingCategorias] = useState(false);
-  const [allUsers, setAllUsers] = useState({});
   const [subcategories, setSubcategories] = useState([]);
   const [allSubcategoriesCache, setAllSubcategoriesCache] = useState([]); // Cache de todas las subcategorías
   const [productCategoriesUsed, setProductCategoriesUsed] = useState([]); // Para filtros de productos
@@ -124,22 +127,16 @@ function UserExpandedDetail({ user, onClose, invalidateUserCategories }) {
     setProductSubcategoriesUsed(Array.from(subs));
   }, [products]);
 
-  // Cargar categorías del sistema filtradas solo por las que usa este usuario (para filtros de productos)
+  // Filtrar categorías del sistema solo por las que usa este usuario (para filtros de productos)
   useEffect(() => {
-    async function loadUserCategories() {
-      const { data } = await supabase
-        .from("categories")
-        .select("id, name, color")
-        .in("id", productCategoriesUsed.length > 0 ? productCategoriesUsed : ["none"])
-        .order("name");
-      setFilterCategories(data || []);
-    }
     if (productCategoriesUsed.length > 0) {
-      loadUserCategories();
+      setFilterCategories(
+        systemCategories.filter(c => productCategoriesUsed.includes(c.id))
+      );
     } else {
       setFilterCategories([]);
     }
-  }, [productCategoriesUsed]);
+  }, [productCategoriesUsed, systemCategories]);
 
   const loadUserData = async () => {
     const targetUserId = user?.id;
@@ -152,6 +149,8 @@ function UserExpandedDetail({ user, onClose, invalidateUserCategories }) {
 
     setLoading(true);
     setSelectedProducts(new Set());
+    setDetallesCache({});
+    setExpandedSale(null);
 
     const [productsRes, salesRes] = await Promise.all([
       supabase
@@ -185,18 +184,13 @@ function UserExpandedDetail({ user, onClose, invalidateUserCategories }) {
 
   // Cargar categorías disponibles y del usuario (para el tab de categorías - TODAS)
   const loadCategorias = async () => {
-    const [catsRes, userCatsRes] = await Promise.all([
-      supabase.from("categories").select("id, name, color, subcategories(id, name)").order("name"),
-      supabase.from("user_categories").select("category_id").eq("user_id", user?.id)
-    ]);
-    
-    setSystemCategoriesForTab(catsRes.data || []);
-    setUserCategorias(userCatsRes.data?.map(uc => uc.category_id) || []);
+    setSystemCategoriesForTab(systemCategories);
+    setUserCategorias(userCategoriesMap[user?.id] || []);
   };
 
   useEffect(() => {
     if (user?.id) loadCategorias();
-  }, [user?.id]);
+  }, [user?.id, systemCategories, userCategoriesMap]);
 
   const toggleCategoria = async (catId) => {
     if (!user?.id) return;
@@ -255,6 +249,40 @@ function UserExpandedDetail({ user, onClose, invalidateUserCategories }) {
     if (!startDate) return sales;
     return sales.filter(v => new Date(v.fecha) >= startDate);
   }, [sales, dateFilter]);
+
+  // Detalle de venta on-demand: fetch solo al expandir, con cache por sale_id
+  const toggleSaleDetail = async (saleId) => {
+    if (expandedSale === saleId) {
+      setExpandedSale(null);
+      return;
+    }
+    setExpandedSale(saleId);
+    if (detallesCache[saleId] !== undefined) return;
+
+    // RLS bloquea detalles de ventas ajenas: no gastamos el request
+    if (user.id !== profile?.id) {
+      setDetallesCache((prev) => ({ ...prev, [saleId]: null }));
+      return;
+    }
+
+    setCargandoDetalle(saleId);
+    try {
+      const { data, error } = await supabase
+        .from("user_sales_detail")
+        .select(
+          "id, cantidad, precio_unitario, precio_compra, nombre_producto, talle"
+        )
+        .eq("sale_id", saleId)
+        .order("id");
+      if (error) throw error;
+      setDetallesCache((prev) => ({ ...prev, [saleId]: data || [] }));
+    } catch (err) {
+      console.error("Error cargando detalle de venta:", err.message);
+      setDetallesCache((prev) => ({ ...prev, [saleId]: [] }));
+    } finally {
+      setCargandoDetalle((prev) => (prev === saleId ? null : prev));
+    }
+  };
 
   const isOwnProfile = profile?.id === user.id;
   const canViewAll = profile?.role === "admin" || profile?.role === "super_admin";
@@ -456,6 +484,7 @@ function UserExpandedDetail({ user, onClose, invalidateUserCategories }) {
           { id: "productos", icon: "📦", label: `Prod (${products.length})` },
           { id: "categorias", icon: "📁", label: `Cats (${userCategorias.length})` },
           { id: "configuracion", icon: "🎨", label: "Tienda" },
+          { id: "contacto", icon: "💳", label: "Contacto y pagos" },
           { id: "ventas", icon: "🧾", label: `Ventas (${sales.length})` },
         ].map(tab => (
           <button
@@ -838,6 +867,21 @@ function UserExpandedDetail({ user, onClose, invalidateUserCategories }) {
         </div>
       )}
 
+      {activeSection === "contacto" && (
+        <div className="space-y-3">
+          {user.tenant_id ? (
+            <ContactoPagos profile={user} />
+          ) : (
+            <div className={`p-4 rounded-xl ${bgCard}`}>
+              <p className={`text-sm ${textSecondary}`}>
+                Este usuario no pertenece a un negocio, así que no tiene
+                tienda propia para configurar contactos y pagos.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
       {activeSection === "ventas" && (
         <div className="space-y-3">
           {/* DATE FILTER */}
@@ -870,53 +914,132 @@ function UserExpandedDetail({ user, onClose, invalidateUserCategories }) {
           </div>
 
           {/* SALES LIST */}
-          <div className="space-y-2 max-h-80 overflow-y-auto">
+          <div className="space-y-2.5 max-h-96 overflow-y-auto pr-0.5">
             {filteredSales.length === 0 ? (
               <p className={`text-center py-4 ${textSecondary}`}>Sin ventas en este período</p>
             ) : (
-              filteredSales.slice(0, 50).map(sale => (
-                <div
-                  key={sale.id}
-                  className={`p-3 rounded-lg ${bgCard}`}
-                >
+              filteredSales.slice(0, 50).map((sale) => {
+                const expandida = expandedSale === sale.id;
+                const pendiente = sale.estado === "pendiente";
+                return (
                   <div
-                    onClick={() => setExpandedSale(expandedSale === sale.id ? null : sale.id)}
-                    className="flex items-center justify-between cursor-pointer"
+                    key={sale.id}
+                    className={`rounded-xl border overflow-hidden transition-colors ${
+                      pendiente
+                        ? dark
+                          ? "border-amber-500/40 bg-amber-500/5"
+                          : "border-amber-300 bg-amber-50/50"
+                        : dark
+                          ? "border-gray-700 bg-gray-800/60 hover:border-gray-600"
+                          : "border-gray-200 bg-white hover:border-gray-300"
+                    }`}
                   >
-                    <div>
-                      {viewingAllData && (
-                        <p className={`text-xs font-medium text-blue-400 mb-1`}>
-                          👤 {allUsers[sale.user_id] || shortId(sale.user_id)}
+                    <button
+                      type="button"
+                      onClick={() => toggleSaleDetail(sale.id)}
+                      className="w-full text-left p-3 flex items-start justify-between gap-3 cursor-pointer"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span
+                            className={`text-sm font-semibold ${textPrimary}`}
+                            title={new Date(sale.fecha).toLocaleString("es-AR")}
+                          >
+                            {new Date(sale.fecha).toLocaleDateString("es-AR", { day: "2-digit", month: "short" })}
+                          </span>
+                          <span className={`text-xs ${textSecondary}`}>
+                            {new Date(sale.fecha).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                          {pendiente && (
+                            <span className="text-[10px] font-semibold px-1.5 py-px rounded-full bg-amber-500/20 text-amber-500">
+                              Pendiente
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-1 min-w-0">
+                          {sale.cliente_nombre ? (
+                            <>
+                              <p className={`text-sm truncate ${textPrimary}`}>
+                                <span className="mr-1 opacity-70">🧑</span>{sale.cliente_nombre}
+                              </p>
+                              {(sale.cliente_email || sale.cliente_telefono) && (
+                                <p className={`text-xs truncate mt-0.5 ${textSecondary}`}>
+                                  {sale.cliente_email && <>✉️ {sale.cliente_email}</>}
+                                  {sale.cliente_email && sale.cliente_telefono && " · "}
+                                  {sale.cliente_telefono && <>📞 {sale.cliente_telefono}</>}
+                                </p>
+                              )}
+                            </>
+                          ) : (
+                            <p className={`text-sm ${textSecondary}`}>
+                              <span className="mr-1 opacity-70">🏪</span>Venta mostrador
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-right flex flex-col items-end gap-1.5">
+                        <p className={`font-bold leading-none ${pendiente ? "text-amber-500" : "text-green-500"}`}>
+                          ${(sale.monto_total || 0).toLocaleString("es-AR")}
                         </p>
-                      )}
-                      <p className={`font-medium ${textPrimary}`}>
-                        {new Date(sale.fecha).toLocaleString("es-AR")}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className={`font-bold text-green-500`}>${sale.monto_total?.toLocaleString()}</p>
-                      <p className={`text-xs ${textSecondary}`}>
-                        {expandedSale === sale.id ? "▼" : "▶"}
-                      </p>
+                        <span className={`inline-flex items-center text-[10px] px-1.5 py-px rounded-full ${
+                          dark ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-600"
+                        }`}>
+                          {sale.metodo_pago === "transferencia" ? "🏦 Transf." : "🏪 Tienda"}
+                        </span>
+                        <span
+                          className={`text-[10px] leading-none transition-transform duration-200 ${textSecondary} ${
+                            expandida ? "rotate-180" : ""
+                          }`}
+                        >
+                          ▼
+                        </span>
+                      </div>
+                    </button>
+
+                    {/* Detalle: animación grid-rows, CSS puro sin JS */}
+                    <div
+                      className={`grid transition-[grid-template-rows] duration-200 ease-out ${
+                        expandida ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                      }`}
+                    >
+                      <div className="overflow-hidden">
+                        <div className={`mx-3 mb-3 pt-2 border-t ${dark ? "border-gray-700/70" : "border-gray-200"}`}>
+                          {cargandoDetalle === sale.id ? (
+                            <p className={`text-xs py-2 text-center animate-pulse ${textSecondary}`}>
+                              Cargando detalle...
+                            </p>
+                          ) : detallesCache[sale.id] === null ? (
+                            <p className={`text-xs py-2 text-center ${textSecondary}`}>
+                              🔒 El detalle solo se ve desde la cuenta del vendedor
+                            </p>
+                          ) : (detallesCache[sale.id] || []).length === 0 ? (
+                            <p className={`text-xs py-2 text-center ${textSecondary}`}>
+                              Sin productos registrados en esta venta
+                            </p>
+                          ) : (
+                            detallesCache[sale.id].map((item, idx) => (
+                              <div key={idx} className="flex justify-between items-center gap-2 text-xs py-1">
+                                <span className={`${textSecondary} truncate`}>
+                                  {item.nombre_producto || "Producto"}
+                                  {item.talle && (
+                                    <span className={`ml-1.5 px-1.5 py-px rounded text-[10px] ${dark ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-600"}`}>
+                                      Talle {item.talle}
+                                    </span>
+                                  )}
+                                  {" "}x{item.cantidad}
+                                </span>
+                                <span className={textPrimary}>
+                                  ${((item.precio_unitario || 0) * (item.cantidad || 1)).toLocaleString("es-AR")}
+                                </span>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </div>
-
-                  {expandedSale === sale.id && sale.user_sales_detail && (
-                    <div className={`mt-3 pt-3 border-t ${dark ? "border-gray-700" : "border-gray-200"}`}>
-                      {sale.user_sales_detail.map((item, idx) => (
-                        <div key={idx} className="flex justify-between text-xs py-1">
-                          <span className={textSecondary}>
-                            {item.nombre_producto || "Producto"} x{item.cantidad}
-                          </span>
-                          <span className={textPrimary}>
-                            ${((item.precio_unitario || 0) * (item.cantidad || 1)).toLocaleString()}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))
+                );
+              })
             )}
           </div>
           {filteredSales.length > 50 && (

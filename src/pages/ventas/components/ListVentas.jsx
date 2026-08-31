@@ -33,6 +33,8 @@ export function ListVentas({
   setRangoPersonalizado,
   setFechaSeleccionada,
   setMesSeleccionado,
+  busquedaCliente,
+  setBusquedaCliente,
 }) {
   const { preferencias } = useAppContext();
   const dark = preferencias?.theme === "dark";
@@ -45,6 +47,7 @@ export function ListVentas({
   const [showCustomRange, setShowCustomRange] = useState(false);
   const [customDesde, setCustomDesde] = useState(dayjs().startOf("month").format("YYYY-MM-DD"));
   const [customHasta, setCustomHasta] = useState(dayjs().format("YYYY-MM-DD"));
+  const [filtroEstado, setFiltroEstado] = useState("todos");
 
   const toggleVenta = (id) => setVentaActiva(ventaActiva === id ? null : id);
   const toggleMostrarDetalles = () => setMostrarDetalles(!mostrarDetalles);
@@ -70,10 +73,31 @@ export function ListVentas({
   };
 
   const ventasFiltradas = useMemo(() => {
-    if (filtro === "semana") return groupByDay(ventas);
-    if (filtro === "mes") return groupByWeek(ventas);
-    return ventas;
-  }, [ventas, filtro]);
+    const term = (busquedaCliente || "").trim().toLowerCase();
+    let base = ventas;
+
+    // 1) Filtrar por búsqueda de cliente
+    if (term) {
+      base = base.filter((venta) => {
+        const nombre = (venta.cliente_nombre || "").toLowerCase();
+        const telefono = (venta.cliente_telefono || "").toLowerCase();
+        const email = (venta.cliente_email || "").toLowerCase();
+        return nombre.includes(term) || telefono.includes(term) || email.includes(term);
+      });
+    }
+
+    // 2) Filtrar por estado (confirmado / pendiente / todos)
+    if (filtroEstado === "confirmado") {
+      base = base.filter((v) => !v.estado || v.estado === "confirmado");
+    } else if (filtroEstado === "pendiente") {
+      base = base.filter((v) => v.estado === "pendiente");
+    }
+
+    // 3) Agrupar según modo
+    if (filtro === "semana") return groupByDay(base);
+    if (filtro === "mes") return groupByWeek(base);
+    return base;
+  }, [ventas, filtro, busquedaCliente, filtroEstado]);
 
   const handlePrintPanel = useReactToPrint({ contentRef: panelRef });
 
@@ -214,6 +238,58 @@ export function ListVentas({
         </div>
       </div>
 
+      {/* BÚSQUEDA POR CLIENTE */}
+      <div className={`p-3 sm:p-4 rounded-2xl ${bgCard} border ${borderColor} mb-4`}>
+        <div className="flex items-center gap-3 mb-3">
+          <span className={`text-lg shrink-0`}>🔍</span>
+          <input
+            type="text"
+            placeholder="Buscar por nombre, teléfono o email del cliente..."
+            value={busquedaCliente || ""}
+            onChange={(e) => setBusquedaCliente(e.target.value)}
+            className={`flex-1 px-3 py-2 rounded-lg border text-sm outline-none transition-colors ${
+              dark
+                ? "bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:border-blue-500"
+                : "bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus:border-blue-500"
+            }`}
+          />
+          {busquedaCliente && (
+            <button
+              onClick={() => setBusquedaCliente("")}
+              className={`px-2 py-1 rounded-lg text-xs font-medium transition-colors ${
+                dark ? "bg-gray-700 text-gray-300 hover:bg-gray-600" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              Limpiar
+            </button>
+          )}
+        </div>
+
+        {/* FILTROS DE ESTADO */}
+        <div className="flex items-center gap-2">
+          <span className={`text-xs font-medium ${textSecondary}`}>Estado:</span>
+          {[
+            { id: "todos", label: "Todos" },
+            { id: "confirmado", label: "✅ Confirmados" },
+            { id: "pendiente", label: "⏳ Pendientes" },
+          ].map((btn) => (
+            <button
+              key={btn.id}
+              onClick={() => setFiltroEstado(btn.id)}
+              className={`px-2 py-1 rounded-lg text-xs font-medium transition-all ${
+                filtroEstado === btn.id
+                  ? "bg-blue-500 text-white shadow-md"
+                  : dark
+                    ? "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              {btn.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* ACCIONES */}
       <div className="flex flex-wrap gap-2 mb-4">
         <button
@@ -266,7 +342,7 @@ export function ListVentas({
                 Object.keys(ventasFiltradas).map((semana) => (
                   <div key={semana} className="mb-4">
                     <h3 className="font-semibold text-sm mb-2">Semana {semana}</h3>
-                    <ul className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-1">
+                    <ul className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
                       {ventasFiltradas[semana].map((venta, index) => (
                         <LiVenta
                           key={index}

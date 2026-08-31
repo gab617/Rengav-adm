@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Carrito } from "../carrito/Carrito";
 import { useAppContext } from "../../contexto/Context";
 import { CarritoMobile } from "../carrito/CarritoMobile";
-import { ToastContainer } from "react-toastify";
 
 export function CarritoDrawer() {
   const [open, setOpen] = useState(false);
@@ -248,15 +247,6 @@ export function CarritoDrawer() {
       >
         <Carrito />
       </div>
-      
-      <ToastContainer
-        position="top-center"
-        autoClose={3000}
-        newestOnTop
-        closeOnClick={false}
-        draggable
-        pauseOnHover
-      />
       
       <style>{`
         @keyframes pulse-subtle {

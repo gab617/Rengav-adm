@@ -1,8 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../../../services/supabaseClient";
+import { useAppContext } from "../../../contexto/Context";
+import { useAdminData } from "../../../hooks/useAdminData";
+import { useSizes } from "../hooksAdmin/useSizes";
 import { ProductImagesEditor } from "../../usuario/components/ProductImagesEditor";
+import { StockPorTalle, stockTallesToPayload, sumStockTalles } from "./productsBase/components/StockPorTalle";
+import { repartirStockEntreTalles } from "../../../utils/talles";
 
 export function AssignCustomProducts({ selectedUser, dark, onCountChange }) {
+  const { syncProductFromAdmin } = useAppContext();
+  const { users: cachedUsers } = useAdminData();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [customs, setCustoms] = useState([]);
@@ -12,6 +19,7 @@ export function AssignCustomProducts({ selectedUser, dark, onCountChange }) {
   const [notification, setNotification] = useState(null);
   const [editData, setEditData] = useState({});
   const [defaultPrices, setDefaultPrices] = useState({});
+  const { getProductSizes } = useSizes();
 
   const baseCard = dark
     ? "bg-gray-800 border-gray-700"
@@ -63,58 +71,54 @@ export function AssignCustomProducts({ selectedUser, dark, onCountChange }) {
         return;
       }
 
-      const { data: tenantUsers } = await supabase
-        .from("profiles")
-        .select("id, name")
-        .eq("tenant_id", tenantId);
-
-      const tenantUserIds = tenantUsers?.map((u) => u.id) || [];
+      const tenantUserIds = cachedUsers.map((u) => u.id);
       const userNames = {};
-      tenantUsers?.forEach((u) => {
-        userNames[u.id] = u.name;
-      });
+      cachedUsers.forEach((u) => { userNames[u.id] = u.name; });
 
-      const { data: customsData } = await supabase
-        .from("user_custom_products")
-        .select(
-          `
-            id,
-            user_id,
-            name,
-            brand_id,
-            brand_text,
-            image_url,
-            category_id,
-            subcategory_id,
-            brands ( id, name ),
-            categories ( id, name ),
-            subcategories ( id, name )
-          `
-        )
-        .in("user_id", tenantUserIds)
-        .order("name");
-
-      const customsList = customsData || [];
-
-      const [assignedRes, countRes, tenantUpRes] = await Promise.all([
+      // Batch 1: queries sin dependencias entre sí — corren en paralelo
+      const [assignedRes, countRes] = await Promise.all([
         supabase
           .from("user_products")
-          .select("id, custom_id, precio_venta, precio_compra, stock, descripcion, active, destacado, imagenes")
+          .select("id, custom_id, precio_venta, precio_compra, stock, stock_talles, descripcion, active, destacado, visible, imagenes")
           .eq("user_id", selectedUser.id)
           .not("custom_id", "is", null),
         supabase
           .from("user_products")
           .select("id", { count: "exact" })
           .eq("user_id", selectedUser.id),
+      ]);
+
+      // Batch 2: customs + precios default — corren en paralelo
+      const [customsRes, tenantUpRes] = await Promise.all([
+        supabase
+          .from("user_custom_products")
+          .select(
+            `
+              id,
+              user_id,
+              name,
+              brand_id,
+              brand_text,
+              image_url,
+              category_id,
+              subcategory_id,
+              talles,
+              brands ( id, name ),
+              categories ( id, name ),
+              subcategories ( id, name )
+            `
+          )
+          .in("user_id", tenantUserIds)
+          .order("name"),
         supabase
           .from("user_products")
           .select("custom_id, user_id, precio_compra, precio_venta, stock")
-          .in("custom_id", customsList.map((c) => c.id)),
+          .in("user_id", tenantUserIds)
+          .not("custom_id", "is", null),
       ]);
 
-      // Precios "default": los del CREADOR del custom (quien lo creó
-      // los dejó en su user_products). Si el creador no tiene fila, se
-      // usa cualquier otra fila del negocio como referencia.
+      const customsList = customsRes.data || [];
+
       const defaultMap = {};
       tenantUpRes?.data?.forEach((up) => {
         if (!defaultMap[up.custom_id]) defaultMap[up.custom_id] = up;
@@ -137,7 +141,30 @@ export function AssignCustomProducts({ selectedUser, dark, onCountChange }) {
     } finally {
       setLoading(false);
     }
-  }, [selectedUser, showNotification, onCountChange]);
+  }, [selectedUser, showNotification, onCountChange, cachedUsers]);
+
+  const reloadAssigned = useCallback(async () => {
+    if (!selectedUser?.id) return;
+
+    try {
+      const [assignedRes, countRes] = await Promise.all([
+        supabase
+          .from("user_products")
+          .select("id, custom_id, precio_venta, precio_compra, stock, stock_talles, descripcion, active, destacado, visible, imagenes")
+          .eq("user_id", selectedUser.id)
+          .not("custom_id", "is", null),
+        supabase
+          .from("user_products")
+          .select("id", { count: "exact" })
+          .eq("user_id", selectedUser.id),
+      ]);
+
+      setAssignedData(assignedRes.data || []);
+      onCountChange?.(selectedUser.id, countRes.count || 0);
+    } catch (err) {
+      console.error("Error recargando asignados:", err);
+    }
+  }, [selectedUser, onCountChange]);
 
   useEffect(() => {
     load();
@@ -165,6 +192,7 @@ export function AssignCustomProducts({ selectedUser, dark, onCountChange }) {
           precio_compra: def?.precio_compra ?? "",
           precio_venta: def?.precio_venta ?? "",
           stock: def?.stock ?? "",
+          stock_talles: {},
         };
       }
       return next;
@@ -178,13 +206,34 @@ export function AssignCustomProducts({ selectedUser, dark, onCountChange }) {
     }));
   };
 
+  const updateStockTallesSel = (customId, value) => {
+    setSelected((prev) => ({
+      ...prev,
+      [customId]: { ...prev[customId], stock_talles: value },
+    }));
+  };
+
   useEffect(() => {
     const next = {};
     assignedData.forEach((a) => {
+      const c = customs.find((x) => x.id === a.custom_id);
+      const talles = c ? getProductSizes(c) : [];
+      const tieneTalles = talles.length > 0;
+
+      // Si el producto tiene talles y stock general heredado SIN desglose,
+      // repartirlo entre los talles para que el admin lo vea y ajuste.
+      const stockTalles =
+        a.stock_talles && Object.keys(a.stock_talles).length
+          ? a.stock_talles
+          : tieneTalles && (a.stock ?? 0) > 0
+            ? repartirStockEntreTalles(a.stock, talles)
+            : {};
+
       next[a.id] = {
         precio_venta: a.precio_venta ?? 0,
         precio_compra: a.precio_compra ?? 0,
         stock: a.stock ?? 0,
+        stock_talles: stockTalles,
         descripcion: a.descripcion ?? "",
         imagenes: a.imagenes || [],
         destacado: a.destacado === true,
@@ -222,6 +271,29 @@ export function AssignCustomProducts({ selectedUser, dark, onCountChange }) {
     }
   }
 
+  async function handleToggleVisible(a) {
+    try {
+      const nuevoVisible = a.visible === false;
+      await supabase
+        .from("user_products")
+        .update({ visible: nuevoVisible })
+        .eq("id", a.id);
+
+      setAssignedData((prev) =>
+        prev.map((x) => (x.id === a.id ? { ...x, visible: nuevoVisible } : x))
+      );
+      showNotification(
+        nuevoVisible
+          ? "Producto visible en el catálogo"
+          : "Producto oculto del catálogo",
+        "success"
+      );
+    } catch (err) {
+      console.error("Error al cambiar visibilidad:", err);
+      showNotification("Error al cambiar visibilidad", "error");
+    }
+  }
+
   async function handleSaveEdit(upId) {
     const data = editData[upId];
     if (!data) return;
@@ -229,21 +301,52 @@ export function AssignCustomProducts({ selectedUser, dark, onCountChange }) {
     setSaving(true);
 
     try {
+      const a = assignedData.find((x) => x.id === upId);
+      const c = customs.find((x) => x.id === a?.custom_id);
+      const tieneTalles = getProductSizes(c).length > 0;
+
+      const payload = {
+        precio_venta: Number(data.precio_venta) || 0,
+        precio_compra: Number(data.precio_compra) || 0,
+        stock: Number(data.stock) || 0,
+        descripcion: data.descripcion || null,
+        imagenes: data.imagenes || [],
+      };
+
+      if (tieneTalles) {
+        const st = stockTallesToPayload(data.stock_talles, { force: true });
+        if (st && Object.keys(st).length) {
+          payload.stock_talles = st;
+          payload.stock = sumStockTalles(st);
+        } else if (Number(data.stock) > 0) {
+          const repartido = repartirStockEntreTalles(
+            Number(data.stock),
+            getProductSizes(c)
+          );
+          payload.stock_talles = repartido;
+          payload.stock = sumStockTalles(repartido);
+        } else {
+          payload.stock_talles = null;
+        }
+      } else {
+        payload.stock_talles = null;
+      }
+
       const { error } = await supabase
         .from("user_products")
-        .update({
-          precio_venta: Number(data.precio_venta) || 0,
-          precio_compra: Number(data.precio_compra) || 0,
-          stock: Number(data.stock) || 0,
-          descripcion: data.descripcion || null,
-          imagenes: data.imagenes || [],
-        })
+        .update(payload)
         .eq("id", upId);
 
       if (error) throw error;
 
+      setAssignedData((prev) =>
+        prev.map((ap) =>
+          ap.id === upId ? { ...ap, ...payload } : ap
+        )
+      );
+
+      syncProductFromAdmin(upId, payload);
       showNotification("Producto actualizado");
-      await load();
     } catch (err) {
       console.error("Error actualizando producto:", err);
       showNotification("Error al actualizar el producto", "error");
@@ -259,15 +362,25 @@ export function AssignCustomProducts({ selectedUser, dark, onCountChange }) {
     setSaving(true);
 
     try {
-      const rows = ids.map((customId) => ({
-        user_id: selectedUser.id,
-        custom_id: customId,
-        precio_compra: Number(selected[customId].precio_compra) || 0,
-        precio_venta: Number(selected[customId].precio_venta) || 0,
-        stock: Number(selected[customId].stock) || 0,
-        active: true,
-        destacado: false,
-      }));
+      const rows = ids.map((customId) => {
+        const c = customs.find((x) => x.id === Number(customId));
+        const tieneTalles = getProductSizes(c).length > 0;
+        const st = selected[customId]?.stock_talles;
+        const row = {
+          user_id: selectedUser.id,
+          custom_id: customId,
+          precio_compra: Number(selected[customId].precio_compra) || 0,
+          precio_venta: Number(selected[customId].precio_venta) || 0,
+          stock: Number(selected[customId].stock) || 0,
+          active: true,
+          destacado: false,
+        };
+        if (tieneTalles) {
+          row.stock_talles = stockTallesToPayload(st, { force: true }) || {};
+          row.stock = sumStockTalles(st);
+        }
+        return row;
+      });
 
       const { error } = await supabase.from("user_products").insert(rows);
 
@@ -284,7 +397,8 @@ export function AssignCustomProducts({ selectedUser, dark, onCountChange }) {
         showNotification(`${rows.length} producto(s) asignado(s)`);
       }
 
-      await load();
+      await reloadAssigned();
+      setSelected({});
     } catch (err) {
       console.error("Error asignando customs:", err);
       showNotification("Error al asignar", "error");
@@ -303,7 +417,7 @@ export function AssignCustomProducts({ selectedUser, dark, onCountChange }) {
       if (error) throw error;
 
       showNotification(active ? "Producto reactivado" : "Producto desactivado");
-      await load();
+      await reloadAssigned();
     } catch (err) {
       console.error("Error actualizando estado:", err);
       showNotification("Error al actualizar el producto", "error");
@@ -389,6 +503,7 @@ export function AssignCustomProducts({ selectedUser, dark, onCountChange }) {
               {disponibles.map((c) => {
                 const isSelected = !!selected[c.id];
                 const img = publicUrl(c.image_url);
+                const prodSizes = getProductSizes(c);
                 return (
                   <div
                     key={c.id}
@@ -494,19 +609,35 @@ export function AssignCustomProducts({ selectedUser, dark, onCountChange }) {
                             className={`w-20 p-1 rounded border text-xs text-right ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
                           />
                         </div>
-                        <div className="flex items-center gap-1">
-                          <span className={`text-xs ${textSecondary}`}>Stock</span>
-                          <input
-                            type="number"
-                            placeholder="0"
-                            value={selected[c.id]?.stock || ""}
-                            onChange={(e) =>
-                              updateField(c.id, "stock", e.target.value)
-                            }
-                            onClick={(e) => e.stopPropagation()}
-                            className={`w-16 p-1 rounded border text-xs text-right ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
-                          />
-                        </div>
+                        {prodSizes.length === 0 && (
+                          <div className="flex items-center gap-1">
+                            <span className={`text-xs ${textSecondary}`}>Stock</span>
+                            <input
+                              type="number"
+                              placeholder="0"
+                              value={selected[c.id]?.stock || ""}
+                              onChange={(e) =>
+                                updateField(c.id, "stock", e.target.value)
+                              }
+                              onClick={(e) => e.stopPropagation()}
+                              className={`w-16 p-1 rounded border text-xs text-right ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {isSelected && prodSizes.length > 0 && (
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <StockPorTalle
+                          sizes={prodSizes}
+                          value={selected[c.id]?.stock_talles || {}}
+                          onChange={(v) => updateStockTallesSel(c.id, v)}
+                          dark={dark}
+                        />
+                        <p className={`text-[10px] mt-1 ${textSecondary}`}>
+                          El stock general se calcula como la suma de los talles.
+                        </p>
                       </div>
                     )}
                   </div>
@@ -563,6 +694,7 @@ export function AssignCustomProducts({ selectedUser, dark, onCountChange }) {
                 const compra = Number(ed?.precio_compra) || 0;
                 const venta = Number(ed?.precio_venta) || 0;
                 const compraMayorVenta = compra > 0 && venta > 0 && compra > venta;
+                const prodSizes = getProductSizes(c);
 
                 return (
                   <div
@@ -608,6 +740,18 @@ export function AssignCustomProducts({ selectedUser, dark, onCountChange }) {
                           ★
                         </button>
                         <button
+                          type="button"
+                          onClick={() => handleToggleVisible(a)}
+                          title={a.visible === false ? "Mostrar en el catálogo" : "Ocultar del catálogo"}
+                          className={`text-xl leading-none transition-colors ${
+                            a.visible === false
+                              ? "text-gray-500"
+                              : "text-gray-400 hover:text-gray-200"
+                          }`}
+                        >
+                          {a.visible === false ? "👁‍🗨" : "👁"}
+                        </button>
+                        <button
                           onClick={() => toggleActive(a.id, false)}
                           className="px-3 py-1 bg-red-500 text-white rounded-lg text-xs hover:bg-red-600 transition-colors shrink-0"
                         >
@@ -637,15 +781,26 @@ export function AssignCustomProducts({ selectedUser, dark, onCountChange }) {
                           className={`w-full p-1.5 rounded border text-xs text-right ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
                         />
                       </div>
-                      <div>
-                        <label className={`block text-[10px] mb-0.5 ${textSecondary}`}>Stock</label>
-                        <input
-                          type="number"
-                          value={ed?.stock ?? ""}
-                          onChange={(e) => updateEditField(a.id, "stock", e.target.value)}
-                          className={`w-full p-1.5 rounded border text-xs text-right ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
-                        />
-                      </div>
+                      {prodSizes.length > 0 ? (
+                        <div className="col-span-2 md:col-span-2">
+                          <label className={`block text-[10px] mb-0.5 ${textSecondary}`}>
+                            📏 Stock general (suma de talles)
+                          </label>
+                          <div className={`px-1.5 py-1.5 rounded border text-xs text-right font-semibold ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}>
+                            {sumStockTalles(ed?.stock_talles)}
+                          </div>
+                        </div>
+                      ) : (
+                        <div>
+                          <label className={`block text-[10px] mb-0.5 ${textSecondary}`}>Stock</label>
+                          <input
+                            type="number"
+                            value={ed?.stock ?? ""}
+                            onChange={(e) => updateEditField(a.id, "stock", e.target.value)}
+                            className={`w-full p-1.5 rounded border text-xs text-right ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
+                          />
+                        </div>
+                      )}
                       <div className="col-span-2 md:col-span-4">
                         <label className={`block text-[10px] mb-0.5 ${textSecondary}`}>Descripción</label>
                         <input
@@ -657,6 +812,20 @@ export function AssignCustomProducts({ selectedUser, dark, onCountChange }) {
                         />
                       </div>
                     </div>
+
+                    {prodSizes.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-gray-600/20">
+                        <StockPorTalle
+                          sizes={prodSizes}
+                          value={ed?.stock_talles || {}}
+                          onChange={(v) => updateEditField(a.id, "stock_talles", v)}
+                          dark={dark}
+                        />
+                        <p className={`text-[10px] mt-1 ${textSecondary}`}>
+                          El stock general se calcula como la suma de los talles.
+                        </p>
+                      </div>
+                    )}
 
                     {compraMayorVenta && (
                       <div

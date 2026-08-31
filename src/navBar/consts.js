@@ -25,6 +25,12 @@ export const menuItems = [
     title: "Listas",
     icon: "📜",
     path: "/pedidos",
+  },
+  {
+    id: 8,
+    title: "Pedidos Web",
+    icon: "🛒",
+    path: "/pedidos-web",
   },  {
     id: 7,
     title: "Usuario",

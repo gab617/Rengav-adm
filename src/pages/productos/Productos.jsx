@@ -12,7 +12,7 @@ export function Productos() {
     <div className={`p-0.5 md:p-1 min-h-screen transition-colors ${dark ? "bg-gray-900" : "bg-gray-50"}`}>
       <div className="sm:flex flex-wrap gap-4">
         {/* Lista de productos ocupa el espacio disponible */}
-        <div className="flex-1 transition-colors">
+        <div className="flex-1 min-w-0 transition-colors">
           <UlProducts />
         </div>
 

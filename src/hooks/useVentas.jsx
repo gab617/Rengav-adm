@@ -27,6 +27,9 @@ export const useVentas = ({ userId }) => {
   // Cache local de ventas por rango
   const [ventasCache, setVentasCache] = useState({});
 
+  // Búsqueda por datos del cliente (nombre/teléfono/email)
+  const [busquedaCliente, setBusquedaCliente] = useState("");
+
   // Calcular rango según filtro
   const calcularRango = useCallback((filtroValue, fecha, mes) => {
     const hoy = dayjs();
@@ -81,6 +84,11 @@ export const useVentas = ({ userId }) => {
           id,
           fecha,
           monto_total,
+          cliente_nombre,
+          cliente_telefono,
+          cliente_email,
+          metodo_pago,
+          estado,
           user_sales_detail (
             id,
             cantidad,
@@ -88,6 +96,7 @@ export const useVentas = ({ userId }) => {
             precio_compra,
             nombre_producto,
             product_id,
+            talle,
             user_products (
               products_base (
                 brands (
@@ -187,7 +196,7 @@ export const useVentas = ({ userId }) => {
   // -----------------------------------------------------
   // CREAR VENTA + DETALLES + ACTUALIZAR STOCK
   // -----------------------------------------------------
-  const crearVenta = async (dataCarrito, actualizarProductosPostVenta) => {
+  const crearVenta = async (dataCarrito, actualizarProductosPostVenta, metadata = {}) => {
     try {
       // -----------------------------
       // 1) Calcular total
@@ -206,6 +215,11 @@ export const useVentas = ({ userId }) => {
           user_id: userId,
           monto_total: montoTotal,
           fecha: new Date().toISOString(),
+          cliente_nombre: metadata.cliente_nombre || null,
+          cliente_telefono: metadata.cliente_telefono || null,
+          cliente_email: metadata.cliente_email || null,
+          metodo_pago: metadata.metodo_pago || "efectivo",
+          estado: metadata.estado || "confirmado",
         })
         .select()
         .single();
@@ -224,6 +238,7 @@ export const useVentas = ({ userId }) => {
         cantidad: item.cantidad,
         precio_unitario: item.precio_venta,
         precio_compra: item.precio_compra,
+        talle: item.talle || null,
       }));
 
       const { data: detalles, error: errDetalles } = await supabase
@@ -239,6 +254,7 @@ export const useVentas = ({ userId }) => {
       const stockPayload = dataCarrito.map((item) => ({
         id: item.id,
         cantidad: item.cantidad,
+        talle: item.talle || null,
       }));
 
       const { error: errStock } = await supabase.rpc("update_stocks", {
@@ -254,6 +270,8 @@ export const useVentas = ({ userId }) => {
       const productosActualizados = dataCarrito.map((item) => ({
         id_producto: item.id,
         stock: Number(item.stock) - Number(item.cantidad),
+        talle: item.talle || null,
+        cantidad: item.cantidad,
       }));
 
       actualizarProductosPostVenta(productosActualizados);
@@ -276,6 +294,44 @@ export const useVentas = ({ userId }) => {
       return false;
     }
   };
+
+  // -----------------------------------------------------
+  // REGISTRAR VENTA LOCAL (para inyectar desde otros hooks)
+  // -----------------------------------------------------
+  const registrarVentaLocal = useCallback((venta, detalles) => {
+    setVentas((prev) => [
+      {
+        ...venta,
+        user_sales_detail: detalles,
+      },
+      ...prev,
+    ]);
+  }, []);
+
+  // -----------------------------------------------------
+  // CONFIRMAR VENTA PENDIENTE (pendiente → confirmado)
+  // -----------------------------------------------------
+  const confirmarVenta = useCallback(async (ventaId) => {
+    try {
+      const { error } = await supabase
+        .from("user_sales")
+        .update({ estado: "confirmado" })
+        .eq("id", ventaId);
+
+      if (error) throw error;
+
+      setVentas((prev) =>
+        prev.map((v) =>
+          v.id === ventaId ? { ...v, estado: "confirmado" } : v
+        )
+      );
+
+      return true;
+    } catch (err) {
+      console.error("Error confirmando venta:", err);
+      return false;
+    }
+  }, []);
 
   // -----------------------------------------------------
   // ELIMINAR UNA VENTA
@@ -439,29 +495,33 @@ export const useVentas = ({ userId }) => {
   // -----------------------------------------------------
   const ventasFiltradas = useMemo(() => {
     const hoy = dayjs();
-    return ventas.filter((venta) => {
-      const fechaVenta = dayjs(venta.fecha);
+    const term = busquedaCliente.trim().toLowerCase();
 
-      if (filtro === "dia") return fechaVenta.isSame(fechaSeleccionada, "day");
-      if (filtro === "mes") return fechaVenta.isSame(mesSeleccionado, "month");
-      if (filtro === "semana")
-        return fechaVenta.isBetween(
-          hoy.startOf("week"),
-          hoy.endOf("week"),
-          null,
-          "[]"
-        );
-      if (filtro === "personalizado") {
-        return fechaVenta.isBetween(
-          dayjs(rangoFechas.desde),
-          dayjs(rangoFechas.hasta),
-          null,
-          "[]"
-        );
-      }
-      return true;
+    return ventas.filter((venta) => {
+      // Filtro por fecha
+      const fechaVenta = dayjs(venta.fecha);
+      let pasaFecha = true;
+
+      if (filtro === "dia") pasaFecha = fechaVenta.isSame(fechaSeleccionada, "day");
+      else if (filtro === "mes") pasaFecha = fechaVenta.isSame(mesSeleccionado, "month");
+      else if (filtro === "semana")
+        pasaFecha = fechaVenta.isBetween(hoy.startOf("week"), hoy.endOf("week"), null, "[]");
+      else if (filtro === "personalizado")
+        pasaFecha = fechaVenta.isBetween(dayjs(rangoFechas.desde), dayjs(rangoFechas.hasta), null, "[]");
+
+      if (!pasaFecha) return false;
+
+      // Si no hay búsqueda de cliente, pasar directo
+      if (!term) return true;
+
+      // Filtro por datos del cliente (nombre, teléfono, email)
+      const nombre = (venta.cliente_nombre || "").toLowerCase();
+      const telefono = (venta.cliente_telefono || "").toLowerCase();
+      const email = (venta.cliente_email || "").toLowerCase();
+
+      return nombre.includes(term) || telefono.includes(term) || email.includes(term);
     });
-  }, [ventas, filtro, fechaSeleccionada, mesSeleccionado, rangoFechas]);
+  }, [ventas, filtro, fechaSeleccionada, mesSeleccionado, rangoFechas, busquedaCliente]);
 
   const ventasAgrupadas = useMemo(() => {
     if (filtro === "semana") {
@@ -492,6 +552,8 @@ export const useVentas = ({ userId }) => {
     error,
 
     crearVenta,
+    registrarVentaLocal,
+    confirmarVenta,
     eliminarVenta,
     eliminarPorDia,
     eliminarPorMes,
@@ -512,5 +574,7 @@ export const useVentas = ({ userId }) => {
     setMesSeleccionado,
     setRangoFechas,
     fetchVentas,
+    busquedaCliente,
+    setBusquedaCliente,
   };
 };

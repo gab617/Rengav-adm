@@ -1,6 +1,38 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import { useAppContext } from "../../../contexto/Context";
 
+function SwitchFiltro({ activo, onClick, icono, etiqueta, colorActivo, dark }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all border select-none ${
+        activo
+          ? colorActivo
+          : dark
+            ? "border-gray-600 bg-gray-700 text-gray-300"
+            : "border-gray-200 bg-gray-50 text-gray-600"
+      }`}
+    >
+      <span className="flex items-center gap-1">
+        <span>{icono}</span>
+        <span>{etiqueta}</span>
+      </span>
+      <span
+        className={`relative w-7 h-4 shrink-0 rounded-full transition-colors ${
+          activo ? "bg-black/25" : dark ? "bg-gray-600" : "bg-gray-300"
+        }`}
+      >
+        <span
+          className={`absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full shadow transition-transform ${
+            activo ? "translate-x-3" : ""
+          }`}
+        />
+      </span>
+    </button>
+  );
+}
+
 export function Filtros({
   filtroNombre,
   setFiltroNombre,
@@ -22,6 +54,10 @@ export function Filtros({
   onOpenScanner,
   soloPeso,
   setSoloPeso,
+  soloDestacados,
+  setSoloDestacados,
+  soloOcultos,
+  setSoloOcultos,
 }) {
   const { preferencias } = useAppContext();
   const dark = preferencias?.theme === "dark";
@@ -52,7 +88,7 @@ export function Filtros({
   }, [marcas, marcaSearch]);
 
   const hayFiltrosActivos =
-    filtroNombre || filtroId || filtroMarca || filtroStock || filtroCategorias.length > 0 || soloCustom || filtroSubcategorias.length > 0 || soloPeso;
+    filtroNombre || filtroId || filtroMarca || filtroStock || filtroCategorias.length > 0 || soloCustom || filtroSubcategorias.length > 0 || soloPeso || soloDestacados || soloOcultos;
 
   const resetearTodo = () => {
     setFiltroNombre("");
@@ -61,6 +97,8 @@ export function Filtros({
     setFiltroStock("");
     setSoloCustom(false);
     setSoloPeso(false);
+    setSoloDestacados(false);
+    setSoloOcultos(false);
     setMarcaSearch("");
     filtroCategorias.forEach((cat) => toggleCategoria(cat));
   };
@@ -203,7 +241,7 @@ export function Filtros({
               </button>
             )}
           </div>
-          <div className="flex gap-1.5">
+          <div className="flex gap-1.5 flex-nowrap lg:flex-wrap">
             {categorias.map((cat) => {
               const activa = filtroCategorias.includes(cat.id);
               return (
@@ -235,7 +273,7 @@ export function Filtros({
                 </button>
               )}
             </div>
-            <div className="flex gap-1.5">
+            <div className="flex gap-1.5 flex-nowrap lg:flex-wrap">
               {subcategorias
                 .filter((s) => filtroCategorias.includes(s.id_categoria))
                 .map((sub) => {
@@ -312,28 +350,44 @@ export function Filtros({
           </div>
 
           {/* TIPO */}
-          <button
+          <SwitchFiltro
+            activo={soloCustom}
             onClick={() => setSoloCustom(!soloCustom)}
-            className={`px-3 py-2 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-1
-              ${soloCustom
-                ? "bg-emerald-600 text-white"
-                : dark ? "border border-gray-600 bg-gray-700 text-gray-300" : "border border-gray-200 bg-gray-50 text-gray-600"
-              }`}
-          >
-            ✨ {soloCustom ? "Personalizados" : "Todos"}
-          </button>
+            icono="✨"
+            etiqueta="Personalizados"
+            colorActivo="bg-emerald-600 text-white border-emerald-600"
+            dark={dark}
+          />
 
           {/* POR PESO */}
-          <button
+          <SwitchFiltro
+            activo={soloPeso}
             onClick={() => setSoloPeso(!soloPeso)}
-            className={`px-3 py-2 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-1
-              ${soloPeso
-                ? "bg-blue-600 text-white"
-                : dark ? "border border-gray-600 bg-gray-700 text-gray-300" : "border border-gray-200 bg-gray-50 text-gray-600"
-              }`}
-          >
-            ⚖️ {soloPeso ? "Por peso" : "Todos"}
-          </button>
+            icono="⚖️"
+            etiqueta="Por peso"
+            colorActivo="bg-blue-600 text-white border-blue-600"
+            dark={dark}
+          />
+
+          {/* DESTACADOS */}
+          <SwitchFiltro
+            activo={soloDestacados}
+            onClick={() => setSoloDestacados(!soloDestacados)}
+            icono="⭐"
+            etiqueta="Destacados"
+            colorActivo="bg-yellow-500 text-white border-yellow-500"
+            dark={dark}
+          />
+
+          {/* OCULTOS */}
+          <SwitchFiltro
+            activo={soloOcultos}
+            onClick={() => setSoloOcultos(!soloOcultos)}
+            icono="👁"
+            etiqueta="Ocultos"
+            colorActivo="bg-gray-600 text-white border-gray-600"
+            dark={dark}
+          />
         </div>
 
         {/* RESETEAR */}

@@ -1,5 +1,13 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { supabase } from "../services/supabaseClient";
+
+const normalizarNombre = (texto) => {
+  const limpio = String(texto || "")
+    .trim()
+    .replace(/\s+/g, " ");
+  if (!limpio) return limpio;
+  return limpio.charAt(0).toUpperCase() + limpio.slice(1);
+};
 
 export const useProducts = (
   { userId, categoryId = null, subcategoryId = null } = {},
@@ -30,12 +38,15 @@ export const useProducts = (
       "precio_compra",
       "precio_venta",
       "stock",
+      "stock_talles",
       "proveedor_nombre",
       "base_id",
       "custom_id",
       "user_id",
       "active",
       "imagenes",
+      "destacado",
+      "visible",
     ];
 
     const cleaned = {};
@@ -65,9 +76,12 @@ export const useProducts = (
             precio_compra,
             precio_venta,
             stock,
+            stock_talles,
             proveedor_nombre,
             active,
             imagenes,
+            destacado,
+            visible,
             products_base (
               id,
               name,
@@ -75,7 +89,8 @@ export const useProducts = (
               image_url,
               category_id,
               subcategory_id,
-              type_unit
+              type_unit,
+              talles
             ),
             user_custom_products (
               id,
@@ -84,7 +99,8 @@ export const useProducts = (
               image_url,
               category_id,
               subcategory_id,
-              brand_text
+              brand_text,
+              talles
             )
           `
           )
@@ -128,6 +144,8 @@ export const useProducts = (
                 category_id: null,
                 subcategory_id: null,
                 brand_text: null,
+                talles: null,
+                type_unit: null,
               },
             };
           }
@@ -143,6 +161,8 @@ export const useProducts = (
               category_id: custom.category_id,
               subcategory_id: custom.subcategory_id,
               brand_text: custom.brand_text,
+              talles: custom.talles || [],
+              type_unit: custom.type_unit || null,
             },
           };
         }
@@ -162,6 +182,7 @@ export const useProducts = (
               subcategory_id: null,
               brand_text: null,
               type_unit: null,
+              talles: null,
             },
           };
         }
@@ -177,7 +198,8 @@ export const useProducts = (
             category_id: base.category_id,
             subcategory_id: base.subcategory_id,
             brand_text: null,
-            type_unit: base.type_unit
+            type_unit: base.type_unit,
+            talles: base.talles || [],
           },
         };
       };
@@ -213,9 +235,12 @@ export const useProducts = (
     userId,
     imagenes,
     tenantId,
+    talles = [],
     unifiedBrands, // 👈 pasar o tomar del contexto
   }) => {
     setLoadingProductosFetch(true);
+
+    const nombreFinal = normalizarNombre(name);
 
     try {
       if (!userId) {
@@ -243,11 +268,12 @@ export const useProducts = (
         .insert([
           {
             user_id: userId,
-            name: name.trim(),
+            name: nombreFinal,
             brand_id: brandId || null,
             brand_text: brandText || null,
             category_id: categoryId,
             subcategory_id: subcategoryId || null,
+            talles: talles.map(Number),
           },
         ]);
 
@@ -258,10 +284,10 @@ export const useProducts = (
       const { data: customRow, error: errFetch } = await supabase
         .from("user_custom_products")
         .select(
-          "id, name, brand_id, brand_text, category_id, subcategory_id, image_url"
+          "id, name, brand_id, brand_text, category_id, subcategory_id, image_url, talles"
         )
         .eq("user_id", userId)
-        .eq("name", name.trim())
+        .eq("name", nombreFinal)
         .order("id", { ascending: false })
         .limit(1);
 
@@ -406,17 +432,21 @@ export const useProducts = (
 
       let necesitaActualizarCustom = false;
 
+      const prevCustom = prev?.user_custom_products;
+      const customImageUrl =
+        producto.user_custom_products?.image_url ?? null;
+
       if (
         producto.tipo === "custom" &&
         producto.custom_id &&
-        prev?.user_custom_products
+        prevCustom
       ) {
         necesitaActualizarCustom =
-          producto.nombre !== prev.user_custom_products.name ||
+          producto.nombre !== prevCustom.name ||
           (producto.brand ?? null) !==
-            (prev.user_custom_products.brand ?? null) ||
-          (producto.image_url ?? null) !==
-            (prev.user_custom_products.image_url ?? null);
+            (prevCustom.brand ?? null) ||
+          customImageUrl !==
+            (prevCustom.image_url ?? null);
       }
 
       if (necesitaActualizarCustom) {
@@ -437,7 +467,7 @@ export const useProducts = (
           .update({
             name: producto.nombre,
             ...brandData,
-            image_url: producto.image_url ?? null,
+            image_url: customImageUrl,
           })
           .eq("id", producto.custom_id);
 
@@ -458,7 +488,7 @@ export const useProducts = (
                         name: producto.nombre,
                         brand: producto.brand ?? p.user_custom_products.brand,
                         image_url:
-                          producto.image_url ??
+                          customImageUrl ??
                           p.user_custom_products.image_url,
                       }
                     : p.user_custom_products,
@@ -482,6 +512,11 @@ export const useProducts = (
     try {
       const aEliminar = products.find((p) => p.id === id);
       const imagenesAEliminar = aEliminar?.imagenes || [];
+      // Los customs comparten UN solo pool de archivos entre el molde
+      // (user_custom_products.image_url) y todas las asignaciones. Si
+      // es un custom, acá solo quitamos la asignación: las imágenes
+      // quedan (las administra /admin/prods-base).
+      const esCustom = aEliminar?.custom_id != null;
 
       const { error } = await supabase
         .from("user_products")
@@ -513,7 +548,7 @@ export const useProducts = (
         throw error;
       }
 
-      if (imagenesAEliminar.length > 0) {
+      if (!esCustom && imagenesAEliminar.length > 0) {
         const { error: errStorage } = await supabase
           .storage
           .from("product-images")
@@ -577,10 +612,31 @@ export const useProducts = (
   const actualizarProductosPostVenta = (productosConStockActualizado) => {
     setProducts((prev) =>
       prev.map((prod) => {
-        const encontrado = productosConStockActualizado.find(
+        const encontrados = productosConStockActualizado.filter(
           (p) => p.id_producto === prod.id
         );
-        return encontrado ? { ...prod, stock: encontrado.stock } : prod;
+        if (!encontrados.length) return prod;
+
+        let actualizado = { ...prod };
+        encontrados.forEach((e) => {
+          actualizado = {
+            ...actualizado,
+            stock: e.stock,
+          };
+
+          if (e.talle && actualizado.stock_talles) {
+            actualizado.stock_talles = {
+              ...actualizado.stock_talles,
+              [e.talle]: Math.max(
+                (Number(actualizado.stock_talles[e.talle]) || 0) -
+                  Number(e.cantidad),
+                0
+              ),
+            };
+          }
+        });
+
+        return actualizado;
       })
     );
   };
@@ -596,6 +652,28 @@ export const useProducts = (
     fetchProductos();
   }, [categoryId, subcategoryId, loadingBrands]);
 
+  const syncProductFromAdmin = (id, updates) => {
+    const applyUpdates = (list) =>
+      list.map((p) =>
+        p.id === id
+          ? {
+              ...p,
+              stock: updates.stock ?? p.stock,
+              stock_talles: updates.stock_talles ?? p.stock_talles,
+              precio_venta: updates.precio_venta ?? p.precio_venta,
+              precio_compra: updates.precio_compra ?? p.precio_compra,
+              active: updates.active ?? p.active,
+              descripcion: updates.descripcion ?? p.descripcion,
+              imagenes: updates.imagenes ?? p.imagenes,
+            }
+          : p
+      );
+
+    setProducts(applyUpdates);
+    setCustomProducts(applyUpdates);
+    setInactiveProducts(applyUpdates);
+  };
+
   return {
     products,
     customProducts,
@@ -610,6 +688,7 @@ export const useProducts = (
     buscarProductoPorId,
     actualizarProductosPostVenta,
     agregarProductoBase,
+    syncProductFromAdmin,
     refetch: fetchProductos,
   };
 };

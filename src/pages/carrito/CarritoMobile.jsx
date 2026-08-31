@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useAppContext } from "../../contexto/Context";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import { stockDelTalle } from "../../utils/talles";
 
 export function CarritoMobile({ onClose }) {
   const {
@@ -19,6 +20,14 @@ export function CarritoMobile({ onClose }) {
 
   const [animatingItems] = useState(() => new Set());
   const [loading, setLoading] = useState(false);
+  const [showClienteForm, setShowClienteForm] = useState(false);
+  const [clienteData, setClienteData] = useState({
+    cliente_nombre: "",
+    cliente_telefono: "",
+    cliente_email: "",
+    metodo_pago: "efectivo",
+    estado: "confirmado",
+  });
 
   const stopProp = useCallback((e) => {
     e.stopPropagation();
@@ -30,9 +39,18 @@ export function CarritoMobile({ onClose }) {
 
     setLoading(true);
 
+    const metadata = {
+      cliente_nombre: clienteData.cliente_nombre.trim() || null,
+      cliente_telefono: clienteData.cliente_telefono.trim() || null,
+      cliente_email: clienteData.cliente_email.trim() || null,
+      metodo_pago: clienteData.metodo_pago,
+      estado: clienteData.estado,
+    };
+
     const ventaExitosa = await crearVenta(
       carrito,
       actualizarProductosPostVenta,
+      metadata,
     );
 
     setLoading(false);
@@ -40,6 +58,14 @@ export function CarritoMobile({ onClose }) {
     if (ventaExitosa) {
       toast.success("✅ Venta realizada con éxito.");
       limpiarCarrito();
+      setClienteData({
+        cliente_nombre: "",
+        cliente_telefono: "",
+        cliente_email: "",
+        metodo_pago: "efectivo",
+        estado: "confirmado",
+      });
+      setShowClienteForm(false);
       if (onClose) onClose();
     } else {
       toast.error("❌ Hubo un error al procesar la venta.");
@@ -114,6 +140,87 @@ export function CarritoMobile({ onClose }) {
         </div>
       </div>
 
+      {/* MÉTODO DE PAGO + ESTADO — siempre visibles */}
+      <div className="mb-3">
+        <div className="flex gap-2">
+          <div className="flex-1">
+            <label className={`block text-[10px] font-medium mb-0.5 ${dark ? "text-gray-400" : "text-gray-500"}`}>
+              Método de pago
+            </label>
+            <select
+              value={clienteData.metodo_pago}
+              onChange={(e) => setClienteData({ ...clienteData, metodo_pago: e.target.value })}
+              className={`w-full px-2 py-2 rounded-xl border text-sm font-medium ${
+                dark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"
+              }`}
+            >
+              <option value="efectivo">Efectivo</option>
+              <option value="transferencia">Transferencia</option>
+            </select>
+          </div>
+          <div className="flex-1">
+            <label className={`block text-[10px] font-medium mb-0.5 ${dark ? "text-gray-400" : "text-gray-500"}`}>
+              Estado
+            </label>
+            <select
+              value={clienteData.estado}
+              onChange={(e) => setClienteData({ ...clienteData, estado: e.target.value })}
+              className={`w-full px-2 py-2 rounded-xl border text-sm font-medium ${
+                dark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"
+              }`}
+            >
+              <option value="confirmado">✅ Confirmado</option>
+              <option value="pendiente">⏳ Pendiente</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* DATOS DEL CLIENTE (colapsable) */}
+      <div className="mb-3">
+        <button
+          onClick={(e) => { e.stopPropagation(); setShowClienteForm(!showClienteForm); }}
+          className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-colors ${
+            dark ? "bg-gray-700 text-gray-300 hover:bg-gray-600" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+          }`}
+        >
+          <span>Datos del cliente (opcional)</span>
+          <span>{showClienteForm ? "▲" : "▼"}</span>
+        </button>
+
+        {showClienteForm && (
+          <div className="mt-2 space-y-2" onClick={(e) => e.stopPropagation()}>
+            <input
+              type="text"
+              placeholder="Nombre del cliente"
+              value={clienteData.cliente_nombre}
+              onChange={(e) => setClienteData({ ...clienteData, cliente_nombre: e.target.value })}
+              className={`w-full px-3 py-2 rounded-xl border text-sm ${
+                dark ? "bg-gray-700 border-gray-600 text-white placeholder-gray-400" : "bg-white border-gray-300 placeholder-gray-400"
+              }`}
+            />
+            <input
+              type="tel"
+              placeholder="Teléfono (opcional)"
+              value={clienteData.cliente_telefono}
+              onChange={(e) => setClienteData({ ...clienteData, cliente_telefono: e.target.value })}
+              className={`w-full px-3 py-2 rounded-xl border text-sm ${
+                dark ? "bg-gray-700 border-gray-600 text-white placeholder-gray-400" : "bg-white border-gray-300 placeholder-gray-400"
+              }`}
+            />
+            <input
+              type="email"
+              placeholder="Email (opcional)"
+              value={clienteData.cliente_email}
+              onChange={(e) => setClienteData({ ...clienteData, cliente_email: e.target.value })}
+              className={`w-full px-3 py-2 rounded-xl border text-sm ${
+                dark ? "bg-gray-700 border-gray-600 text-white placeholder-gray-400" : "bg-white border-gray-300 placeholder-gray-400"
+              }`}
+            />
+          </div>
+        )}
+      </div>
+
       {/* BOTONES DE ACCIÓN */}
       <div className="flex gap-2 mb-4" onClick={(e) => e.stopPropagation()}>
         <button
@@ -174,10 +281,11 @@ export function CarritoMobile({ onClose }) {
             .replace(/\B(?=(\d{3})+(?!\d))/g, ".");
           const cantidad = cantidadEnCarrito(producto);
           const esP = esPeso(producto);
+          const stockTalle = stockDelTalle(producto, producto.talle);
 
           return (
             <li
-              key={`${producto.id}-${producto.cantidad}`}
+              key={`${producto.id}|${producto.talle || ""}`}
               className={`
                 p-4 rounded-xl border-2
                 transition-all duration-200
@@ -196,6 +304,13 @@ export function CarritoMobile({ onClose }) {
                 <div className="flex-1 min-w-0">
                   <h3 className={`font-semibold truncate ${dark ? "text-white" : "text-gray-900"}`}>
                     {producto.products_base?.name}
+                    {producto.talle && (
+                      <span className={`ml-2 text-xs font-bold px-2 py-0.5 rounded-full ${
+                        dark ? "bg-white/10 text-gray-200" : "bg-gray-200 text-gray-700"
+                      }`}>
+                        👕 {producto.talle}
+                      </span>
+                    )}
                   </h3>
                   <p className={`text-sm ${dark ? "text-gray-400" : "text-gray-500"}`}>
                     {esP ? (
@@ -235,7 +350,11 @@ export function CarritoMobile({ onClose }) {
                       `}
                       onClick={(e) => {
                         e.stopPropagation();
-                        actualizarCantidad(producto.id, producto.cantidad - 1);
+                        actualizarCantidad(
+                          producto.id,
+                          producto.cantidad - 1,
+                          producto.talle,
+                        );
                       }}
                       disabled={producto.cantidad <= 1}
                     >
@@ -258,10 +377,18 @@ export function CarritoMobile({ onClose }) {
                       `}
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (producto.cantidad < producto.stock) {
-                          actualizarCantidad(producto.id, producto.cantidad + 1);
+                        if (producto.cantidad < stockTalle) {
+                          actualizarCantidad(
+                            producto.id,
+                            producto.cantidad + 1,
+                            producto.talle,
+                          );
                         } else {
-                          toast.warning("⚠️ Stock insuficiente.");
+                          toast.warning(
+                            producto.talle
+                              ? `⚠️ Stock insuficiente para el talle ${producto.talle}.`
+                              : "⚠️ Stock insuficiente.",
+                          );
                         }
                       }}
                     >
@@ -289,7 +416,7 @@ export function CarritoMobile({ onClose }) {
                   `}
                   onClick={(e) => {
                     e.stopPropagation();
-                    eliminarProductoCarrito(producto.id);
+                    eliminarProductoCarrito(producto.id, producto.talle);
                   }}
                 >
                   🗑️

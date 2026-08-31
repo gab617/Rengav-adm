@@ -43,12 +43,12 @@ export function AdminDataProvider({ children }) {
         : supabase.from("profiles").select("id, name, role, created_at, tenant_id, parent_admin_id").order("created_at", { ascending: false }),
       supabase
         .from("products_base")
-        .select("id, name, brand_id, category_id, subcategory_id, type_unit, image_url, brands(name), categories(name), subcategories(name)")
+        .select("id, name, brand_id, category_id, subcategory_id, type_unit, image_url, talles, brands(id, name), categories(id, name), subcategories(id, name)")
         .order("name"),
       userIds && userIds.length > 0
         ? supabase.from("user_products").select("user_id").in("user_id", userIds)
         : supabase.from("user_products").select("user_id"),
-      supabase.from("categories").select("id, name").order("name"),
+      supabase.from("categories").select("id, name, color, subcategories(id, name)").order("name"),
       userIds && userIds.length > 0
         ? supabase.from("user_categories").select("user_id, category_id").in("user_id", userIds)
         : supabase.from("user_categories").select("user_id, category_id"),
@@ -94,22 +94,28 @@ export function AdminDataProvider({ children }) {
   }, [getTenantUserIds]);
 
   const invalidateCategories = useCallback(async () => {
-    const { data } = await supabase.from("categories").select("id, name").order("name");
+    const { data } = await supabase.from("categories").select("id, name, color, subcategories(id, name)").order("name");
     setSystemCategories(data || []);
   }, []);
 
   const invalidateProductsBase = useCallback(async () => {
     const { data } = await supabase
       .from("products_base")
-      .select("id, name, brand_id, category_id, subcategory_id, type_unit, image_url, brands(name), categories(name), subcategories(name)")
+      .select("id, name, brand_id, category_id, subcategory_id, type_unit, image_url, talles, brands(id, name), categories(id, name), subcategories(id, name)")
       .order("name");
     setProductsBase(data || []);
+  }, []);
+
+  const patchProductBase = useCallback((productId, fields) => {
+    setProductsBase((prev) =>
+      prev.map((p) => (p.id === productId ? { ...p, ...fields } : p))
+    );
   }, []);
 
   const invalidateUserProducts = useCallback(async (userId) => {
     const [countsRes, userProductsRes] = await Promise.all([
       supabase.from("user_products").select("user_id"),
-      supabase.from("user_products").select("base_id, precio_venta, precio_compra, stock, descripcion, active, destacado, id").eq("user_id", userId),
+      supabase.from("user_products").select("base_id, precio_venta, precio_compra, stock, stock_talles, descripcion, active, destacado, visible, id").eq("user_id", userId),
     ]);
 
     const counts = {};
@@ -156,6 +162,7 @@ export function AdminDataProvider({ children }) {
     invalidateUsers,
     invalidateCategories,
     invalidateProductsBase,
+    patchProductBase,
     invalidateUserProducts,
     updateUserCount,
     addUserOptimistic,

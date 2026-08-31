@@ -2,11 +2,14 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { supabase } from "../../../services/supabaseClient";
 import { useAppContext } from "../../../contexto/Context";
 import { useAdminData } from "../../../hooks/useAdminData";
+import { useSizes } from "../hooksAdmin/useSizes";
 import { AssignCustomProducts } from "./AssignCustomProducts";
 import { EditPorSucursales } from "./EditPorSucursales";
+import { StockPorTalle, stockTallesToPayload, sumStockTalles } from "./productsBase/components/StockPorTalle";
+import { repartirStockEntreTalles } from "../../../utils/talles";
 
 export function AssignProducts() {
-  const { preferencias, profile } = useAppContext();
+  const { preferencias, profile, syncProductFromAdmin } = useAppContext();
   const dark = preferencias?.theme === "dark";
   const esSuperAdmin = profile?.role === "super_admin";
   const { 
@@ -48,6 +51,7 @@ export function AssignProducts() {
   const [userCategories, setUserCategories] = useState([]);
   const [editDataBase, setEditDataBase] = useState({});
   const [tenants, setTenants] = useState([]);
+  const { getProductSizes } = useSizes();
 
   const showNotification = (msg, type = "success") => {
     setNotification({ msg, type });
@@ -225,7 +229,7 @@ export function AssignProducts() {
 
     const { data } = await supabase
       .from("user_products")
-      .select("base_id, precio_venta, precio_compra, stock, descripcion, active, destacado, id")
+      .select("base_id, precio_venta, precio_compra, stock, stock_talles, descripcion, active, destacado, visible, id")
       .eq("user_id", currentUserId);
 
     if (selectedUser?.id !== currentUserId) return;
@@ -243,9 +247,11 @@ const ids = new Set();
         precio_venta: up.precio_venta,
         precio_compra: up.precio_compra,
         stock: up.stock,
+        stock_talles: up.stock_talles || {},
         descripcion: up.descripcion,
         active: up.active !== false,
         destacado: up.destacado === true,
+        visible: up.visible !== false,
         id: up.id
       });
     });
@@ -313,9 +319,11 @@ const ids = new Set();
         precio_venta: up.precio_venta,
         precio_compra: up.precio_compra,
         stock: up.stock,
+        stock_talles: up.stock_talles || {},
         descripcion: up.descripcion,
         active: up.active !== false,
         destacado: up.destacado === true,
+        visible: up.visible !== false,
         id: up.id
       });
     });
@@ -332,10 +340,26 @@ const ids = new Set();
   useEffect(() => {
     const next = {};
     assignedProductsData.forEach((ap) => {
+      const baseProduct = products.find(
+        (p) => String(p.id) === String(ap.base_id)
+      );
+      const talles = baseProduct ? getProductSizes(baseProduct) : [];
+      const tieneTalles = talles.length > 0;
+
+      // Si el producto tiene talles y stock general heredado SIN desglose,
+      // repartirlo entre los talles para que el admin lo vea y ajuste.
+      const stockTalles =
+        ap.stock_talles && Object.keys(ap.stock_talles).length
+          ? ap.stock_talles
+          : tieneTalles && (ap.stock ?? 0) > 0
+            ? repartirStockEntreTalles(ap.stock, talles)
+            : {};
+
       next[ap.id] = {
         precio_venta: ap.precio_venta ?? 0,
         precio_compra: ap.precio_compra ?? 0,
         stock: ap.stock ?? 0,
+        stock_talles: stockTalles,
         descripcion: ap.descripcion ?? "",
       };
     });
@@ -349,25 +373,55 @@ const ids = new Set();
     }));
   };
 
-  async function handleSaveEditBase(upId) {
+  async function handleSaveEditBase(upId, prod) {
     const data = editDataBase[upId];
     if (!data) return;
 
     try {
+      const payload = {
+        precio_venta: Number(data.precio_venta) || 0,
+        precio_compra: Number(data.precio_compra) || 0,
+        stock: Number(data.stock) || 0,
+        descripcion: data.descripcion || null,
+      };
+
+      const tieneTalles = getProductSizes(prod).length > 0;
+      if (tieneTalles) {
+        const st = stockTallesToPayload(data.stock_talles, { force: true });
+        if (st && Object.keys(st).length) {
+          payload.stock_talles = st;
+          payload.stock = sumStockTalles(st);
+        } else if (Number(data.stock) > 0) {
+          const repartido = repartirStockEntreTalles(
+            Number(data.stock),
+            getProductSizes(prod)
+          );
+          payload.stock_talles = repartido;
+          payload.stock = sumStockTalles(repartido);
+        } else {
+          payload.stock_talles = null;
+        }
+      } else {
+        payload.stock_talles = null;
+      }
+
       const { error } = await supabase
         .from("user_products")
-        .update({
-          precio_venta: Number(data.precio_venta) || 0,
-          precio_compra: Number(data.precio_compra) || 0,
-          stock: Number(data.stock) || 0,
-          descripcion: data.descripcion || null,
-        })
+        .update(payload)
         .eq("id", upId);
 
       if (error) throw error;
 
+      setAssignedProductsData((prev) =>
+        prev.map((ap) =>
+          ap.id === upId
+            ? { ...ap, ...payload, active: ap.active, destacado: ap.destacado }
+            : ap
+        )
+      );
+
+      syncProductFromAdmin(upId, payload);
       showNotification("Producto actualizado", "success");
-      await reloadUserProducts();
     } catch (err) {
       console.error("Error actualizando producto:", err);
       showNotification("Error al actualizar el producto", "error");
@@ -476,6 +530,7 @@ const ids = new Set();
         name: baseProduct?.name || "Producto desconocido",
         brand: baseProduct?.brands?.name || "Sin marca",
         image_url: baseProduct?.image_url || null,
+        talles: baseProduct?.talles || [],
       });
     }
 
@@ -510,7 +565,8 @@ const ids = new Set();
         [id]: { 
           precio_venta: parseFloat(precioBaseVenta) || 0,
           precio_compra: 0,
-          stock: 0
+          stock: 0,
+          stock_talles: {},
         },
       }));
     }
@@ -573,7 +629,8 @@ const ids = new Set();
       all[p.id] = { 
         precio_venta: 0,
         precio_compra: 0,
-        stock: 0
+        stock: 0,
+        stock_talles: {},
       };
     });
     setSelectedProducts(all);
@@ -587,11 +644,19 @@ const ids = new Set();
       first[p.id] = { 
         precio_venta: 0,
         precio_compra: 0,
-        stock: 0
+        stock: 0,
+        stock_talles: {},
       };
     });
     setSelectedProducts(first);
     showNotification(`${Math.min(n, productosFiltrados.length)} productos seleccionados`);
+  };
+
+  const updateStockTalles = (id, value) => {
+    setSelectedProducts((prev) => ({
+      ...prev,
+      [id]: { ...prev[id], stock_talles: value },
+    }));
   };
 
   const handleAsignar = async () => {
@@ -611,13 +676,23 @@ const ids = new Set();
     const userId = selectedUser.id;
     const userName = selectedUser.name;
     const ids = Object.keys(selectedProducts);
-    const productsToInsert = ids.map((base_id) => ({
-      user_id: userId,
-      base_id,
-      precio_venta: selectedProducts[base_id]?.precio_venta || 0,
-      precio_compra: selectedProducts[base_id]?.precio_compra || 0,
-      stock: selectedProducts[base_id]?.stock || 0,
-    }));
+    const productsToInsert = ids.map((base_id) => {
+      const baseProduct = products.find((p) => String(p.id) === base_id);
+      const tieneTalles = getProductSizes(baseProduct).length > 0;
+      const st = selectedProducts[base_id]?.stock_talles;
+      const row = {
+        user_id: userId,
+        base_id,
+        precio_venta: selectedProducts[base_id]?.precio_venta || 0,
+        precio_compra: selectedProducts[base_id]?.precio_compra || 0,
+        stock: selectedProducts[base_id]?.stock || 0,
+      };
+      if (tieneTalles) {
+        row.stock_talles = stockTallesToPayload(st, { force: true }) || {};
+        row.stock = sumStockTalles(st);
+      }
+      return row;
+    });
 
     setAsignando(true);
 
@@ -715,6 +790,31 @@ const ids = new Set();
     } catch (err) {
       console.error(err);
       showNotification("Error al cambiar destacado", "error");
+    }
+  };
+
+  const handleToggleVisible = async (prod) => {
+    try {
+      const nuevoVisible = prod.visible === false;
+      await supabase
+        .from("user_products")
+        .update({ visible: nuevoVisible })
+        .eq("id", prod.id);
+
+      setAssignedProductsData((prev) =>
+        prev.map((p) =>
+          p.id === prod.id ? { ...p, visible: nuevoVisible } : p
+        )
+      );
+      showNotification(
+        nuevoVisible
+          ? "Producto visible en el catálogo"
+          : "Producto oculto del catálogo",
+        "success"
+      );
+    } catch (err) {
+      console.error(err);
+      showNotification("Error al cambiar visibilidad", "error");
     }
   };
 
@@ -1006,7 +1106,7 @@ const ids = new Set();
                         onClick={() => {
                           const cleared = {};
                           Object.keys(selectedProducts).forEach(id => {
-                            cleared[id] = { precio_venta: 0, precio_compra: 0, stock: 0 };
+                            cleared[id] = { precio_venta: 0, precio_compra: 0, stock: 0, stock_talles: {} };
                           });
                           setSelectedProducts(cleared);
                         }}
@@ -1259,6 +1359,7 @@ const ids = new Set();
                         {productosFiltrados.map((prod) => {
                           const isSelected = !!selectedProducts[prod.id];
                           const tieneWarning = selectedProducts[prod.id]?.precio_venta > 0 && selectedProducts[prod.id]?.precio_compra > 0 && selectedProducts[prod.id].precio_venta < selectedProducts[prod.id].precio_compra;
+                          const prodSizes = getProductSizes(prod);
                           
                           return (
                             <div
@@ -1351,20 +1452,36 @@ const ids = new Set();
                                       className={`w-16 p-1 rounded border text-xs text-right ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
                                     />
                                   </div>
-                                  <div className="flex items-center gap-1">
-                                    <span className={`text-xs ${textSecondary}`}>Stock</span>
-                                    <input
-                                      type="number"
-                                      placeholder="0"
-                                      value={selectedProducts[prod.id]?.stock || ""}
-                                      onChange={(e) => updateStock(prod.id, e.target.value)}
-                                      onClick={(e) => e.stopPropagation()}
-                                      className={`w-12 p-1 rounded border text-xs text-right ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
-                                    />
-                                  </div>
+                                  {prodSizes.length === 0 && (
+                                    <div className="flex items-center gap-1">
+                                      <span className={`text-xs ${textSecondary}`}>Stock</span>
+                                      <input
+                                        type="number"
+                                        placeholder="0"
+                                        value={selectedProducts[prod.id]?.stock || ""}
+                                        onChange={(e) => updateStock(prod.id, e.target.value)}
+                                        onClick={(e) => e.stopPropagation()}
+                                        className={`w-12 p-1 rounded border text-xs text-right ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
+                                      />
+                                    </div>
+                                  )}
                                   {tieneWarning && (
                                     <span className="text-red-500 font-bold text-xs">⚠️ P. venta &lt; compra</span>
                                   )}
+                                </div>
+                              )}
+
+                              {isSelected && prodSizes.length > 0 && (
+                                <div onClick={(e) => e.stopPropagation()}>
+                                  <StockPorTalle
+                                    sizes={prodSizes}
+                                    value={selectedProducts[prod.id]?.stock_talles || {}}
+                                    onChange={(v) => updateStockTalles(prod.id, v)}
+                                    dark={dark}
+                                  />
+                                  <p className={`text-[10px] mt-1 ${textSecondary}`}>
+                                    El stock general se calcula como la suma de los talles.
+                                  </p>
                                 </div>
                               )}
                             </div>
@@ -1467,6 +1584,7 @@ const ids = new Set();
                             const compra = Number(ed.precio_compra) || 0;
                             const venta = Number(ed.precio_venta) || 0;
                             const compraMayorVenta = compra > 0 && venta > 0 && compra > venta;
+                            const prodSizes = getProductSizes(prod);
                             return (
                               <div
                                 key={prod.base_id}
@@ -1522,6 +1640,25 @@ const ids = new Set();
                                     >
                                       ★
                                     </button>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleToggleVisible(prod);
+                                      }}
+                                      title={
+                                        prod.visible === false
+                                          ? "Mostrar en el catálogo"
+                                          : "Ocultar del catálogo"
+                                      }
+                                      className={`text-xl leading-none transition-colors ${
+                                        prod.visible === false
+                                          ? "text-gray-500"
+                                          : "text-gray-400 hover:text-gray-200"
+                                      }`}
+                                    >
+                                      {prod.visible === false ? "👁‍🗨" : "👁"}
+                                    </button>
                                     <div className="text-right">
                                       <p className={`font-bold ${textPrimary}`}>${prod.precio_venta}</p>
                                       <p className={`text-xs ${textSecondary}`}>ID: {prod.base_id}</p>
@@ -1553,15 +1690,26 @@ const ids = new Set();
                                       className={`w-full p-1.5 rounded border text-xs text-right ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
                                     />
                                   </div>
-                                  <div>
-                                    <label className={`block text-[10px] mb-0.5 ${textSecondary}`}>Stock</label>
-                                    <input
-                                      type="number"
-                                      value={ed?.stock ?? ""}
-                                      onChange={(e) => updateEditFieldBase(upId, "stock", e.target.value)}
-                                      className={`w-full p-1.5 rounded border text-xs text-right ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
-                                    />
-                                  </div>
+                                  {prodSizes.length > 0 ? (
+                                    <div className="col-span-2 md:col-span-2">
+                                      <label className={`block text-[10px] mb-0.5 ${textSecondary}`}>
+                                        📏 Stock general (suma de talles)
+                                      </label>
+                                      <div className={`px-1.5 py-1.5 rounded border text-xs text-right font-semibold ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}>
+                                        {sumStockTalles(ed?.stock_talles)}
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div>
+                                      <label className={`block text-[10px] mb-0.5 ${textSecondary}`}>Stock</label>
+                                      <input
+                                        type="number"
+                                        value={ed?.stock ?? ""}
+                                        onChange={(e) => updateEditFieldBase(upId, "stock", e.target.value)}
+                                        className={`w-full p-1.5 rounded border text-xs text-right ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
+                                      />
+                                    </div>
+                                  )}
                                   <div className="col-span-2 md:col-span-4">
                                     <label className={`block text-[10px] mb-0.5 ${textSecondary}`}>Descripción</label>
                                     <input
@@ -1573,6 +1721,23 @@ const ids = new Set();
                                     />
                                   </div>
                                 </div>
+
+                                {prodSizes.length > 0 && (
+                                  <div
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="mt-3 pt-3 border-t border-gray-600/20"
+                                  >
+                                    <StockPorTalle
+                                      sizes={prodSizes}
+                                      value={ed?.stock_talles || {}}
+                                      onChange={(v) => updateEditFieldBase(upId, "stock_talles", v)}
+                                      dark={dark}
+                                    />
+                                    <p className={`text-[10px] mt-1 ${textSecondary}`}>
+                                      El stock general se calcula como la suma de los talles.
+                                    </p>
+                                  </div>
+                                )}
 
                                 {compraMayorVenta && (
                                   <div
@@ -1591,7 +1756,7 @@ const ids = new Set();
                                   className="mt-2 flex justify-end"
                                 >
                                   <button
-                                    onClick={() => handleSaveEditBase(upId)}
+                                    onClick={() => handleSaveEditBase(upId, prod)}
                                     className="px-4 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-500 transition-colors"
                                   >
                                     💾 Guardar

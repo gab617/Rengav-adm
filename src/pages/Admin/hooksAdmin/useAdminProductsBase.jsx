@@ -1,9 +1,17 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "../../../services/supabaseClient";
 import { useProfile } from "../../../hooksSB/useProfile";
+import { useAdminData } from "../../../hooks/useAdminData";
+import { compressImage } from "../../../utils/compressImage";
 
 export function useAdminProductsBase(onProductCreated, tenantId) {
   const { profile } = useProfile();
+  const {
+    users: cachedUsers,
+    userCategoriesMap,
+    productsBase: cachedProducts,
+    patchProductBase,
+  } = useAdminData();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -11,20 +19,16 @@ export function useAdminProductsBase(onProductCreated, tenantId) {
   const [tieneCatalogoDefinido, setTieneCatalogoDefinido] = useState(false);
   const [baseGallery, setBaseGallery] = useState({});
   const [tenantGallery, setTenantGallery] = useState({});
+  const hasLoadedRef = useRef(false);
 
   const loadProducts = useCallback(async () => {
-    setLoading(true);
+    // Soft refresh: si ya hay datos, no flashear la lista con el spinner
+    if (!hasLoadedRef.current) setLoading(true);
 
     let adminCatIds = [];
 
     if (profile?.id) {
-      const { data: userCats } = await supabase
-        .from("user_categories")
-        .select("category_id")
-        .eq("user_id", profile.id)
-        .eq("active", true);
-
-      adminCatIds = userCats?.map(uc => uc.category_id) || [];
+      adminCatIds = userCategoriesMap[profile.id] || [];
       setAdminCategoryIds(adminCatIds);
       setTieneCatalogoDefinido(adminCatIds.length > 0);
     }
@@ -33,32 +37,15 @@ export function useAdminProductsBase(onProductCreated, tenantId) {
     
     if (profile?.id && (profile.role === "admin" || profile.role === "super_admin")) {
       if (profile.role === "super_admin") {
-        const { data: allUsers } = await supabase.from("profiles").select("id");
-        relatedUsers = allUsers?.map(u => u.id) || [];
+        relatedUsers = cachedUsers.map(u => u.id);
       } else if (profile.tenant_id) {
-        const { data: tenantUsers } = await supabase
-          .from("profiles")
-          .select("id")
-          .eq("tenant_id", profile.tenant_id);
-        relatedUsers = tenantUsers?.map(u => u.id) || [];
+        relatedUsers = cachedUsers
+          .filter(u => u.tenant_id === profile.tenant_id)
+          .map(u => u.id);
       }
     }
 
-    const { data: productsData, error } = await supabase
-      .from("products_base")
-      .select(`
-        id,
-        name,
-        type_unit,
-        brand_id,
-        category_id,
-        subcategory_id,
-        image_url,
-        brands ( id, name ),
-        categories ( id, name ),
-        subcategories ( id, name )
-      `)
-      .order("name");
+    const productsData = cachedProducts;
 
     let productsWithFlags = productsData || [];
     const galleryMap = {};
@@ -104,9 +91,12 @@ export function useAdminProductsBase(onProductCreated, tenantId) {
     });
     setBaseGallery(galleryMap);
 
-    if (!error) setProducts(productsWithFlags);
+    if (productsData) {
+      setProducts(productsWithFlags);
+      hasLoadedRef.current = true;
+    }
     setLoading(false);
-  }, [profile?.id, profile?.role, profile?.tenant_id]);
+  }, [profile?.id, profile?.role, profile?.tenant_id, cachedUsers, userCategoriesMap, cachedProducts]);
 
   useEffect(() => {
     loadProducts();
@@ -160,6 +150,7 @@ export function useAdminProductsBase(onProductCreated, tenantId) {
     category_id,
     subcategory_id,
     type_unit = "unit",
+    talles = [],
     imageFile,
   }) => {
     if (profile?.role !== "super_admin") {
@@ -181,6 +172,7 @@ export function useAdminProductsBase(onProductCreated, tenantId) {
           category_id,
           subcategory_id,
           type_unit,
+          talles: talles.map(Number),
         },
       ])
       .select(`
@@ -191,6 +183,7 @@ export function useAdminProductsBase(onProductCreated, tenantId) {
         category_id,
         subcategory_id,
         image_url,
+        talles,
         brands ( id, name ),
         categories ( id, name ),
         subcategories ( id, name )
@@ -205,10 +198,11 @@ export function useAdminProductsBase(onProductCreated, tenantId) {
     let data = inserted;
 
     if (imageFile) {
-      const path = `base/${inserted.id}/${Date.now()}-${imageFile.name.replace(/[^\w.-]/g, "_")}`;
+      const compressed = await compressImage(imageFile);
+      const path = `base/${inserted.id}/${Date.now()}-image.jpg`;
       const { error: uploadErr } = await supabase.storage
         .from("product-images")
-        .upload(path, imageFile, { contentType: imageFile.type });
+        .upload(path, compressed, { contentType: "image/jpeg" });
 
       if (uploadErr) {
         await supabase.from("products_base").delete().eq("id", inserted.id);
@@ -228,6 +222,7 @@ export function useAdminProductsBase(onProductCreated, tenantId) {
           category_id,
           subcategory_id,
           image_url,
+          talles,
           brands ( id, name ),
           categories ( id, name ),
           subcategories ( id, name )
@@ -283,11 +278,8 @@ export function useAdminProductsBase(onProductCreated, tenantId) {
     setProducts((prev) =>
       prev.map((p) => (p.id === productId ? { ...p, image_url: imageUrl } : p))
     );
-
-    if (onProductCreated) {
-      onProductCreated();
-    }
-  }, [onProductCreated, profile?.role]);
+    patchProductBase(productId, { image_url: imageUrl });
+  }, [patchProductBase, profile?.role]);
 
   const updateProductBase = useCallback(async ({
     id,
@@ -296,6 +288,7 @@ export function useAdminProductsBase(onProductCreated, tenantId) {
     subcategory_id,
     brand_id,
     type_unit,
+    talles,
     newImageFile,
     removeImage,
   }) => {
@@ -307,10 +300,11 @@ export function useAdminProductsBase(onProductCreated, tenantId) {
 
     let image_url;
     if (newImageFile) {
-      const path = `base/${id}/${Date.now()}-${newImageFile.name.replace(/[^\w.-]/g, "_")}`;
+      const compressed = await compressImage(newImageFile);
+      const path = `base/${id}/${Date.now()}-image.jpg`;
       const { error: uploadErr } = await supabase.storage
         .from("product-images")
-        .upload(path, newImageFile, { contentType: newImageFile.type });
+        .upload(path, compressed, { contentType: "image/jpeg" });
       if (uploadErr) throw uploadErr;
       image_url = path;
     } else if (removeImage) {
@@ -324,6 +318,7 @@ export function useAdminProductsBase(onProductCreated, tenantId) {
       brand_id: brand_id ? Number(brand_id) : null,
       type_unit,
     };
+    if (talles !== undefined) payload.talles = talles.map(Number);
     if (image_url !== undefined) payload.image_url = image_url;
 
     const { data, error } = await supabase
@@ -338,6 +333,7 @@ export function useAdminProductsBase(onProductCreated, tenantId) {
         category_id,
         subcategory_id,
         image_url,
+        talles,
         brands ( id, name ),
         categories ( id, name ),
         subcategories ( id, name )
@@ -382,10 +378,8 @@ export function useAdminProductsBase(onProductCreated, tenantId) {
       });
     }
 
-    if (onProductCreated) {
-      onProductCreated();
-    }
-  }, [onProductCreated, profile?.role, products, adminCategoryIds]);
+    patchProductBase(id, data);
+  }, [patchProductBase, profile?.role, products, adminCategoryIds]);
 
   return {
     products,

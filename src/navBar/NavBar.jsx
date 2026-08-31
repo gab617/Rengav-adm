@@ -1,18 +1,74 @@
-import React, { useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import React, { useCallback, useEffect, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { menuItems } from "./consts";
 import { useAppContext } from "../contexto/Context";
+import { useAuth } from "../contexto/AuthContext";
+import { supabase } from "../services/supabaseClient";
+import { EVENTO_PEDIDOS_CAMBIO } from "../utils/notificaciones";
 
 export function NavBar() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const { preferencias, updatePreferencias } = useAppContext();
   const [openMenu, setOpenMenu] = useState(false);
+  const [pendientes, setPendientes] = useState(0);
 
   const dark = preferencias?.theme === "dark";
 
   const toggleTheme = () => {
     updatePreferencias({ theme: dark ? "light" : "dark" });
   };
+
+  // Recuento real contra la base: carga inicial y red de seguridad
+  // por si el socket perdió algún evento (foco / volver a la pestaña).
+  const contarPendientes = useCallback(async () => {
+    if (!user) return;
+    try {
+      const { count, error } = await supabase
+        .from("pedidos")
+        .select("*", { count: "exact", head: true })
+        .eq("estado", "pendiente");
+      if (!error && typeof count === "number") setPendientes(count);
+    } catch {
+      // RLS/sesión: el badge simplemente no se actualiza.
+    }
+  }, [user]);
+
+  useEffect(() => {
+    contarPendientes();
+
+    window.addEventListener("focus", contarPendientes);
+    const alVisible = () => {
+      if (!document.hidden) contarPendientes();
+    };
+    document.addEventListener("visibilitychange", alVisible);
+
+    return () => {
+      window.removeEventListener("focus", contarPendientes);
+      document.removeEventListener("visibilitychange", alVisible);
+    };
+  }, [contarPendientes]);
+
+  // Aritmética local con el detalle del cambio: cero consultas extra.
+  // INSERT de un pendiente suma; UPDATE ajusta según entre/sale del estado.
+  useEffect(() => {
+    const alCambio = (e) => {
+      const { evento, nuevo, anterior } = e.detail || {};
+      if (evento === "insert") {
+        if (nuevo?.estado === "pendiente") setPendientes((p) => p + 1);
+        return;
+      }
+      if (evento === "update") {
+        const era = anterior?.estado === "pendiente";
+        const es = nuevo?.estado === "pendiente";
+        if (era && !es) setPendientes((p) => Math.max(0, p - 1));
+        else if (!era && es) setPendientes((p) => p + 1);
+      }
+    };
+    window.addEventListener(EVENTO_PEDIDOS_CAMBIO, alCambio);
+    return () => window.removeEventListener(EVENTO_PEDIDOS_CAMBIO, alCambio);
+  }, []);
 
   return (
     <nav
@@ -71,23 +127,34 @@ export function NavBar() {
           })}
         </ul>
 
-        {/* Botón de tema */}
-        <button
-          onClick={toggleTheme}
-          className="
-            absolute right-4 top-1/2 -translate-y-1/2
-            w-[3em] h-[3em] rounded-full border
-            flex items-center justify-center
-            backdrop-blur-md
-            transition-all duration-300 hover:scale-110
-          "
-        >
-          <img
-            src={dark ? "./tema-dark.png" : "./tema-light.png"}
-            alt="theme toggle"
-            className="w-[2em] h-[2em] opacity-90"
-          />
-        </button>
+        {/* Acciones a la derecha: campanita de pedidos + tema */}
+        <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
+          <button
+            onClick={() => navigate("/pedidos-web")}
+            title="Pedidos web pendientes"
+            className="relative w-[3em] h-[3em] rounded-full border flex items-center justify-center backdrop-blur-md transition-all duration-300 hover:scale-110"
+          >
+            <span className="text-xl">🔔</span>
+            {pendientes > 0 && (
+              <span
+                className="absolute -top-1 -right-1 min-w-[1.25rem] h-5 px-1 rounded-full bg-red-500 text-white text-xs font-bold flex items-center justify-center"
+              >
+                {pendientes > 99 ? "99+" : pendientes}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={toggleTheme}
+            className="w-[3em] h-[3em] rounded-full border flex items-center justify-center backdrop-blur-md transition-all duration-300 hover:scale-110"
+          >
+            <img
+              src={dark ? "./tema-dark.png" : "./tema-light.png"}
+              alt="theme toggle"
+              className="w-[2em] h-[2em] opacity-90"
+            />
+          </button>
+        </div>
       </div>
 
       {/* Menú MOBILE desplegable */}

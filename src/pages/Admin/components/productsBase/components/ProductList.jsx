@@ -2,8 +2,9 @@ import { useMemo, useState, useRef } from "react";
 import { useAppContext } from "../../../../../contexto/Context";
 import { supabase } from "../../../../../services/supabaseClient";
 import { toast } from "react-toastify";
+import { SizeSelector } from "./SizeSelector";
 
-export function ProductList({ products = [], categories = [], subcategories = [], tieneCatalogoDefinido = false, baseGallery = {}, tenantGallery = {}, brands = [], getBrandsByCategory = () => [], updateProductBase }) {
+export function ProductList({ products = [], categories = [], subcategories = [], getSizesByCategory = () => [], sizes = [], tieneCatalogoDefinido = false, baseGallery = {}, tenantGallery = {}, brands = [], getBrandsByCategory = () => [], updateProductBase }) {
   const { preferencias, profile } = useAppContext();
   const dark = preferencias?.theme === "dark";
   const esSuperAdmin = profile?.role === "super_admin";
@@ -24,6 +25,7 @@ export function ProductList({ products = [], categories = [], subcategories = []
   const [editSubcategoryId, setEditSubcategoryId] = useState("");
   const [editBrandId, setEditBrandId] = useState("");
   const [editTypeUnit, setEditTypeUnit] = useState("unit");
+  const [editTalles, setEditTalles] = useState([]);
   const [editNewImage, setEditNewImage] = useState(null);
   const [editRemoveImage, setEditRemoveImage] = useState(false);
   const [savingBase, setSavingBase] = useState(false);
@@ -163,6 +165,7 @@ export function ProductList({ products = [], categories = [], subcategories = []
     setEditSubcategoryId(p.subcategory_id ? String(p.subcategory_id) : "");
     setEditBrandId(p.brand_id ? String(p.brand_id) : "");
     setEditTypeUnit(p.type_unit || "unit");
+    setEditTalles(p.talles || []);
     setEditNewImage(null);
     setEditRemoveImage(false);
   };
@@ -223,6 +226,7 @@ export function ProductList({ products = [], categories = [], subcategories = []
         subcategory_id: editSubcategoryId || null,
         brand_id: editBrandId || null,
         type_unit: editTypeUnit,
+        talles: editTalles,
         newImageFile: editNewImage || undefined,
         removeImage: editRemoveImage,
       });
@@ -651,6 +655,14 @@ export function ProductList({ products = [], categories = [], subcategories = []
                             📂 {subcat.nombre || subcat.name}
                           </span>
                         )}
+                        {p.talles?.length > 0 && (
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${dark ? "bg-teal-500/20 text-teal-400" : "bg-teal-50 text-teal-600"}`}>
+                            📏 {p.talles
+                              .map((id) => sizes.find((s) => s.id === id)?.name)
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -721,6 +733,7 @@ export function ProductList({ products = [], categories = [], subcategories = []
                       setEditCategoryId(e.target.value);
                       setEditSubcategoryId("");
                       setEditBrandId("");
+                      setEditTalles([]);
                     }}
                     disabled={!esSuperAdmin}
                     className={`w-full px-3 py-2.5 rounded-lg border text-sm ${
@@ -754,7 +767,7 @@ export function ProductList({ products = [], categories = [], subcategories = []
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className={`block text-xs font-medium mb-1 ${dark ? "text-gray-400" : "text-gray-500"}`}>
                     Marca
@@ -806,6 +819,24 @@ export function ProductList({ products = [], categories = [], subcategories = []
                   </div>
                 </div>
               </div>
+
+              {esSuperAdmin && editTypeUnit === "unit" && (
+                <div>
+                  <label className={`block text-xs font-medium mb-1 ${dark ? "text-gray-400" : "text-gray-500"}`}>
+                    📏 Talles del producto
+                  </label>
+                  <p className={`text-[10px] mb-2 ${dark ? "text-gray-500" : "text-gray-400"}`}>
+                    Elegí los talles que ofrece este producto. Dejá vacío si se
+                    vende sin talles.
+                  </p>
+                  <SizeSelector
+                    sizes={getSizesByCategory(editCategoryId)}
+                    selected={editTalles}
+                    onChange={setEditTalles}
+                    dark={dark}
+                  />
+                </div>
+              )}
 
               {esSuperAdmin && (
                 <div>

@@ -7,7 +7,8 @@ export function Ventas() {
     filtro, fechaSeleccionada, mesSeleccionado, rangoFechas,
     cambiarFiltroRapido, setRangoPersonalizado, setFechaSeleccionada, 
     setMesSeleccionado, fetchVentas, eliminarPorDia, eliminarPorMes, 
-    eliminarTodo, eliminarVenta, actualizarProducto } = useAppContext();
+    eliminarTodo, eliminarVenta, actualizarProducto,
+    busquedaCliente, setBusquedaCliente } = useAppContext();
   const dark = preferencias?.theme === "dark";
   const [ventaExpandida, setVentaExpandida] = useState(null);
   const [stockFilter, setStockFilter] = useState("alerta");
@@ -689,6 +690,8 @@ export function Ventas() {
           eliminarPorDia={eliminarPorDia}
           eliminarPorMes={eliminarPorMes}
           eliminarTodo={eliminarTodo}
+          busquedaCliente={busquedaCliente}
+          setBusquedaCliente={setBusquedaCliente}
         />
       </div>
     </div>

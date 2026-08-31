@@ -1,57 +1,55 @@
-import { useEffect, useMemo, useState } from "react";
-import { supabase } from "../../../services/supabaseClient";
+import { useMemo } from "react";
+import { useSizesContext } from "../../../contexto/SizesContext";
+import { useAdminData } from "../../../hooks/useAdminData";
 
 export function useAdminCategories() {
-  const [categories, setCategories] = useState([]);
-  const [subcategories, setSubcategories] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { sizes, categorySizes, getSizesByCategory } = useSizesContext();
+  const { systemCategories, isLoaded, invalidateCategories } = useAdminData();
 
-  async function loadCategories() {
-    setLoading(true);
+  const categories = useMemo(() => {
+    return systemCategories.map(({ subcategories: _, ...cat }) => cat);
+  }, [systemCategories]);
 
-    const { data: catData, error: catError } = await supabase
-      .from("categories")
-      .select("id, name, color")
-      .order("name");
+  const subcategories = useMemo(() => {
+    return systemCategories.flatMap((cat) =>
+      (cat.subcategories || []).map((sub) => ({
+        ...sub,
+        category_id: cat.id,
+      }))
+    );
+  }, [systemCategories]);
 
-    const { data: subData, error: subError } = await supabase
-      .from("subcategories")
-      .select("id, name, category_id")
-      .order("name");
-
-    if (!catError) setCategories(catData || []);
-    if (!subError) setSubcategories(subData || []);
-
-    setLoading(false);
-  }
-
-  useEffect(() => {
-    loadCategories();
-  }, []);
-
-  // 🔥 Agrupar subcategorías por categoría (estructura lista para UI)
   const categoriesWithSubs = useMemo(() => {
-    return categories.map((cat) => ({
-      ...cat,
-      subcategories: subcategories.filter(
-        (sub) => sub.category_id === cat.id
-      ),
+    return systemCategories.map((cat) => ({
+      id: cat.id,
+      name: cat.name,
+      color: cat.color,
+      subcategories: (cat.subcategories || []).map((sub) => ({
+        ...sub,
+        category_id: cat.id,
+      })),
     }));
-  }, [categories, subcategories]);
+  }, [systemCategories]);
 
-  // 🔥 Helper útil
   function getSubcategoriesByCategory(categoryId) {
     return subcategories.filter(
       (sub) => sub.category_id === Number(categoryId)
     );
   }
 
+  async function reload() {
+    await invalidateCategories();
+  }
+
   return {
     categories,
     subcategories,
+    sizes,
+    categorySizes,
     categoriesWithSubs,
     getSubcategoriesByCategory,
-    loading,
-    reload: loadCategories,
+    getSizesByCategory,
+    loading: !isLoaded,
+    reload,
   };
 }

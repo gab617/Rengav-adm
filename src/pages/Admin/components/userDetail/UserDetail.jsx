@@ -5,11 +5,13 @@ import { useState } from "react";
 import { Productos } from "./tabs/Productos";
 import { Categorias } from "./tabs/Categorias";
 import { Configuracion } from "./tabs/Configuracion";
+import { ContactoPagos } from "./tabs/configuracion/ContactoPagos";
 
 const TABS = [
   { id: "productos", label: "Productos" },
   { id: "categorias", label: "Categorías" },
   { id: "configuracion", label: "Configuración" },
+  { id: "contacto", label: "Contacto y pagos" },
 ];
 
 export function UserDetail() {
@@ -92,6 +94,8 @@ export function UserDetail() {
       )}
 
       {activeTab === "configuracion" && <Configuracion profile={user} />}
+
+      {activeTab === "contacto" && <ContactoPagos profile={user} />}
     </div>
   );
 }

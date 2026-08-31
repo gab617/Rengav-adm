@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { supabase } from "../../../services/supabaseClient";
 import { toast } from "react-toastify";
+import { compressImage } from "../../../utils/compressImage";
 
 const generarUuid = () =>
   typeof crypto !== "undefined" && crypto.randomUUID
@@ -40,6 +41,7 @@ export function ProductImagesEditor({
   imagenes = [],
   onImagenesChange,
   dark,
+  imagenHeredada = null,
 }) {
   const [maxImagenes, setMaxImagenes] = useState(3);
   const [subiendo, setSubiendo] = useState(false);
@@ -84,12 +86,13 @@ export function ProductImagesEditor({
         continue;
       }
 
-      const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+      const compressed = await compressImage(file);
+      const ext = "jpg";
       const path = `${tenantId}/${productId}/${generarUuid()}.${ext}`;
 
       const { error } = await supabase.storage
         .from("product-images")
-        .upload(path, file, { contentType: file.type });
+        .upload(path, compressed, { contentType: "image/jpeg" });
 
       if (error) {
         toast.error(`Error subiendo "${file.name}": ${error.message}`);
@@ -111,12 +114,19 @@ export function ProductImagesEditor({
     const nuevas = imagenes.filter((_, i) => i !== idx);
     onImagenesChange(nuevas);
 
-    const { error } = await supabase.storage
-      .from("product-images")
-      .remove([path]);
+    // Solo purgamos del bucket lo subido a la carpeta PROPIA de esta
+    // asignación. Los customs comparten un pool entre molde y todas
+    // las asignaciones ({tenant}/customs/...): borrar ese archivo
+    // acá le rompería la imagen al molde y a las demás sucursales.
+    const esArchivoPropio = path?.startsWith(`${tenantId}/${productId}/`);
+    if (esArchivoPropio) {
+      const { error } = await supabase.storage
+        .from("product-images")
+        .remove([path]);
 
-    if (error) {
-      console.warn("No se pudo borrar la imagen del storage:", error.message);
+      if (error) {
+        console.warn("No se pudo borrar la imagen del storage:", error.message);
+      }
     }
   };
 
@@ -154,6 +164,32 @@ export function ProductImagesEditor({
           </span>
         )}
       </div>
+
+      {imagenes.length === 0 && imagenHeredada && (
+        <div className="mb-3">
+          <div className="flex flex-wrap gap-2">
+            <div
+              className={`relative w-20 h-20 rounded-xl overflow-hidden border-2 ${
+                dark ? "border-gray-600" : "border-gray-300"
+              }`}
+            >
+              <img
+                src={publicUrl(imagenHeredada)}
+                alt="Imagen heredada"
+                className="w-full h-full object-cover"
+              />
+              <span
+                className={`absolute bottom-0 inset-x-0 text-center text-[9px] font-semibold py-0.5 bg-black/60 text-white`}
+              >
+                Heredada
+              </span>
+            </div>
+          </div>
+          <p className={`text-[10px] mt-1 ${dark ? "text-gray-500" : "text-gray-400"}`}>
+            Esta imagen viene del producto base/custom. Agregá una propia para reemplazarla y poder editarla.
+          </p>
+        </div>
+      )}
 
       {imagenes.length > 0 && (
         <div className="flex flex-wrap gap-2 mb-3">

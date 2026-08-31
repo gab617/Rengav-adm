@@ -3,8 +3,9 @@ import { supabase } from "../../../../services/supabaseClient";
 import { useAuth } from "../../../../contexto/AuthContext";
 import { useAppContext } from "../../../../contexto/Context";
 import { ProductImagesEditor } from "../../../usuario/components/ProductImagesEditor";
+import { SizeSelector } from "./components/SizeSelector";
 
-export function AdminCustomProductForm({ products, categories, subcategories, onAgregado }) {
+export function AdminCustomProductForm({ products, categories, subcategories, getSizesByCategory = () => [], onAgregado }) {
   const { user } = useAuth();
   const { profile, preferencias, unifiedBrands, crearCustomProduct, agregarProductoBase } =
     useAppContext();
@@ -21,6 +22,7 @@ export function AdminCustomProductForm({ products, categories, subcategories, on
   const [stock, setStock] = useState("");
   const [descripcion, setDescripcion] = useState("");
   const [imagenes, setImagenes] = useState([]);
+  const [talles, setTalles] = useState([]);
   const [submitting, setSubmitting] = useState(false);
 
   const userId = user?.id;
@@ -86,6 +88,7 @@ export function AdminCustomProductForm({ products, categories, subcategories, on
     setStock("");
     setDescripcion("");
     setImagenes([]);
+    setTalles([]);
   };
 
   async function moverImagenes(upId) {
@@ -184,6 +187,7 @@ export function AdminCustomProductForm({ products, categories, subcategories, on
         userId,
         imagenes,
         tenantId,
+        talles,
       });
 
       alert(`✅ "${name.trim()}" creado como producto propio`);
@@ -300,6 +304,7 @@ export function AdminCustomProductForm({ products, categories, subcategories, on
               setCategoryId(e.target.value);
               setSubcategoryId("");
               setBrandInput("");
+              setTalles([]);
             }}
             className={inputClass}
             required
@@ -346,6 +351,24 @@ export function AdminCustomProductForm({ products, categories, subcategories, on
               Si la marca no está en el catálogo, se crea como marca propia.
             </p>
           </div>
+
+          {categoryId && (
+            <div>
+              <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>
+                📏 Talles del producto
+              </label>
+              <p className={`text-[10px] mb-2 ${textSecondary}`}>
+                Si el producto se vende con talles, elegí cuáles ofrece. Dejá
+                vacío si se vende sin talles.
+              </p>
+              <SizeSelector
+                sizes={getSizesByCategory(categoryId)}
+                selected={talles}
+                onChange={setTalles}
+                dark={dark}
+              />
+            </div>
+          )}
         </>
       )}
 

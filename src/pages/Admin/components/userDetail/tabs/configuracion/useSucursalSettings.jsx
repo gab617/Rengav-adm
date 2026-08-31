@@ -1,7 +1,24 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../../../../../../services/supabaseClient";
 
-const SETTINGS_SELECT = "id, logo_url, hero_url, lema, descripcion, theme";
+const SETTINGS_SELECT =
+  "id, logo_url, hero_url, lema, descripcion, theme, telefono_whatsapp, alias_transferencia, cbu_transferencia, facebook_url, instagram_url, x_url";
+
+function computeEffective(sucursal, tenant) {
+  return {
+    logo_url: sucursal?.logo_url ?? tenant?.logo_url ?? null,
+    hero_url: sucursal?.hero_url ?? tenant?.hero_url ?? null,
+    lema: sucursal?.lema ?? tenant?.lema ?? "",
+    descripcion: sucursal?.descripcion ?? tenant?.descripcion ?? "",
+    theme: { ...(tenant?.theme || {}), ...(sucursal?.theme || {}) },
+    telefono_whatsapp: sucursal?.telefono_whatsapp ?? tenant?.telefono_whatsapp ?? "",
+    alias_transferencia: sucursal?.alias_transferencia ?? tenant?.alias_transferencia ?? "",
+    cbu_transferencia: sucursal?.cbu_transferencia ?? tenant?.cbu_transferencia ?? "",
+    facebook_url: sucursal?.facebook_url ?? tenant?.facebook_url ?? "",
+    instagram_url: sucursal?.instagram_url ?? tenant?.instagram_url ?? "",
+    x_url: sucursal?.x_url ?? tenant?.x_url ?? "",
+  };
+}
 
 export function useSucursalSettings(profileId, tenantId) {
   const [sucursal, setSucursal] = useState(null);
@@ -47,39 +64,65 @@ export function useSucursalSettings(profileId, tenantId) {
 
   // CASCADA: el valor efectivo es lo que la tienda muestra.
   // sucursal pisa a tenant (misma regla que el RPC storefront_get_sucursal).
-  const effective = {
-    logo_url: sucursal?.logo_url ?? tenant?.logo_url ?? null,
-    hero_url: sucursal?.hero_url ?? tenant?.hero_url ?? null,
-    lema: sucursal?.lema ?? tenant?.lema ?? "",
-    descripcion: sucursal?.descripcion ?? tenant?.descripcion ?? "",
-    theme: { ...(tenant?.theme || {}), ...(sucursal?.theme || {}) },
-  };
+  const effective = computeEffective(sucursal, tenant);
 
+  // Persiste SOLO los campos que vienen en el form. Asi cada seccion
+  // guarda lo suyo sin pisar la otra (branding <-> contacto/pagos).
   const save = async (form) => {
     setSaving(true);
     try {
-      // Se guarda SOLO lo que difiere del negocio (cascada limpia):
-      // un token sin valor o igual al del tenant => se hereda.
-      const tenantTheme = tenant?.theme || {};
-      const theme = {};
-      for (const [key, value] of Object.entries(form.theme || {})) {
-        if (
-          value !== undefined &&
-          value !== null &&
-          String(value).trim() !== "" &&
-          value !== tenantTheme[key]
-        ) {
-          theme[key] = value;
+      const payload = {};
+
+      if ("theme" in form) {
+        // Se guarda SOLO lo que difiere del negocio (cascada limpia):
+        // un token sin valor o igual al del tenant => se hereda.
+        const tenantTheme = tenant?.theme || {};
+        const theme = {};
+        for (const [key, value] of Object.entries(form.theme || {})) {
+          if (
+            value !== undefined &&
+            value !== null &&
+            String(value).trim() !== "" &&
+            value !== tenantTheme[key]
+          ) {
+            theme[key] = value;
+          }
         }
+        payload.theme = theme;
       }
 
-      const payload = {
-        lema: form.lema?.trim() ? form.lema.trim() : null,
-        descripcion: form.descripcion?.trim() ? form.descripcion.trim() : null,
-        logo_url: form.logo_url || null,
-        hero_url: form.hero_url || null,
-        theme,
-      };
+      if ("lema" in form)
+        payload.lema = form.lema?.trim() ? form.lema.trim() : null;
+      if ("descripcion" in form)
+        payload.descripcion = form.descripcion?.trim()
+          ? form.descripcion.trim()
+          : null;
+      if ("logo_url" in form) payload.logo_url = form.logo_url || null;
+      if ("hero_url" in form) payload.hero_url = form.hero_url || null;
+
+      if ("telefono_whatsapp" in form)
+        payload.telefono_whatsapp = form.telefono_whatsapp?.trim()
+          ? form.telefono_whatsapp.trim()
+          : null;
+      if ("alias_transferencia" in form)
+        payload.alias_transferencia = form.alias_transferencia?.trim()
+          ? form.alias_transferencia.trim()
+          : null;
+      if ("cbu_transferencia" in form)
+        payload.cbu_transferencia = form.cbu_transferencia?.trim()
+          ? form.cbu_transferencia.trim()
+          : null;
+
+      if ("facebook_url" in form)
+        payload.facebook_url = form.facebook_url?.trim()
+          ? form.facebook_url.trim()
+          : null;
+      if ("instagram_url" in form)
+        payload.instagram_url = form.instagram_url?.trim()
+          ? form.instagram_url.trim()
+          : null;
+      if ("x_url" in form)
+        payload.x_url = form.x_url?.trim() ? form.x_url.trim() : null;
 
       let result;
       if (sucursal?.id) {
@@ -101,13 +144,7 @@ export function useSucursalSettings(profileId, tenantId) {
 
       setSucursal(result.data);
 
-      const newEffective = {
-        logo_url: result.data.logo_url ?? tenant?.logo_url ?? null,
-        hero_url: result.data.hero_url ?? tenant?.hero_url ?? null,
-        lema: result.data.lema ?? tenant?.lema ?? "",
-        descripcion: result.data.descripcion ?? tenant?.descripcion ?? "",
-        theme: { ...(tenant?.theme || {}), ...(result.data.theme || {}) },
-      };
+      const newEffective = computeEffective(result.data, tenant);
 
       return { ok: true, effective: newEffective };
     } catch (err) {

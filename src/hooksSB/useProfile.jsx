@@ -1,9 +1,12 @@
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { supabase } from "../services/supabaseClient";
 
-export function useProfile() {
+const ProfileContext = createContext({ profile: null, loadingProfile: true });
+
+export function ProfileProvider({ children }) {
   const [profile, setProfile] = useState(null);
   const [loadingProfile, setLoading] = useState(true);
+  const lastUserIdRef = useRef(undefined);
 
   useEffect(() => {
     let mounted = true;
@@ -31,16 +34,14 @@ export function useProfile() {
     }
 
     async function handleSession(session) {
-      await loadProfile(session?.user?.id ?? null);
+      const userId = session?.user?.id ?? null;
+      // getSession() e INITIAL_SESSION llegan con la misma sesión al montar:
+      // solo procesamos la primera para no duplicar la query a profiles.
+      if (userId === lastUserIdRef.current) return;
+      lastUserIdRef.current = userId;
+      await loadProfile(userId);
     }
 
-    // Cargar sesión inicial
-    supabase.auth.getSession().then(({ data }) => {
-      if (!mounted) return;
-      handleSession(data.session);
-    });
-
-    // Reaccionar a login/logout/refresh sin recargar la página
     const { data: listener } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (!mounted) return;
@@ -49,11 +50,24 @@ export function useProfile() {
       }
     );
 
+    supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return;
+      handleSession(data.session);
+    });
+
     return () => {
       mounted = false;
       listener.subscription.unsubscribe();
     };
   }, []);
 
-  return { profile, loadingProfile };
+  return (
+    <ProfileContext.Provider value={{ profile, loadingProfile }}>
+      {children}
+    </ProfileContext.Provider>
+  );
+}
+
+export function useProfile() {
+  return useContext(ProfileContext);
 }

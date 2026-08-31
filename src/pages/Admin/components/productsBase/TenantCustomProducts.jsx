@@ -8,8 +8,10 @@ import React, {
 } from "react";
 import { supabase } from "../../../../services/supabaseClient";
 import { useAppContext } from "../../../../contexto/Context";
+import { SizeSelector } from "./components/SizeSelector";
+import { compressImage } from "../../../../utils/compressImage";
 
-export function TenantCustomProducts({ dark, tenantId, categories, subcategories, refreshKey }) {
+export function TenantCustomProducts({ dark, tenantId, categories, subcategories, getSizesByCategory = () => [], sizes = [], refreshKey }) {
   const { unifiedBrands } = useAppContext();
   const [customs, setCustoms] = useState([]);
   const [assignments, setAssignments] = useState({});
@@ -28,6 +30,14 @@ export function TenantCustomProducts({ dark, tenantId, categories, subcategories
   const [lightbox, setLightbox] = useState(null);
   const [maxImages, setMaxImages] = useState(3);
   const [brokenImg, setBrokenImg] = useState(new Set());
+  const [listBroken, setListBroken] = useState(new Set());
+  const [deletingCustom, setDeletingCustom] = useState(null);
+  const [eliminando, setEliminando] = useState(false);
+  const [papeleraOpen, setPapeleraOpen] = useState(false);
+  const [papeleraItems, setPapeleraItems] = useState([]);
+  const [papeleraLoading, setPapeleraLoading] = useState(false);
+  const [restaurandoId, setRestaurandoId] = useState(null);
+  const [papeleraBroken, setPapeleraBroken] = useState(new Set());
   const gridRef = useRef(null);
   const firstPositions = useRef({});
 
@@ -35,6 +45,7 @@ export function TenantCustomProducts({ dark, tenantId, categories, subcategories
   const [formCategoryId, setFormCategoryId] = useState("");
   const [formSubcategoryId, setFormSubcategoryId] = useState("");
   const [formBrandInput, setFormBrandInput] = useState("");
+  const [formTalles, setFormTalles] = useState([]);
 
   const textPrimary = dark ? "text-white" : "text-gray-900";
   const textSecondary = dark ? "text-gray-400" : "text-gray-500";
@@ -45,6 +56,8 @@ export function TenantCustomProducts({ dark, tenantId, categories, subcategories
     ? "bg-gray-700 text-white border-gray-600"
     : "bg-white text-gray-900 border-gray-300";
   const inputClass = `w-full px-3 py-2.5 rounded-lg border text-sm ${inputBg}`;
+  const rowHover = dark ? "hover:bg-gray-700/50" : "hover:bg-gray-50";
+  const borderColor = dark ? "border-gray-700" : "border-gray-200";
 
   const showNotification = useCallback((msg, type = "success") => {
     setNotification({ msg, type });
@@ -102,6 +115,7 @@ export function TenantCustomProducts({ dark, tenantId, categories, subcategories
             image_url,
             category_id,
             subcategory_id,
+            talles,
             brands ( id, name ),
             categories ( id, name ),
             subcategories ( id, name )
@@ -148,6 +162,7 @@ export function TenantCustomProducts({ dark, tenantId, categories, subcategories
       setGallery(galleryMap);
 
       setBrokenImg(new Set());
+      setListBroken(new Set());
 
       setCustoms(customsList);
     } catch (err) {
@@ -300,6 +315,7 @@ export function TenantCustomProducts({ dark, tenantId, categories, subcategories
     setFormCategoryId(c.category_id ? String(c.category_id) : "");
     setFormSubcategoryId(c.subcategory_id ? String(c.subcategory_id) : "");
     setFormBrandInput(brandName(c) || "");
+    setFormTalles(c.talles || []);
     setEditingImage(null);
     setPendingDelete([]);
     setPendingPrincipal(null);
@@ -311,7 +327,77 @@ export function TenantCustomProducts({ dark, tenantId, categories, subcategories
     setEditingImage(null);
     setPendingDelete([]);
     setPendingPrincipal(null);
+    setFormTalles([]);
     setBrokenImg(new Set());
+  };
+
+  const cargarPapelera = useCallback(async () => {
+    if (!tenantId) return;
+    setPapeleraLoading(true);
+    try {
+      const { data, error } = await supabase.rpc("custom_papelera", {
+        p_tenant_id: tenantId,
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      setPapeleraItems(data?.items || []);
+      setPapeleraBroken(new Set());
+    } catch (err) {
+      console.error("Error cargando papelera:", err);
+      showNotification("Error cargando la papelera", "error");
+    } finally {
+      setPapeleraLoading(false);
+    }
+  }, [tenantId, showNotification]);
+
+  const togglePapelera = () => {
+    const abrir = !papeleraOpen;
+    setPapeleraOpen(abrir);
+    if (abrir) cargarPapelera();
+  };
+
+  // El RPC desarma la cadena en orden: suelta ventas -> borra
+  // asignaciones -> deleted_at. Imágenes del bucket intactas para
+  // que el revival conserve fotos.
+  const handleEliminarConfirm = async () => {
+    if (!deletingCustom || eliminando) return;
+    setEliminando(true);
+    try {
+      const { data, error } = await supabase.rpc("custom_eliminar", {
+        p_custom_id: deletingCustom.id,
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      showNotification(`"${deletingCustom.name}" enviado a la papelera`);
+      setDeletingCustom(null);
+      await load();
+      if (papeleraOpen) await cargarPapelera();
+    } catch (err) {
+      console.error("Error eliminando custom:", err);
+      showNotification("Error al eliminar el producto", "error");
+    } finally {
+      setEliminando(false);
+    }
+  };
+
+  const handleRestaurar = async (item) => {
+    if (restaurandoId) return;
+    setRestaurandoId(item.id);
+    try {
+      const { data, error } = await supabase.rpc("custom_restaurar", {
+        p_custom_id: item.id,
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      showNotification(`"${item.name}" restaurado`);
+      setPapeleraItems((prev) => prev.filter((i) => i.id !== item.id));
+      await load();
+    } catch (err) {
+      console.error("Error restaurando custom:", err);
+      showNotification("Error al restaurar", "error");
+    } finally {
+      setRestaurandoId(null);
+    }
   };
 
   async function handleSaveEdit(e) {
@@ -338,11 +424,12 @@ export function TenantCustomProducts({ dark, tenantId, categories, subcategories
       let nuevoPath = null;
 
       if (editingImage) {
-        const fileName = `${Date.now()}-${editingImage.name.replace(/[^\w.-]/g, "_")}`;
+        const compressed = await compressImage(editingImage);
+        const fileName = `${Date.now()}-image.jpg`;
         nuevoPath = `${tenantId}/customs/${editingCustom.id}/${fileName}`;
         const { error: uploadErr } = await supabase.storage
           .from("product-images")
-          .upload(nuevoPath, editingImage);
+          .upload(nuevoPath, compressed, { contentType: "image/jpeg" });
 
         if (uploadErr) throw uploadErr;
       }
@@ -385,6 +472,7 @@ export function TenantCustomProducts({ dark, tenantId, categories, subcategories
           brand_text: marcaEnCatalogo ? null : formBrandInput.trim() || null,
           category_id: Number(formCategoryId),
           subcategory_id: formSubcategoryId ? Number(formSubcategoryId) : null,
+          talles: formTalles.map(Number),
           image_url: imageUrl,
         })
         .eq("id", editingCustom.id);
@@ -461,30 +549,135 @@ export function TenantCustomProducts({ dark, tenantId, categories, subcategories
         </div>
       )}
 
-      <div className={`p-4 border-b flex items-start justify-between gap-3 ${dark ? "border-gray-700" : "border-gray-200"}`}>
-        <div>
-          <h2 className={`font-semibold text-lg ${textPrimary}`}>
+      <div className={`px-4 py-3 border-b flex flex-wrap items-center justify-between gap-x-3 gap-y-2 ${borderColor}`}>
+        <div className="min-w-0">
+          <h2 className={`font-semibold text-base ${textPrimary}`}>
             ⭐ Productos custom del negocio
           </h2>
-          <p className={`text-xs mt-1 ${textSecondary}`}>
-            Productos propios del tenant. Se comparten entre los usuarios del
-            negocio; los precios y el stock se manejan por usuario en Asignar.
+          <p className={`text-xs mt-0.5 ${textSecondary}`}>
+            Solo este negocio · compartidos por todos sus vendedores. Cada uno
+            define su precio y stock en "Asignar".
           </p>
         </div>
-        {customs.length > 0 && (
+        <div className="flex items-center gap-2 shrink-0">
+          {customs.length > 0 && (
+            <button
+              type="button"
+              onClick={toggleAll}
+              title={allCollapsed ? "Desplegar todas las categorías" : "Plegar todas las categorías"}
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                dark
+                  ? "bg-gray-700 text-gray-200 hover:bg-gray-600"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              {allCollapsed ? "▼ Desplegar" : "▲ Plegar"}
+            </button>
+          )}
           <button
             type="button"
-            onClick={toggleAll}
-            className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-              dark
-                ? "bg-gray-700 text-gray-200 hover:bg-gray-600"
-                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            onClick={togglePapelera}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              papeleraOpen
+                ? dark
+                  ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
+                  : "bg-red-100 text-red-600 hover:bg-red-200"
+                : dark
+                  ? "bg-gray-700 text-gray-200 hover:bg-gray-600"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
             }`}
           >
-            {allCollapsed ? "▼ Desplegar todos" : "▶ Plegar todos"}
+            🗑️ Papelera
+            {!papeleraLoading && papeleraItems.length > 0 && (
+              <span
+                className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${
+                  papeleraOpen
+                    ? "bg-red-500 text-white"
+                    : dark
+                      ? "bg-red-500/20 text-red-400"
+                      : "bg-red-100 text-red-600"
+                }`}
+              >
+                {papeleraItems.length}
+              </span>
+            )}
           </button>
-        )}
+        </div>
       </div>
+
+      {papeleraOpen && (
+        <div className={`px-4 py-3 border-b space-y-1.5 ${borderColor}`}>
+          <p className={`text-xs ${textSecondary}`}>
+            Estos productos no aparecen en ningún catálogo ni se pueden
+            asignar. Restaurarlos los devuelve a la lista, sin sus
+            asignaciones anteriores.
+          </p>
+          {papeleraLoading ? (
+            <div className={`py-3 text-center animate-pulse ${textSecondary}`}>
+              Cargando papelera...
+            </div>
+          ) : papeleraItems.length === 0 ? (
+            <div className={`py-3 text-center ${textSecondary}`}>
+              La papelera está vacía
+            </div>
+          ) : (
+            papeleraItems.map((item) => (
+              <div
+                key={item.id}
+                className={`flex items-center gap-3 rounded-lg px-2.5 py-2 ${
+                  dark ? "bg-gray-700/40" : "bg-gray-50"
+                }`}
+              >
+                {item.image_url && !papeleraBroken.has(item.id) ? (
+                  <img
+                    src={publicUrl(item.image_url)}
+                    alt=""
+                    onError={(e) => {
+                      e.currentTarget.style.display = "none";
+                      setPapeleraBroken((prev) => new Set(prev).add(item.id));
+                    }}
+                    className={`w-10 h-10 rounded-md object-cover shrink-0 border ${
+                      dark ? "border-gray-600 opacity-60" : "border-gray-300 opacity-60"
+                    }`}
+                  />
+                ) : (
+                  <div
+                    className={`w-10 h-10 rounded-md flex items-center justify-center shrink-0 opacity-60 ${
+                      dark ? "bg-gray-700" : "bg-gray-100"
+                    }`}
+                  >
+                    🛒
+                  </div>
+                )}
+
+                <div className="flex-1 min-w-0">
+                  <p className={`font-medium text-sm truncate ${textSecondary}`}>
+                    {item.name}
+                  </p>
+                  <p className={`text-xs mt-0.5 truncate ${textSecondary}`}>
+                    Eliminado el{" "}
+                    {new Date(item.deleted_at).toLocaleDateString("es-AR", {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                    })}
+                    {item.creado_por ? ` · creado por ${item.creado_por}` : ""}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleRestaurar(item)}
+                  disabled={restaurandoId !== null}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-green-600 text-white hover:bg-green-500 disabled:opacity-50 transition-colors shrink-0"
+                >
+                  {restaurandoId === item.id ? "Restaurando..." : "🔄 Restaurar"}
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      )}
 
       {customs.length === 0 ? (
         <div className={`text-center py-10 ${textSecondary}`}>
@@ -492,18 +685,15 @@ export function TenantCustomProducts({ dark, tenantId, categories, subcategories
           <p>Este negocio todavía no tiene productos custom</p>
         </div>
       ) : (
-        <div className="p-4 space-y-4">
+        <div className={`divide-y ${borderColor}`}>
           {groups.map((g) => {
             const collapsed = isCollapsed(g.name);
             return (
-              <div
-                key={g.name}
-                className={`rounded-xl border overflow-hidden ${bgCard}`}
-              >
+              <div key={g.name}>
                 <button
                   type="button"
                   onClick={() => toggleCat(g.name)}
-                  className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 transition-colors ${
+                  className={`w-full flex items-center justify-between gap-2 px-4 py-2 transition-colors ${
                     dark
                       ? "bg-purple-500/10 hover:bg-purple-500/20"
                       : "bg-purple-50 hover:bg-purple-100"
@@ -528,84 +718,120 @@ export function TenantCustomProducts({ dark, tenantId, categories, subcategories
                   </span>
                 </button>
                 {!collapsed && (
-                  <div className="p-3 space-y-2">
+                  <div className={`divide-y ${dark ? "divide-gray-700/60" : "divide-gray-100"}`}>
                     {g.items.map((c) => {
                       const asignados = assignments[c.id] || [];
-                      const totalImgs = gallery[c.id]?.length || 0;
+                      const galeria = gallery[c.id] || [];
+                      const creador = userNames[c.user_id];
+                      const metaLinea = `${creador ? `👤 ${creador} · ` : ""}${
+                        asignados.length > 0
+                          ? `Asignado a: ${asignados.join(", ")}`
+                          : "Sin asignar"
+                      }`;
 
                       return (
-                        <div key={c.id} className={`rounded-xl border ${bgCard}`}>
-                          <div className="flex flex-wrap md:flex-nowrap md:items-center items-center gap-3 p-3">
+                        <div key={c.id}>
+                          <div className={`flex items-center gap-2.5 px-4 py-2.5 transition-colors ${rowHover}`}>
+                            {galeria.length > 0 && !listBroken.has(c.id) ? (
+                              <button
+                                type="button"
+                                onClick={() => openLightbox(c.id, 0)}
+                                title={`${galeria.length} imagen${galeria.length > 1 ? "es" : ""} · ver`}
+                                className="relative shrink-0 cursor-pointer"
+                              >
+                                <img
+                                  src={publicUrl(galeria[0])}
+                                  alt=""
+                                  onError={() =>
+                                    setListBroken((prev) => new Set(prev).add(c.id))
+                                  }
+                                  className={`w-11 h-11 rounded-lg object-cover border ${
+                                    dark ? "border-gray-600" : "border-gray-300"
+                                  }`}
+                                />
+                                {galeria.length > 1 && (
+                                  <span className="absolute -bottom-1 -right-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-blue-600 text-white border border-white/70">
+                                    +{galeria.length - 1}
+                                  </span>
+                                )}
+                              </button>
+                            ) : (
+                              <div
+                                className={`w-11 h-11 rounded-lg flex items-center justify-center shrink-0 ${
+                                  dark
+                                    ? "bg-gray-700 text-gray-400"
+                                    : "bg-gray-100 text-gray-400"
+                                }`}
+                              >
+                                <span className="text-lg">🛒</span>
+                              </div>
+                            )}
+
                             <div className="flex-1 min-w-0">
-                              <p className={`font-medium text-sm ${textPrimary}`}>
+                              <p className={`font-medium text-sm truncate ${textPrimary}`}>
                                 {c.name}
                               </p>
-                              <div className="flex flex-wrap gap-1 mt-0.5">
-                                {brandName(c) && (
-                                  <span
-                                    className={`text-xs px-1.5 py-0.5 rounded ${
-                                      dark
-                                        ? "bg-blue-500/20 text-blue-400"
-                                        : "bg-blue-50 text-blue-600"
-                                    }`}
-                                  >
-                                    {brandName(c)}
-                                  </span>
-                                )}
-                                {c.categories?.name && (
-                                  <span
-                                    className={`text-xs px-1.5 py-0.5 rounded ${
-                                      dark
-                                        ? "bg-purple-500/20 text-purple-400"
-                                        : "bg-purple-50 text-purple-600"
-                                    }`}
-                                  >
-                                    {c.categories.name}
-                                  </span>
-                                )}
-                              </div>
-                              <p className={`text-xs mt-1 ${textSecondary}`}>
-                                {userNames[c.user_id] ? `👤 ${userNames[c.user_id]} · ` : ""}
-                                {asignados.length > 0
-                                  ? `Asignado a: ${asignados.join(", ")}`
-                                  : "Sin asignar"}
+                              {(brandName(c) || c.talles?.length > 0) && (
+                                <div className="flex flex-wrap items-center gap-1 mt-0.5">
+                                  {brandName(c) && (
+                                    <span
+                                      className={`text-[11px] px-1.5 py-0.5 rounded ${
+                                        dark
+                                          ? "bg-blue-500/15 text-blue-400"
+                                          : "bg-blue-50 text-blue-600"
+                                      }`}
+                                    >
+                                      {brandName(c)}
+                                    </span>
+                                  )}
+                                  {c.talles?.length > 0 && (
+                                    <span
+                                      className={`text-[11px] px-1.5 py-0.5 rounded ${
+                                        dark
+                                          ? "bg-teal-500/15 text-teal-400"
+                                          : "bg-teal-50 text-teal-600"
+                                      }`}
+                                    >
+                                      📏{" "}
+                                      {c.talles
+                                        .map((id) => sizes.find((s) => s.id === id)?.name)
+                                        .filter(Boolean)
+                                        .join(" · ")}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                              <p
+                                className={`text-[11px] mt-0.5 truncate ${textSecondary}`}
+                                title={metaLinea}
+                              >
+                                {metaLinea}
                               </p>
                             </div>
 
-                            <button
-                              onClick={() => startEdit(c)}
-                              className="px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 text-white hover:bg-blue-500 transition-colors shrink-0 order-2 md:order-3"
-                            >
-                              ✏️ Editar
-                            </button>
-
-                            <div
-                              className={`flex gap-1.5 p-1 overflow-hidden w-full md:w-auto md:max-w-[45%] order-3 md:order-2 ${
-                                dark ? "border-gray-700" : "border-gray-200"
-                              }`}
-                            >
-                              {totalImgs > 0 ? (
-                                gallery[c.id].map((u, i) => (
-                                  <img
-                                    key={u}
-                                    src={publicUrl(u)}
-                                    alt=""
-                                    onError={(e) => { e.currentTarget.style.display = "none"; }}
-                                    onClick={() => openLightbox(c.id, i)}
-                                    className={`w-12 h-12 rounded-md object-cover shrink-0 cursor-pointer transition-transform hover:scale-105 border ${
-                                      dark ? "border-gray-600" : "border-gray-300"
-                                    }`}
-                                  />
-                                ))
-                              ) : (
-                                <div
-                                  className={`w-12 h-12 rounded-md flex items-center justify-center shrink-0 ${
-                                    dark ? "bg-gray-700" : "bg-gray-100"
-                                  }`}
-                                >
-                                  <span className="text-xl">🛒</span>
-                                </div>
-                              )}
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                onClick={() => startEdit(c)}
+                                title="Editar producto"
+                                className={`w-8 h-8 rounded-lg text-sm flex items-center justify-center transition-colors ${
+                                  dark
+                                    ? "bg-blue-500/15 text-blue-400 hover:bg-blue-500/25"
+                                    : "bg-blue-50 text-blue-600 hover:bg-blue-100"
+                                }`}
+                              >
+                                ✏️
+                              </button>
+                              <button
+                                onClick={() => setDeletingCustom(c)}
+                                title="Enviar a la papelera"
+                                className={`w-8 h-8 rounded-lg text-sm flex items-center justify-center transition-colors ${
+                                  dark
+                                    ? "bg-red-500/15 text-red-400 hover:bg-red-500/25"
+                                    : "bg-red-50 text-red-600 hover:bg-red-100"
+                                }`}
+                              >
+                                🗑️
+                              </button>
                             </div>
                           </div>
 
@@ -653,6 +879,7 @@ export function TenantCustomProducts({ dark, tenantId, categories, subcategories
                                   setFormCategoryId(e.target.value);
                                   setFormSubcategoryId("");
                                   setFormBrandInput("");
+                                  setFormTalles([]);
                                 }}
                                 className={inputClass}
                                 required
@@ -702,6 +929,24 @@ export function TenantCustomProducts({ dark, tenantId, categories, subcategories
                                   propia del producto.
                                 </p>
                               </div>
+
+                              {formCategoryId && (
+                                <div>
+                                  <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>
+                                    📏 Talles del producto
+                                  </label>
+                                  <p className={`text-[10px] mb-2 ${textSecondary}`}>
+                                    Elegí los talles que ofrece este producto. Dejá vacío
+                                    si se vende sin talles.
+                                  </p>
+                                  <SizeSelector
+                                    sizes={getSizesByCategory(formCategoryId)}
+                                    selected={formTalles}
+                                    onChange={setFormTalles}
+                                    dark={dark}
+                                  />
+                                </div>
+                              )}
 
                               <div>
                                 <label className={`block text-xs font-medium mb-1 flex items-center gap-2 ${textSecondary}`}>
@@ -887,6 +1132,62 @@ export function TenantCustomProducts({ dark, tenantId, categories, subcategories
               </div>
             );
           })}
+        </div>
+      )}
+
+      {deletingCustom && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={() => !eliminando && setDeletingCustom(null)}
+        >
+          <div
+            className={`rounded-2xl shadow-2xl p-5 w-[90%] max-w-sm border ${bgCard}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-center mb-4">
+              <div className="text-5xl mb-2">🗑️</div>
+              <p className={`font-semibold ${dark ? "text-red-400" : "text-red-600"}`}>
+                ¿Eliminar "{deletingCustom.name}"?
+              </p>
+              <div className={`text-sm text-left rounded-lg px-3 py-2 mt-3 space-y-1.5 ${
+                dark ? "bg-gray-700/50 text-gray-300" : "bg-gray-100 text-gray-600"
+              }`}>
+                <p>
+                  {(assignments[deletingCustom.id] || []).length > 0 ? (
+                    <>
+                      Se quitará del catálogo de:{" "}
+                      <strong>{assignments[deletingCustom.id].join(", ")}</strong>
+                    </>
+                  ) : (
+                    <>No está asignado a ningún catálogo.</>
+                  )}
+                </p>
+                <p>Las ventas ya hechas conservan su nombre y montos.</p>
+                <p>Puede restaurarse desde la papelera.</p>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                className="flex-1 px-3 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+                onClick={handleEliminarConfirm}
+                disabled={eliminando}
+              >
+                {eliminando ? "Eliminando..." : "✅ Eliminar"}
+              </button>
+              <button
+                className={`flex-1 px-3 py-2 rounded-lg font-medium transition-colors ${
+                  dark
+                    ? "bg-gray-600 hover:bg-gray-500 text-white"
+                    : "bg-gray-300 hover:bg-gray-400 text-gray-800"
+                }`}
+                onClick={() => setDeletingCustom(null)}
+                disabled={eliminando}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

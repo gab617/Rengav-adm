@@ -1,9 +1,15 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useAppContext } from "../../../contexto/Context";
 import { EditProduct } from "./EditProduct";
 import { DeleteProduct } from "./DeleteProduct";
 import { Balanza } from "./liProductComponents/Balanza";
+import { StepperCantidad } from "./liProductComponents/StepperCantidad";
+import { TallesStock } from "./liProductComponents/TallesStock";
 import { ProductModal } from "./ProductModal";
+import {
+  stockTallesToPayload,
+  sumStockTalles,
+} from "../../Admin/components/productsBase/components/StockPorTalle";
 import { toast } from "react-toastify";
 import { supabase } from "../../../services/supabaseClient";
 
@@ -27,10 +33,22 @@ export function LiProduct({
     carrito,
     actualizarStockEnCarrito,
     profile,
+    sizesById,
   } = useAppContext();
 
   const dark = preferencias?.theme === "dark";
   const esAdmin = profile?.role === "admin" || profile?.role === "super_admin";
+
+  const ocultoBg = useMemo(() => {
+    const color = dark ? "%23c4b5fd" : "%236d28d9";
+    const svg =
+      "<svg xmlns='http://www.w3.org/2000/svg' width='110' height='38'>" +
+      "<text x='55' y='27' font-family='Arial, sans-serif' font-size='11' font-weight='700' letter-spacing='2' text-anchor='middle' transform='rotate(-15 55 27)' fill='" +
+      color +
+      "' opacity='0.5'>OCULTO</text>" +
+      "</svg>";
+    return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+  }, [dark]);
 
   const [isEditing, setIsEditing] = useState(false);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
@@ -41,6 +59,7 @@ export function LiProduct({
       prod.tipo === "custom" ? prod.user_custom_products?.name : prod.nombre,
   });
   const [pesoSeleccionado, setPesoSeleccionado] = useState(null);
+  const [cantidad, setCantidad] = useState(1);
 
   useEffect(() => {
     setEditedProduct({
@@ -51,13 +70,30 @@ export function LiProduct({
     setIsEditing(false);
     setShowConfirmDelete(false);
     setShowProductModal(false);
+    setCantidad(1);
   }, [prod.id]);
 
   const esPeso = prod.products_base?.type_unit === "weight";
+  const hayTalles =
+    !esPeso && (prod.products_base?.talles || []).length > 0;
+  const esUnitario = !esPeso && !hayTalles;
+
+  // Talles del producto (resueltos a objetos { id, name, sort_order }),
+  // respetando el orden del catálogo.
+  const productSizes = useMemo(() => {
+    const ids = prod.products_base?.talles || [];
+    return ids
+      .map((id) => sizesById[id])
+      .filter(Boolean)
+      .sort((a, b) => a.sort_order - b.sort_order || a.id - b.id);
+  }, [prod, sizesById]);
+
+  const tieneStockTalles = hayTalles && !!prod.stock_talles;
   const enCarrito = carrito.some((item) => item.id === prod.id);
   const cantidadEnCarrito = carrito
     .filter((item) => item.id === prod.id)
     .reduce((acc, item) => acc + Number(item.cantidad), 0);
+  const stockDisponible = Math.max(0, Number(prod.stock || 0) - cantidadEnCarrito);
 
   const precioVenta = parseFloat(prod.precio_venta) || 0;
   const precioCompra = parseFloat(prod.precio_compra) || 0;
@@ -76,13 +112,19 @@ export function LiProduct({
 
   const handleCancel = () => setIsEditing(false);
 
-  const handleAgregarCarrito = () => {
+  const handleAgregarCarrito = (opts = {}) => {
     if (sinPrecios) {
       let msg = "⚠️ Faltan definir los siguientes precios:";
       if (faltaPrecioVenta) msg += "\n• Precio de VENTA";
       if (faltaPrecioCompra) msg += "\n• Precio de COMPRA";
       msg += "\n\nEditá el producto para agregarlos.";
       toast.warning(msg);
+      return;
+    }
+
+    // Producto con talles: el alta se hace desde el modal (elegir talle).
+    if (hayTalles) {
+      setShowProductModal(true);
       return;
     }
 
@@ -101,18 +143,31 @@ export function LiProduct({
         precioCalculado,
       });
     } else {
-      agregarProductoCarrito(prod, color);
+      agregarProductoCarrito(prod, color, opts);
     }
   };
 
   const handleSubmit = async () => {
     const payload = { ...editedProduct };
     if (payload.stock < 0) payload.stock = 0;
-    console.log(payload);
     delete payload.products_base;
     delete payload.id;
+
+    if (hayTalles) {
+      payload.stock_talles = stockTallesToPayload(payload.stock_talles || {}, {
+        force: true,
+      });
+      payload.stock = sumStockTalles(payload.stock_talles);
+    }
+
     await actualizarProducto(prod.id, payload);
-    actualizarStockEnCarrito([{ id_producto: prod.id, stock: Number(payload.stock) }]);
+    actualizarStockEnCarrito([
+      {
+        id_producto: prod.id,
+        stock: Number(payload.stock),
+        stock_talles: payload.stock_talles,
+      },
+    ]);
     setIsEditing(false);
   };
 
@@ -148,19 +203,47 @@ export function LiProduct({
     return supabase.storage.from("product-images").getPublicUrl(path).data.publicUrl;
   };
 
-  const borderClass = sinStock
-    ? "border-red-500"
-    : enCarrito
-      ? "border-yellow-500"
-      : dark
-        ? "border-gray-600"
-        : "border-gray-400";
+  const borderClass = prod.visible === false
+    ? "border-violet-500 border-dashed"
+    : sinStock
+      ? "border-red-500"
+      : enCarrito
+        ? "border-yellow-500"
+        : dark
+          ? "border-gray-600"
+          : "border-gray-400";
 
   return (
-    <li
-      key={prod.id}
-      className={`
-        group relative
+    <>
+      <style>{`
+        @keyframes star-twinkle {
+          0%, 100% {
+            transform: scale(1) rotate(0deg);
+            filter: drop-shadow(0 0 3px rgba(250, 204, 21, 0.55));
+          }
+          50% {
+            transform: scale(1.18) rotate(10deg);
+            filter: drop-shadow(0 0 9px rgba(250, 204, 21, 0.95));
+          }
+        }
+        .animate-star-twinkle {
+          animation: star-twinkle 1.4s ease-in-out infinite;
+        }
+        .oculto-marca {
+          background-image: ${ocultoBg};
+          background-repeat: repeat;
+          background-size: 110px 38px;
+        }
+        @media (max-width: 767px) {
+          .oculto-marca {
+            background-size: 72px 25px;
+          }
+        }
+      `}</style>
+      <li
+        key={prod.id}
+        className={`
+        group relative isolate
         rounded-xl border-2 transition-all duration-200
         ${vista === "listado"
           ? "flex items-center justify-between md:p-2 md:h-[60px] gap-2"
@@ -172,17 +255,21 @@ export function LiProduct({
         group-hover:shadow-lg
       `}
       style={{
-        backgroundColor: sinStock
+        backgroundColor: prod.visible === false
           ? dark
-            ? "rgba(220, 38, 38, 0.2)"
-            : "rgba(254, 226, 226, 1)"
-          : enCarrito
+            ? "rgba(139, 92, 246, 0.28)"
+            : "rgba(167, 139, 250, 0.25)"
+          : sinStock
             ? dark
-              ? "rgba(250, 204, 21, 0.15)"
-              : "rgba(250, 204, 21, 0.1)"
-            : dark
-              ? "#1f2937"
-              : "white",
+              ? "rgba(220, 38, 38, 0.2)"
+              : "rgba(254, 226, 226, 1)"
+            : enCarrito
+              ? dark
+                ? "rgba(250, 204, 21, 0.15)"
+                : "rgba(250, 204, 21, 0.1)"
+              : dark
+                ? "#1f2937"
+                : "white",
         color: dark ? "white" : "black",
       }}
     >
@@ -190,6 +277,21 @@ export function LiProduct({
         <div className="absolute -top-2 -right-2 bg-yellow-500 text-black text-xs font-bold px-2 py-0.5 rounded-full shadow-lg z-10">
           {esPeso ? `${cantidadEnCarrito.toFixed(3)}kg` : `x${cantidadEnCarrito}`}
         </div>
+      )}
+
+      {prod.destacado && (
+        <div
+          className={`absolute -top-3 w-6 h-6 rounded-full flex items-center justify-center text-sm bg-yellow-400 shadow-lg z-10 animate-star-twinkle ${
+            enCarrito ? "right-12" : "-right-2"
+          }`}
+          title="Producto destacado"
+        >
+          ⭐
+        </div>
+      )}
+
+      {prod.visible === false && (
+        <div className="oculto-marca absolute inset-0 pointer-events-none -z-10 select-none overflow-hidden" />
       )}
 
       {sinStock && (
@@ -257,6 +359,12 @@ export function LiProduct({
                   )}
                 </span>
 
+                {prod.visible === false && (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-gray-600 text-white font-semibold shrink-0 whitespace-nowrap">
+                    👁 Oculto tienda
+                  </span>
+                )}
+
                 <div
                   className={`border rounded-xl px-2 md:px-3 py-0.5 md:py-1 shadow-md text-sm md:text-base ${
                     dark
@@ -294,6 +402,15 @@ export function LiProduct({
                   />
                 )}
               </div>
+              {tieneStockTalles && (
+                <div className="mt-0.5">
+                  <TallesStock
+                    sizes={productSizes}
+                    stockTalles={prod.stock_talles}
+                    dark={dark}
+                  />
+                </div>
+              )}
             </div>
           </div>
 
@@ -320,17 +437,33 @@ export function LiProduct({
                   |
                 </span>
 
-                <span
-                  className={`text-sm md:text-base md:text-center font-medium ${
-                    prod.stock <= 5
-                      ? "text-red-500"
-                      : dark
-                        ? "text-gray-300"
-                        : "text-gray-600"
-                  }`}
-                >
-                  Stock: {prod.stock}
-                </span>
+                {tieneStockTalles ? (
+                  <span
+                    className={`text-xs md:text-sm font-medium whitespace-nowrap ${
+                      dark ? "text-gray-400" : "text-gray-600"
+                    }`}
+                    title={`Stock total: ${sumStockTalles(prod.stock_talles)} unidades`}
+                  >
+                    👕 {productSizes.length} talles
+                  </span>
+                ) : (
+                  <>
+                    <span
+                      className={`text-sm md:text-base md:text-center font-medium ${
+                        prod.stock <= 5
+                          ? "text-red-500"
+                          : dark
+                            ? "text-gray-300"
+                            : "text-gray-600"
+                      }`}
+                    >
+                      Stock: {prod.stock}
+                    </span>
+                    {hayTalles && (
+                      <span className="text-sm" title="Producto con talles">👕</span>
+                    )}
+                  </>
+                )}
               </div>
             </div>
 
@@ -364,14 +497,14 @@ export function LiProduct({
                 onClick={handleAgregarCarrito}
                 title={sinPrecios 
                   ? `No se puede agregar: ${faltaPrecioVenta && faltaPrecioCompra ? "falta precio de venta y compra" : faltaPrecioVenta ? "falta precio de venta" : "falta precio de compra"}` 
-                  : enCarrito ? "Agregar más" : "Agregar al carrito"}
+                  : hayTalles ? "Elegir talle" : enCarrito ? "Agregar más" : "Agregar al carrito"}
               >
-                {sinPrecios ? "⚠️" : enCarrito ? "➕" : "🛒"}
+                {sinPrecios ? "⚠️" : hayTalles ? "👕" : enCarrito ? "➕" : "🛒"}
               </button>
 
               {esAdmin && (
                 <button
-                  className="px-2 py-1 md:px-2 md:py-1 text-base md:text-lg bg-blue-500 hover:bg-blue-400 text-white rounded-lg transition-colors"
+                  className="px-2 py-1 md:px-2 md:py-1 text-base md:text-lg bg-blue-500 hover:bg-blue-400 text-white rounded-lg shadow-md transition-colors"
                   onClick={() => setIsEditing(!isEditing)}
                   title="Editar producto"
                 >
@@ -381,8 +514,42 @@ export function LiProduct({
 
               {esAdmin && (
                 <button
-                  className={`px-2 py-1 md:px-2 md:py-1 text-sm md:text-base rounded-lg transition-all opacity-50 hover:opacity-100 ${
-                    dark ? "hover:bg-red-600 text-gray-500" : "hover:bg-red-100 text-gray-400 hover:text-red-500"
+                  className={`px-2 py-1 text-sm md:text-base rounded-lg transition-all shadow-sm ${
+                    prod.destacado
+                      ? "bg-yellow-400 text-black shadow-md hover:bg-yellow-300"
+                      : dark
+                        ? "bg-gray-700 text-gray-400 hover:text-yellow-400 hover:bg-gray-600"
+                        : "bg-gray-100 text-gray-400 hover:text-yellow-500 hover:bg-yellow-100"
+                  }`}
+                  onClick={() => actualizarProducto(prod.id, { destacado: !prod.destacado })}
+                  title={prod.destacado ? "Quitar de destacados" : "Marcar como destacado"}
+                >
+                  ★
+                </button>
+              )}
+
+              {esAdmin && (
+                <button
+                  className={`px-2 py-1 text-sm md:text-base rounded-lg transition-all shadow-sm ${
+                    prod.visible === false
+                      ? "bg-violet-500 text-white shadow-md hover:bg-violet-600"
+                      : dark
+                        ? "bg-gray-700 text-gray-300 hover:text-gray-100 hover:bg-gray-600"
+                        : "bg-gray-100 text-gray-500 hover:text-gray-700 hover:bg-gray-200"
+                  }`}
+                  onClick={() => actualizarProducto(prod.id, { visible: prod.visible === false ? true : false })}
+                  title={prod.visible === false ? "Mostrar en catálogo" : "Ocultar del catálogo"}
+                >
+                  {prod.visible === false ? "👁‍🗨" : "👁"}
+                </button>
+              )}
+
+              {esAdmin && (
+                <button
+                  className={`px-2 py-1 md:px-2 md:py-1 text-sm md:text-base rounded-lg transition-all shadow-sm ${
+                    dark
+                      ? "bg-gray-700 text-red-400 hover:bg-red-600 hover:text-white"
+                      : "bg-gray-100 text-red-500 hover:bg-red-500 hover:text-white"
                   }`}
                   onClick={() => setShowConfirmDelete(true)}
                   title="Eliminar producto"
@@ -397,7 +564,7 @@ export function LiProduct({
         <div className="w-full flex flex-col">
           {imagenPrincipal && (
             <div
-              className="h-10 mb-1.5 overflow-hidden rounded-lg border cursor-pointer transition-all duration-300 ease-out md:group-hover:h-24 md:group-hover:shadow-lg"
+              className="h-24 md:h-32 overflow-hidden rounded-lg border cursor-pointer"
               style={{ borderColor: dark ? "#374151" : "#e5e7eb", backgroundColor: dark ? "#111827" : "#f9fafb" }}
               onClick={() => setShowProductModal(true)}
               title="Ver detalle"
@@ -406,7 +573,7 @@ export function LiProduct({
                 src={publicUrl(imagenPrincipal)}
                 alt={prod.products_base?.name || "Producto"}
                 onError={(e) => { e.currentTarget.style.display = "none"; }}
-                className="w-full h-full object-contain transition-transform duration-300 md:group-hover:scale-105"
+                className="w-full h-full object-contain"
               />
             </div>
           )}
@@ -419,18 +586,153 @@ export function LiProduct({
                     : prod.products_base?.name}
                 </span>
                 {esPeso && <span className="text-sm shrink-0">⚖️</span>}
+                {prod.visible === false && (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-gray-600 text-white font-semibold shrink-0 whitespace-nowrap">
+                    👁 Oculto tienda
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-2 mt-0.5">
                 <span className={`font-bold ${dark ? "text-green-400" : "text-green-700"}`}>
                   ${precioFormateado}
                 </span>
-                <span className={`text-xs ${prod.stock <= 5 ? "text-red-500 font-bold" : dark ? "text-gray-400" : "text-gray-500"}`}>
-                  Stock: {prod.stock}
-                </span>
+                {!tieneStockTalles && (
+                  <span className={`text-xs ${prod.stock <= 5 ? "text-red-500 font-bold" : dark ? "text-gray-400" : "text-gray-500"}`}>
+                    Stock: {prod.stock}
+                  </span>
+                )}
+                {hayTalles && (
+                  <span className="text-xs" title="Producto con talles">👕</span>
+                )}
               </div>
+              {tieneStockTalles && (
+                <TallesStock
+                  sizes={productSizes}
+                  stockTalles={prod.stock_talles}
+                  dark={dark}
+                  repartido
+                />
+              )}
             </div>
           </div>
-          <div className="flex items-center gap-1 shrink-0">
+          {esPeso && (
+            <div
+              className={`w-full rounded-xl border p-2 ${
+                dark
+                  ? "border-yellow-500/40 bg-yellow-500/10"
+                  : "border-yellow-200 bg-yellow-50"
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <span
+                  className={`text-[10px] uppercase font-bold tracking-wide ${
+                    dark ? "text-yellow-400" : "text-yellow-600"
+                  }`}
+                >
+                  ⚖️ Por peso
+                </span>
+                {pesoSeleccionado ? (
+                  <button
+                    onClick={() => setPesoSeleccionado(null)}
+                    title="Limpiar peso"
+                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs shrink-0 transition-colors ${
+                      dark
+                        ? "bg-gray-700 text-gray-300 hover:bg-red-900/50 hover:text-red-400"
+                        : "bg-white border border-gray-300 text-gray-500 hover:bg-red-50 hover:text-red-500"
+                    }`}
+                  >
+                    ✕
+                  </button>
+                ) : (
+                  <span
+                    className={`text-[10px] ${dark ? "text-gray-500" : "text-gray-400"}`}
+                  >
+                    Ingresá el peso
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="relative shrink-0">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={pesoSeleccionado !== null ? Math.round(pesoSeleccionado * 1000) : ""}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/[^\d]/g, "");
+                      setPesoSeleccionado(val ? Number(val) / 1000 : null);
+                    }}
+                    placeholder="0"
+                    className={`w-16 text-center px-1 py-2 font-semibold text-sm rounded-lg ${
+                      dark
+                        ? "bg-gray-800 text-white border border-gray-600"
+                        : "bg-white text-gray-900 border border-gray-300"
+                    }`}
+                  />
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-400 pointer-events-none">
+                    g
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1 flex-1">
+                  {[0.05, 0.1, 0.5, 1].map((val) => (
+                    <button
+                      key={val}
+                      onClick={() => {
+                        if (sinPrecios) {
+                          let msg = "⚠️ Faltan definir los siguientes precios:";
+                          if (faltaPrecioVenta) msg += "\n• Precio de VENTA";
+                          if (faltaPrecioCompra) msg += "\n• Precio de COMPRA";
+                          msg += "\n\nEditá el producto para agregarlos.";
+                          toast.warning(msg);
+                          return;
+                        }
+                        if (enCarrito) {
+                          agregarProductoCarrito(prod, color, { peso: val });
+                        } else {
+                          setPesoSeleccionado((prev) => (prev || 0) + val);
+                        }
+                      }}
+                      className={`min-w-[44px] px-1 py-2 flex-1 rounded-lg text-center text-xs font-semibold transition-colors ${
+                        dark
+                          ? "bg-gray-700 hover:bg-yellow-500/30"
+                          : "bg-white border border-gray-200 hover:bg-yellow-100"
+                      }`}
+                    >
+                      {val >= 1 ? "1k" : val * 1000 + "g"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <p
+                className={`text-[10px] mt-1 ${
+                  pesoSeleccionado
+                    ? dark ? "text-yellow-400/80" : "text-yellow-600"
+                    : dark ? "text-gray-500" : "text-gray-400"
+                }`}
+              >
+                {pesoSeleccionado
+                  ? `Total: ${pesoSeleccionado.toFixed(3).replace(/0+$/, "").replace(/\.$/, "")} kg`
+                  : "Tocá un atajo o escribilo en gramos"}
+              </p>
+            </div>
+          )}
+          {esUnitario && !sinPrecios && stockDisponible > 0 && (
+            <div className="flex items-center justify-between gap-1.5 w-full">
+              <StepperCantidad
+                cantidad={cantidad}
+                max={stockDisponible}
+                onChange={setCantidad}
+                dark={dark}
+              />
+              <span
+                className={`text-[10px] sm:text-xs ${
+                  dark ? "text-gray-500" : "text-gray-500"
+                }`}
+              >
+                disp: {stockDisponible}
+              </span>
+            </div>
+          )}
+          <div className="flex flex-wrap items-center gap-1.5 shrink-0 w-full">
               {enCarrito && (
                 <button
                   onClick={(e) => {
@@ -438,39 +740,70 @@ export function LiProduct({
                     eliminarProductoCarrito(prod.id);
                   }}
                   title="Quitar del carrito"
-                  className="w-9 h-9 rounded-xl flex items-center justify-center text-base font-bold transition-all shadow-md bg-red-500 hover:bg-red-600 text-white shrink-0"
+                  className="w-8 h-9 rounded-lg flex items-center justify-center text-base font-bold transition-all shadow-md bg-red-500 hover:bg-red-600 text-white shrink-0"
                 >
                   ✕
                 </button>
               )}
               <button
-                className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg font-bold transition-all shadow-md ${
+                className={`h-9 flex-1 min-w-0 rounded-lg flex items-center justify-center gap-1 px-2 text-xs sm:text-sm font-semibold transition-all shadow-md ${
                   enCarrito
                     ? "bg-yellow-500 hover:bg-yellow-400 text-black shadow-yellow-500/30"
                     : sinPrecios
-                      ? "bg-gray-400 text-gray-200 cursor-not-allowed"
+                      ? "bg-gray-400 text-gray-200 cursor-not-allowed shadow-none"
                       : esPeso && !pesoSeleccionado
-                        ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                        : "bg-green-600 hover:bg-green-500 text-white shadow-green-600/30"
+                        ? "bg-gray-300 text-gray-500 cursor-not-allowed shadow-none"
+                        : esUnitario && cantidad > stockDisponible
+                          ? "bg-gray-300 text-gray-500 cursor-not-allowed shadow-none"
+                          : "bg-green-600 hover:bg-green-500 text-white shadow-green-600/30"
                 }`}
                 onClick={() => {
                   if (esPeso && pesoSeleccionado && pesoSeleccionado > 0) {
                     agregarProductoCarrito(prod, color, { peso: pesoSeleccionado });
                     setPesoSeleccionado(null);
                   } else if (!esPeso) {
-                    handleAgregarCarrito();
+                    handleAgregarCarrito({ cantidad });
+                    if (esUnitario) setCantidad(1);
                   }
                 }}
-                disabled={sinPrecios || (esPeso && !pesoSeleccionado)}
-                title={sinPrecios ? "Faltan precios" : enCarrito ? "Agregar más" : "Agregar al carrito"}
+                disabled={
+                  sinPrecios ||
+                  (esPeso && !pesoSeleccionado) ||
+                  (esUnitario && cantidad > stockDisponible)
+                }
+                title={
+                  sinPrecios
+                    ? "Faltan precios"
+                    : hayTalles
+                      ? `Elegir talle (${(prod.products_base?.talles || []).length} disponibles)`
+                      : esPeso
+                        ? "Ingresá el peso y tocalo para agregar"
+                        : enCarrito
+                          ? "Agregar más"
+                          : "Agregar al carrito"
+                }
               >
-                {esPeso ? (
-                  pesoSeleccionado ? pesoSeleccionado.toFixed(2) : "⚖️"
-                ) : enCarrito ? "➕" : "🛒"}
+                {sinPrecios ? (
+                  <span className="truncate">⚠️ Precios</span>
+                ) : hayTalles ? (
+                  <span className="truncate">👕 Elegir talle</span>
+                ) : esPeso ? (
+                  pesoSeleccionado ? (
+                    `${pesoSeleccionado.toFixed(2)}kg`
+                  ) : (
+                    <span className="truncate">⚖️ Agregar</span>
+                  )
+                ) : esUnitario && !enCarrito && cantidad > 1 ? (
+                  <span className="truncate">🛒 Agregar {cantidad}</span>
+                ) : enCarrito ? (
+                  <span className="truncate">➕ Agregar más</span>
+                ) : (
+                  <span className="truncate">🛒 Agregar</span>
+                )}
               </button>
               {esAdmin && (
                 <button
-                  className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm transition-all ${
+                  className={`w-8 h-9 rounded-lg flex items-center justify-center text-sm transition-all shrink-0 shadow-md ${
                     dark ? "bg-blue-600 hover:bg-blue-500 text-white" : "bg-blue-500 hover:bg-blue-400 text-white"
                   }`}
                   onClick={() => setIsEditing(!isEditing)}
@@ -480,78 +813,51 @@ export function LiProduct({
                 </button>
               )}
               {esAdmin && (
-                <button
-                  className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs transition-all opacity-50 hover:opacity-100 ${
-                    dark ? "hover:bg-red-600 text-gray-500" : "hover:bg-red-100 text-gray-400 hover:text-red-500"
-                  }`}
-                  onClick={() => setShowConfirmDelete(true)}
-                  title="Eliminar producto"
-                >
-                  🗑️
-                </button>
+                <div className="flex items-center gap-1.5 w-full md:w-auto">
+                  <button
+                    className={`w-7 h-9 rounded-lg flex items-center justify-center text-xs transition-all shrink-0 flex-1 md:flex-none shadow-sm ${
+                      prod.destacado
+                        ? "bg-yellow-400 text-black shadow-md shadow-yellow-400/40 hover:bg-yellow-300"
+                        : dark
+                          ? "bg-gray-700 text-gray-400 hover:text-yellow-400 hover:bg-gray-600"
+                          : "bg-gray-100 text-gray-400 hover:text-yellow-500 hover:bg-yellow-100"
+                    }`}
+                    onClick={() => actualizarProducto(prod.id, { destacado: !prod.destacado })}
+                    title={prod.destacado ? "Quitar de destacados" : "Marcar como destacado"}
+                  >
+                    ★
+                  </button>
+                  <button
+                    className={`w-7 h-9 rounded-lg flex items-center justify-center text-xs transition-all shrink-0 flex-1 md:flex-none shadow-sm ${
+                      prod.visible === false
+                        ? "bg-violet-500 text-white shadow-md shadow-violet-500/40 hover:bg-violet-600"
+                        : dark
+                          ? "bg-gray-700 text-gray-300 hover:text-gray-100 hover:bg-gray-600"
+                          : "bg-gray-100 text-gray-500 hover:text-gray-700 hover:bg-gray-200"
+                    }`}
+                    onClick={() => actualizarProducto(prod.id, { visible: prod.visible === false ? true : false })}
+                    title={prod.visible === false ? "Mostrar en catálogo" : "Ocultar del catálogo"}
+                  >
+                    {prod.visible === false ? "👁‍🗨" : "👁"}
+                  </button>
+                  <button
+                    className={`w-7 h-9 rounded-lg flex items-center justify-center text-xs transition-all shrink-0 flex-1 md:flex-none shadow-sm ${
+                      dark
+                        ? "bg-gray-700 text-red-400 hover:bg-red-600 hover:text-white"
+                        : "bg-gray-100 text-red-500 hover:bg-red-500 hover:text-white"
+                    }`}
+                    onClick={() => setShowConfirmDelete(true)}
+                    title="Eliminar producto"
+                  >
+                    🗑️
+                  </button>
+                </div>
               )}
             </div>
 
           {enCarrito && (
             <div className={`text-xs font-medium mb-1.5 ${dark ? "text-yellow-400" : "text-yellow-700"}`}>
               ✓ {esPeso ? `${cantidadEnCarrito.toFixed(3)}kg` : `x${cantidadEnCarrito} en carrito`}
-            </div>
-          )}
-
-          {esPeso && (
-            <div className={`flex flex-col items-center gap-1.5 p-1 rounded-lg border text-base ${
-              dark ? "border-yellow-500/30 bg-yellow-500/10" : "border-yellow-200 bg-yellow-50"
-            }`}>
-              <input
-                type="text"
-                inputMode="numeric"
-                value={pesoSeleccionado !== null ? Math.round(pesoSeleccionado * 1000) : ""}
-                onChange={(e) => {
-                  const val = e.target.value.replace(/[^\d]/g, "");
-                  setPesoSeleccionado(val ? Number(val) / 1000 : null);
-                }}
-                placeholder="gr"
-                className={`w-14 text-center px-1.5 py-1 rounded font-medium ${
-                  dark ? "bg-gray-800 text-white border border-gray-600" : "bg-white text-gray-900 border border-gray-300"
-                }`}
-              />
-              <div className="flex gap-0.5 flex-1">
-                {[0.05, 0.1, 0.5, 1].map((val) => (
-                  <button
-                    key={val}
-                    onClick={() => {
-                      if (sinPrecios) {
-                        let msg = "⚠️ Faltan definir los siguientes precios:";
-                        if (faltaPrecioVenta) msg += "\n• Precio de VENTA";
-                        if (faltaPrecioCompra) msg += "\n• Precio de COMPRA";
-                        msg += "\n\nEditá el producto para agregarlos.";
-                        toast.warning(msg);
-                        return;
-                      }
-                      if (enCarrito) {
-                        agregarProductoCarrito(prod, color, { peso: val });
-                      } else {
-                        setPesoSeleccionado((prev) => (prev || 0) + val);
-                      }
-                    }}
-                    className={`flex-1 p-1 rounded text-center font-medium transition-colors ${
-                      dark ? "bg-gray-700 hover:bg-yellow-500/30" : "bg-white hover:bg-yellow-100 border border-gray-200"
-                    }`}
-                  >
-                    {val >= 1 ? "1k" : val * 1000 + "g"}
-                  </button>
-                ))}
-              </div>
-              {pesoSeleccionado && (
-                <button
-                  onClick={() => setPesoSeleccionado(null)}
-                  className={`w-6 h-6 rounded flex items-center justify-center ${
-                    dark ? "hover:bg-gray-600" : "hover:bg-gray-200"
-                  }`}
-                >
-                  ✕
-                </button>
-              )}
             </div>
           )}
 
@@ -575,6 +881,8 @@ export function LiProduct({
           <DeleteProduct
             handleDelete={handleDelete}
             setShowConfirmDelete={setShowConfirmDelete}
+            productId={prod.id}
+            esCustom={prod.custom_id != null}
             imagenesCount={prod.imagenes?.length || 0}
           />
         )}
@@ -587,5 +895,6 @@ export function LiProduct({
         )}
       </div>
     </li>
+    </>
   );
 }

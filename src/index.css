@@ -1,3 +1,38 @@
 @import "tailwindcss";
 
+/* ============================================================
+   Toast de pedidos nuevos: tarjeta ámbar sólida, texto oscuro,
+   más grande que el resto y con titileo hasta confirmar.
+   ------------------------------------------------------------
+   Por qué tanta especificidad y cero keyframes: el toastClassName
+   global usa utilidades Tailwind CON !important (!bg-gray-900/85).
+   Las animaciones CSS viven en un nivel INFERIOR al !important de
+   autor en la cascada, así que ningún keyframe puede ganarle.
+   El parpadeo se hace desde JS alternando .toast-pedido-flash, y
+   ambas fases son declaraciones estáticas lo bastante específicas
+   para ganarle a las utilidades globales.
+   El diseño es agnóstico del theme: ámbar sólido + texto casi
+   negro contrasta bien sobre fondo claro y sobre gray-800.
+   ============================================================ */
+
+div.Toastify__toast.toast-pedido-alerta.toast-pedido-alerta {
+  background-color: #fbbf24 !important;
+  color: #111827 !important;
+  border: 2px solid #111827 !important;
+  font-size: 1rem !important;
+  line-height: 1.35 !important;
+  padding-top: 0.7rem !important;
+  padding-bottom: 0.7rem !important;
+  box-shadow:
+    0 0 0 3px rgba(251, 191, 36, 0.55),
+    0 14px 30px rgba(0, 0, 0, 0.45) !important;
+}
+
+div.Toastify__toast.toast-pedido-alerta.toast-pedido-alerta.toast-pedido-flash {
+  background-color: #fffbeb !important;
+  box-shadow:
+    0 0 0 8px rgba(251, 191, 36, 0.3),
+    0 14px 30px rgba(0, 0, 0, 0.45) !important;
+}
+
 

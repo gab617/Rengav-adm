@@ -14,6 +14,8 @@ export function useProductFilters(
   const [filtroSubcategorias, setFiltroSubcategorias] = useState([]);
   const [soloCustom, setSoloCustom] = useState(false);
   const [soloPeso, setSoloPeso] = useState(false); // productos por peso
+  const [soloDestacados, setSoloDestacados] = useState(false);
+  const [soloOcultos, setSoloOcultos] = useState(false);
 
   const toggleCategoria = (id) => {
     setFiltroCategorias((prev) =>
@@ -68,6 +70,13 @@ export function useProductFilters(
 
     const cumplePeso = !soloPeso || base.type_unit === "weight";
 
+    // Ocultos: por default se muestran TODOS (incluyendo ocultos, señalizados en la card);
+    // si soloOcultos activo, mostrar SOLO los ocultos
+    const cumpleVisible = !soloOcultos || prod.visible === false;
+
+    // Destacados: si soloDestacados activo, mostrar SOLO destacado=true
+    const cumpleDestacado = !soloDestacados || prod.destacado === true;
+
     return (
       cumpleNombre &&
       cumpleId &&
@@ -75,7 +84,9 @@ export function useProductFilters(
       cumpleCategoria &&
       cumpleSubcategoria &&
       cumpleStock &&
-      cumplePeso
+      cumplePeso &&
+      cumpleVisible &&
+      cumpleDestacado
     );
   };
 
@@ -91,6 +102,8 @@ export function useProductFilters(
     filtroCategorias,
     filtroSubcategorias,
     soloPeso,
+    soloDestacados,
+    soloOcultos,
   ]);
 
   // 🔹 SOLO productos custom
@@ -107,6 +120,8 @@ export function useProductFilters(
     filtroCategorias,
     filtroSubcategorias,
     soloPeso,
+    soloDestacados,
+    soloOcultos,
   ]);
 
   const marcasDisponibles = useMemo(() => {
@@ -128,6 +143,8 @@ export function useProductFilters(
     setFiltroSubcategorias([]);
     setSoloCustom(false);
     setSoloPeso(false);
+    setSoloDestacados(false);
+    setSoloOcultos(false);
   };
 
   return {
@@ -140,6 +157,8 @@ export function useProductFilters(
       filtroSubcategorias,
       soloCustom,
       soloPeso,
+      soloDestacados,
+      soloOcultos,
     },
     setFiltroNombre,
     setFiltroId,
@@ -147,6 +166,8 @@ export function useProductFilters(
     setFiltroStock,
     setSoloCustom,
     setSoloPeso,
+    setSoloDestacados,
+    setSoloOcultos,
     toggleCategoria,
     toggleSubcategoria,
     productosFiltrados,

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "../../../services/supabaseClient";
 import { useAppContext } from "../../../contexto/Context";
-import { toast, ToastContainer } from "react-toastify";
+import { toast } from "react-toastify";
 import { ProductImagesEditor } from "../../usuario/components/ProductImagesEditor";
 
 export function FormCustomProduct({ userId }) {
@@ -359,7 +359,6 @@ export function FormCustomProduct({ userId }) {
           </motion.form>
         )}
       </AnimatePresence>
-      <ToastContainer />
     </div>
   );
 }

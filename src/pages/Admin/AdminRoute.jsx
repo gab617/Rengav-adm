@@ -1,5 +1,4 @@
 import { Navigate } from "react-router-dom";
-import { useProfile } from "../../hooksSB/useProfile";
 import { useAppContext } from "../../contexto/Context";
 
 export function AdminRoute({ children }) {

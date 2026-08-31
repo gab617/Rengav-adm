@@ -22,11 +22,13 @@ export function UlProducts() {
     setFiltroStock,
     setSoloCustom,
     setSoloPeso,
+    setSoloDestacados,
+    setSoloOcultos,
     toggleCategoria,
     toggleSubcategoria,
     productosFiltrados,
-    productosCustomFiltrados, //  NUEVO
-    marcasDisponibles, //  AHORA VIENE DEL HOOK
+    productosCustomFiltrados,
+    marcasDisponibles,
   } = useProductFilters(products, categorias, subcategorias, unifiedBrands);
   const productosActivos = filtros.soloCustom
     ? productosCustomFiltrados
@@ -115,6 +117,10 @@ const productosPorCategoria = useMemo(() => {
           marcas={marcasDisponibles}
           soloPeso={filtros.soloPeso}
           setSoloPeso={setSoloPeso}
+          soloDestacados={filtros.soloDestacados}
+          setSoloDestacados={setSoloDestacados}
+          soloOcultos={filtros.soloOcultos}
+          setSoloOcultos={setSoloOcultos}
         />
       </div>
 

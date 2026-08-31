@@ -1,6 +1,11 @@
-import React from "react";
+import React, { useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useAppContext } from "../../../contexto/Context";
 import { ProductImagesEditor } from "../../usuario/components/ProductImagesEditor";
+import {
+  StockPorTalle,
+  sumStockTalles,
+} from "../../Admin/components/productsBase/components/StockPorTalle";
 
 export function EditProduct({
   editedProduct,
@@ -8,8 +13,23 @@ export function EditProduct({
   handleSubmit,
   handleCancel,
 }) {
-  const { preferencias, profile } = useAppContext();
+  const { preferencias, profile, sizesById } = useAppContext();
   const dark = preferencias?.theme === "dark";
+
+  const productSizes = useMemo(() => {
+    const ids = editedProduct.products_base?.talles || [];
+    return ids
+      .map((id) => sizesById[id])
+      .filter(Boolean)
+      .sort((a, b) => a.sort_order - b.sort_order || a.id - b.id);
+  }, [editedProduct, sizesById]);
+
+  const hayTalles = productSizes.length > 0;
+
+  const imagenHeredada =
+    editedProduct.products_base?.image_url ||
+    editedProduct.user_custom_products?.image_url ||
+    null;
 
   const precioVenta = parseFloat(editedProduct.precio_venta) || 0;
   const precioCompra = parseFloat(editedProduct.precio_compra) || 0;
@@ -34,12 +54,11 @@ export function EditProduct({
     ? "bg-red-700 hover:bg-red-600 text-white"
     : "bg-red-600 hover:bg-red-500 text-white";
 
-  return (
+  return createPortal(
     <div
       className={`
-        fixed inset-0 z-[100] flex items-start sm:items-center justify-center bg-black/60 p-2 sm:p-4
-        sm:absolute sm:inset-auto sm:z-50 sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2
-        sm:bg-transparent sm:bg-black/40 sm:backdrop-blur-sm overflow-y-auto
+        fixed inset-0 z-[100] flex items-start sm:items-center justify-center bg-black/60 backdrop-blur-sm p-2 sm:p-4
+        overflow-y-auto
       `}
       onClick={(e) => {
         if (e.target === e.currentTarget) handleCancel();
@@ -132,29 +151,57 @@ export function EditProduct({
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          {hayTalles ? (
             <div>
-              <label className="block text-sm font-semibold mb-1">Stock</label>
-              <input
-                type="number"
-                name="stock"
-                value={editedProduct.stock === 0 ? "" : editedProduct.stock}
-                onChange={handleChange}
-                placeholder="0"
-                className={`w-full p-3 border rounded-lg text-base ${inputBg}`}
-              />
+              <div className={`p-3 rounded-xl border ${dark ? "border-gray-600 bg-gray-900/50" : "border-gray-200 bg-gray-50"}`}>
+                <StockPorTalle
+                  sizes={productSizes}
+                  value={editedProduct.stock_talles || {}}
+                  onChange={(value) =>
+                    handleChange({ target: { name: "stock_talles", value } })
+                  }
+                  dark={dark}
+                />
+                <p className={`text-xs mt-2 font-medium ${dark ? "text-gray-400" : "text-gray-500"}`}>
+                  📦 Stock total: {sumStockTalles(editedProduct.stock_talles)}
+                </p>
+              </div>
+              <div className="mt-3">
+                <label className="block text-sm font-semibold mb-1">Proveedor</label>
+                <input
+                  type="text"
+                  name="proveedor_nombre"
+                  value={editedProduct.proveedor_nombre}
+                  onChange={handleChange}
+                  className={`w-full p-3 border rounded-lg text-base ${inputBg}`}
+                />
+              </div>
             </div>
-            <div>
-              <label className="block text-sm font-semibold mb-1">Proveedor</label>
-              <input
-                type="text"
-                name="proveedor_nombre"
-                value={editedProduct.proveedor_nombre}
-                onChange={handleChange}
-                className={`w-full p-3 border rounded-lg text-base ${inputBg}`}
-              />
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-semibold mb-1">Stock</label>
+                <input
+                  type="number"
+                  name="stock"
+                  value={editedProduct.stock === 0 ? "" : editedProduct.stock}
+                  onChange={handleChange}
+                  placeholder="0"
+                  className={`w-full p-3 border rounded-lg text-base ${inputBg}`}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold mb-1">Proveedor</label>
+                <input
+                  type="text"
+                  name="proveedor_nombre"
+                  value={editedProduct.proveedor_nombre}
+                  onChange={handleChange}
+                  className={`w-full p-3 border rounded-lg text-base ${inputBg}`}
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           <div>
             <label className="block text-sm font-semibold mb-1">Descripción</label>
@@ -176,6 +223,7 @@ export function EditProduct({
                 handleChange({ target: { name: "imagenes", value: imgs } })
               }
               dark={dark}
+              imagenHeredada={imagenHeredada}
             />
           </div>
         </div>
@@ -197,6 +245,7 @@ export function EditProduct({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

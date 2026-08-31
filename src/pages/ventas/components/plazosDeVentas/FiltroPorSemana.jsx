@@ -23,7 +23,7 @@ export function FiltroPorSemana({
           >
             {dayjs(dia).format("dddd, D MMMM YYYY")}
           </h3>
-          <ul className="w-[80%] lg:w-[88%] grid grid-cols-2 md:grid-cols-4 sm:grid-cols-3 lg:grid-cols-7 xl:grid-cols-8 gap-1">
+          <ul className="w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
             {ventasFiltradas[dia].map((venta, index) => (
               <LiVenta
                 key={index}

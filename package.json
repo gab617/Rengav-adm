@@ -12,6 +12,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.83.0",
     "@tailwindcss/vite": "^4.1.17",
+    "browser-image-compression": "^2.0.2",
     "dayjs": "^1.11.19",
     "framer-motion": "^12.23.24",
     "react": "^19.1.0",

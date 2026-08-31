@@ -5,6 +5,7 @@ import { useProveedores } from "../hooks/useProveedores";
 import { useCarrito } from "../hooks/useCarrito";
 import { useCategories } from "../hooksSB/useCategories";
 import { useProducts } from "../hooksSB/useProducts";
+import { useSizes } from "../hooksSB/useSizes";
 import { usePreferences } from "../hooksSB/usePreferencesUser";
 import { useProductFilters } from "../hooksSB/useProductsFilters";
 import { useBrands } from "../hooksSB/useBrands";
@@ -30,6 +31,8 @@ export const AppContextProvider = ({ children }) => {
     brandsHook.brandsMap,
     brandsHook.loadingBrands
   );
+
+  const sizesHook = useSizes();
 
   const unifiedBrands = useMemo(() => {
     if (brandsHook.loadingBrands) return [];
@@ -117,6 +120,7 @@ export const AppContextProvider = ({ children }) => {
         ...carritoHook,
         ...categoriesHook,
         ...productsHook,
+        ...sizesHook,
         ...preferencesUserHook,
         ...productsFiltersHook,
         ...brandsHook,
