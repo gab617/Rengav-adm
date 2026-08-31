@@ -117,6 +117,28 @@
     background: #f0f0f0 !important;
   }
 
+  /* Fondos semi-transparentes de las nuevas tarjetas */
+  .print-panel .bg-blue-500\/15,
+  .print-panel .bg-emerald-500\/15,
+  .print-panel .bg-purple-500\/15,
+  .print-panel .bg-amber-500\/15,
+  .print-panel .bg-amber-500\/10,
+  .print-panel .bg-red-500\/5,
+  .print-panel .bg-gray-800\/50 {
+    background: #f0f0f0 !important;
+  }
+
+  /* Barras de progreso en impresión */
+  .print-panel .h-full {
+    background: #90a4ae !important;
+  }
+  .print-panel .h-1\.5 {
+    height: 6px !important;
+  }
+  .print-panel .overflow-hidden {
+    overflow: hidden !important;
+  }
+
   .print-panel .bg-green-100 { background: #e8f5e9 !important; }
   .print-panel .bg-blue-100 { background: #e3f2fd !important; }
   .print-panel .bg-purple-100 { background: #f3e5f5 !important; }
@@ -128,9 +150,76 @@
   .print-panel .text-yellow-600 { color: #f9a825 !important; }
   .print-panel .text-red-500 { color: #c62828 !important; }
 
+  /* ============================================================
+     CONTRASTE DE IMPRESIÓN — grises a negro, colores con tonalidad
+     Fuerza todo el texto a negro primero; luego se dan tonalidades
+     oscuras y legibles a los valores de color (los tonos claros del
+     dark theme se verían lavados sobre el fondo blanco del PDF).
+     ============================================================ */
+  .print-panel,
+  .print-panel * {
+    color: black !important;
+  }
+
+  /* Escala de grises -> negro */
+  .print-panel .text-white,
+  .print-panel .text-gray-100,
+  .print-panel .text-gray-200,
+  .print-panel .text-gray-300,
+  .print-panel .text-gray-400,
+  .print-panel .text-gray-500,
+  .print-panel .text-gray-600,
+  .print-panel .text-gray-700,
+  .print-panel .text-gray-800,
+  .print-panel .text-gray-900 {
+    color: #000000 !important;
+  }
+
+  /* Valores de color -> tonalidad oscura legible sobre blanco */
+  .print-panel .text-blue-300,
+  .print-panel .text-blue-400,
+  .print-panel .text-blue-600,
+  .print-panel .text-blue-700 {
+    color: #0d47a1 !important;
+  }
+  .print-panel .text-emerald-300,
+  .print-panel .text-emerald-400,
+  .print-panel .text-emerald-600,
+  .print-panel .text-emerald-700 {
+    color: #166534 !important;
+  }
+  .print-panel .text-purple-300,
+  .print-panel .text-purple-400,
+  .print-panel .text-purple-700 {
+    color: #4c1d95 !important;
+  }
+  .print-panel .text-amber-300,
+  .print-panel .text-amber-400,
+  .print-panel .text-amber-700,
+  .print-panel .text-yellow-600 {
+    color: #b45309 !important;
+  }
+  .print-panel .text-red-400,
+  .print-panel .text-red-500,
+  .print-panel .text-red-600 {
+    color: #b91c1c !important;
+  }
+
   @page {
     size: A4;
     margin: 1cm;
+  }
+
+  /* Evitar que un bloque se corte a la mitad de la página */
+  .print-panel .avoid-break {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Forzar salto de página antes del bloque */
+  .print-panel .page-break {
+    break-before: page;
+    page-break-before: always;
   }
 
   html, body {

@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useRef, useEffect } from "react";
 import { useAppContext } from "../../contexto/Context";
 import { ListVentas } from "./components/ListVentas";
+import { calcularResumenVentas } from "./functions";
 
 export function Ventas() {
   const { ventas, loadingVentas, preferencias, products, categorias, subcategorias,
@@ -80,24 +81,7 @@ export function Ventas() {
     });
   }, [stockFilter, stockStats, products, searchName, selectedCategory, selectedSubcategory, selectedBrand]);
 
-  const metricas = useMemo(() => {
-    const totalVentas = ventas.length;
-    const montoTotal = ventas.reduce((acc, v) => acc + (v.monto_total || 0), 0);
-
-    let ganancias = 0;
-    ventas.forEach(venta => {
-      if (venta.user_sales_detail) {
-        venta.user_sales_detail.forEach(detail => {
-          const diferencia = (detail.precio_unitario || 0) - (detail.precio_compra || 0);
-          ganancias += diferencia * (detail.cantidad || 1);
-        });
-      }
-    });
-
-    const ticketPromedio = totalVentas > 0 ? montoTotal / totalVentas : 0;
-
-    return { totalVentas, montoTotal, ganancias, ticketPromedio };
-  }, [ventas]);
+  const metricas = useMemo(() => calcularResumenVentas(ventas), [ventas]);
 
   const formatoMoneda = (num) => {
     return num.toLocaleString("es-AR", {

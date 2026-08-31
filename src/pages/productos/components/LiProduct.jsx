@@ -247,7 +247,7 @@ export function LiProduct({
         rounded-xl border-2 transition-all duration-200
         ${vista === "listado"
           ? "flex items-center justify-between md:p-2 md:h-[60px] gap-2"
-          : "flex flex-col justify-between p-2 pt-5 pl-5 min-h-[110px]"
+          : "flex flex-col justify-between p-2 pt-5 min-h-[110px]"
         }
         ${sizeClass}
         ${borderClass}

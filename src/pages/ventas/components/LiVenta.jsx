@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import dayjs from "dayjs";
 import { toast } from "react-toastify";
 import { useAppContext } from "../../../contexto/Context";
+import { calcularMontoVenta, calcularGananciaVenta } from "../functions";
 import "./scrollbar.css";
 
 const formatNumber = (num) => {
@@ -25,22 +26,8 @@ export function LiVenta({
 
   if (!venta) return null;
 
-  const totalVenta = venta.user_sales_detail
-    ?.reduce(
-      (acc, prod) => acc + Number(prod.precio_unitario) * Number(prod.cantidad),
-      0
-    )
-    .toFixed(2);
-
-  const gananciaEstimada = venta.user_sales_detail
-    ?.reduce(
-      (acc, prod) =>
-        acc +
-        (Number(prod.precio_unitario) - Number(prod.precio_compra)) *
-          Number(prod.cantidad),
-      0
-    )
-    .toFixed(2);
+  const totalVenta = calcularMontoVenta(venta).toFixed(2);
+  const gananciaEstimada = calcularGananciaVenta(venta).toFixed(2);
 
   const esPendiente = venta.estado === "pendiente";
   const borderColor = esPendiente
@@ -200,22 +187,8 @@ export function LiVenta({
 function DetalleVenta({ venta, onClose }) {
   const ref = useRef(null);
 
-  const totalVenta = venta.user_sales_detail
-    ?.reduce(
-      (acc, prod) => acc + Number(prod.precio_unitario) * Number(prod.cantidad),
-      0
-    )
-    .toFixed(2);
-
-  const gananciaEstimada = venta.user_sales_detail
-    ?.reduce(
-      (acc, prod) =>
-        acc +
-        (Number(prod.precio_unitario) - Number(prod.precio_compra)) *
-          Number(prod.cantidad),
-      0
-    )
-    .toFixed(2);
+  const totalVenta = calcularMontoVenta(venta).toFixed(2);
+  const gananciaEstimada = calcularGananciaVenta(venta).toFixed(2);
 
   useEffect(() => {
     const handleEsc = (e) => {

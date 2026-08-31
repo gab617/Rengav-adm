@@ -6,7 +6,7 @@ function SwitchFiltro({ activo, onClick, icono, etiqueta, colorActivo, dark }) {
     <button
       type="button"
       onClick={onClick}
-      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all border select-none ${
+      className={`flex items-center justify-between gap-1 w-full min-w-0 rounded-lg px-2 sm:px-3 py-2 text-xs font-medium transition-all border select-none ${
         activo
           ? colorActivo
           : dark
@@ -14,9 +14,9 @@ function SwitchFiltro({ activo, onClick, icono, etiqueta, colorActivo, dark }) {
             : "border-gray-200 bg-gray-50 text-gray-600"
       }`}
     >
-      <span className="flex items-center gap-1">
-        <span>{icono}</span>
-        <span>{etiqueta}</span>
+      <span className="flex items-center gap-1 min-w-0">
+        <span className="shrink-0">{icono}</span>
+        <span className="truncate">{etiqueta}</span>
       </span>
       <span
         className={`relative w-7 h-4 shrink-0 rounded-full transition-colors ${
@@ -299,7 +299,7 @@ export function Filtros({
 
       {/* FILTROS RÁPIDOS */}
       <div className="p-3 pt-0">
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           {/* BUSCAR POR ID */}
           <div className="relative flex gap-1">
             <div className="relative flex-1">
