@@ -2,13 +2,16 @@ import React, { useState, useMemo } from "react";
 import { supabase } from "../../../../services/supabaseClient";
 import { useAuth } from "../../../../contexto/AuthContext";
 import { useAppContext } from "../../../../contexto/Context";
+import { useAdminData } from "../../../../hooks/useAdminData";
 import { ProductImagesEditor } from "../../../usuario/components/ProductImagesEditor";
 import { SizeSelector } from "./components/SizeSelector";
+import { StockPorTalle } from "./components/StockPorTalle";
 
 export function AdminCustomProductForm({ products, categories, subcategories, getSizesByCategory = () => [], onAgregado }) {
   const { user } = useAuth();
   const { profile, preferencias, unifiedBrands, crearCustomProduct, agregarProductoBase } =
     useAppContext();
+  const { users: sucursales } = useAdminData();
   const dark = preferencias?.theme === "dark";
 
   const [name, setName] = useState("");
@@ -23,6 +26,8 @@ export function AdminCustomProductForm({ products, categories, subcategories, ge
   const [descripcion, setDescripcion] = useState("");
   const [imagenes, setImagenes] = useState([]);
   const [talles, setTalles] = useState([]);
+  const [stockTalles, setStockTalles] = useState({});
+  const [sucursalId, setSucursalId] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const userId = user?.id;
@@ -89,6 +94,8 @@ export function AdminCustomProductForm({ products, categories, subcategories, ge
     setDescripcion("");
     setImagenes([]);
     setTalles([]);
+    setStockTalles({});
+    setSucursalId("");
   };
 
   async function moverImagenes(upId) {
@@ -165,6 +172,28 @@ export function AdminCustomProductForm({ products, categories, subcategories, ge
       return;
     }
 
+    const sinSucursal = !sucursalId;
+
+    if (sinSucursal) {
+      if (hayStockOValores) {
+        const confirmacion = confirm(
+          "⚠️ No seleccionaste una sucursal.\n\n" +
+            "La ficha del producto se guardará SIN asignar. Los precios y stock " +
+            "que cargaste NO se aplican: se definen cuando lo asignes a una sucursal.\n\n" +
+            "¿Continuar y crear la ficha sin asignar?"
+        );
+        if (!confirmacion) return;
+      } else {
+        const confirmacion = confirm(
+          "⚠️ No seleccionaste una sucursal.\n\n" +
+            "La ficha del producto se guardará SIN asignar. Para asignarla " +
+            "a una sucursal y cargar precios/stock, usá la vista de asignación.\n\n" +
+            "¿Continuar y crear la ficha sin asignar?"
+        );
+        if (!confirmacion) return;
+      }
+    }
+
     setSubmitting(true);
     try {
       const marcaEnCatalogo = marcasDeCategoria.find(
@@ -184,13 +213,20 @@ export function AdminCustomProductForm({ products, categories, subcategories, ge
         precioVenta,
         proveedor: null,
         stock,
+        stockTalles,
         userId,
+        userIdAsignado: sucursalId || null,
+        crearSinAsignar: sinSucursal,
         imagenes,
         tenantId,
         talles,
       });
 
-      alert(`✅ "${name.trim()}" creado como producto propio`);
+      alert(
+        sinSucursal
+          ? `✅ "${name.trim()}" creado como producto propio, sin asignar (disponible)`
+          : `✅ "${name.trim()}" creado y asignado a la sucursal`
+      );
       limpiar();
       onAgregado?.();
     } catch (err) {
@@ -210,6 +246,16 @@ export function AdminCustomProductForm({ products, categories, subcategories, ge
     ? "bg-gray-700 text-white border-gray-600"
     : "bg-white text-gray-900 border-gray-300";
   const inputClass = `w-full px-3 py-2.5 rounded-lg border text-sm ${inputBg}`;
+
+  const pvNum = parseFloat(precioVenta) || 0;
+  const pcNum = parseFloat(precioCompra) || 0;
+  const ganancia = pvNum - pcNum;
+  const ventaMenorQueCompra = pvNum > 0 && pcNum > 0 && pcNum > pvNum;
+  const hayStockOValores =
+    (stockTalles && Object.keys(stockTalles).length > 0) ||
+    Number(stock) > 0 ||
+    Number(precioCompra) > 0 ||
+    Number(precioVenta) > 0;
 
   return (
     <form
@@ -305,6 +351,7 @@ export function AdminCustomProductForm({ products, categories, subcategories, ge
               setSubcategoryId("");
               setBrandInput("");
               setTalles([]);
+              setStockTalles({});
             }}
             className={inputClass}
             required
@@ -364,11 +411,70 @@ export function AdminCustomProductForm({ products, categories, subcategories, ge
               <SizeSelector
                 sizes={getSizesByCategory(categoryId)}
                 selected={talles}
-                onChange={setTalles}
+                onChange={(newTalles) => {
+                  setTalles(newTalles);
+                  const prevStock = { ...stockTalles };
+                  const newStock = {};
+                  getSizesByCategory(categoryId).forEach((s) => {
+                    if (newTalles.includes(s.id)) {
+                      newStock[s.name] = prevStock[s.name] ?? "";
+                    }
+                  });
+                  setStockTalles(newStock);
+                }}
                 dark={dark}
               />
+
+              {talles.length > 0 && (
+                <StockPorTalle
+                  sizes={getSizesByCategory(categoryId).filter((s) =>
+                    talles.includes(s.id)
+                  )}
+                  value={stockTalles}
+                  onChange={setStockTalles}
+                  dark={dark}
+                />
+              )}
             </div>
           )}
+
+          {/* ASIGNAR A SUCURSAL */}
+          <div>
+            <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>
+              🏪 Asignar a sucursal (opcional)
+            </label>
+            <p className={`text-[10px] mb-2 ${textSecondary}`}>
+              Si elegís una sucursal, el producto se asigna y queda disponible
+              para ella en el momento. Si no, queda disponible para asignar
+              desde "Asignar productos".
+            </p>
+            <select
+              value={sucursalId}
+              onChange={(e) => setSucursalId(e.target.value)}
+              className={inputClass}
+            >
+              <option value="">Dejar disponible (sin asignar)</option>
+              {sucursales
+                .filter((u) => u.tenant_id === tenantId)
+                .map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name} {u.role === "admin" ? "(admin)" : ""}
+                  </option>
+                ))}
+            </select>
+            {!sucursalId && hayStockOValores && (
+              <p
+                className={`text-[10px] mt-2 px-2 py-1 rounded border ${
+                  dark
+                    ? "text-amber-300 border-amber-500/40 bg-amber-900/20"
+                    : "text-amber-700 border-amber-400 bg-amber-50"
+                }`}
+              >
+                ⚠️ Sin sucursal, la ficha se guarda SIN asignar y estos precios/
+                stock NO se aplican. Se definen cuando asignes el producto.
+              </p>
+            )}
+          </div>
         </>
       )}
 
@@ -402,18 +508,44 @@ export function AdminCustomProductForm({ products, categories, subcategories, ge
         </div>
       </div>
 
+      {ventaMenorQueCompra && (
+        <div
+          className={`p-3 rounded-lg border-2 ${
+            dark ? "bg-red-900/30 border-red-400" : "bg-red-50 border-red-400"
+          }`}
+        >
+          <p className={`text-xs font-semibold ${dark ? "text-red-300" : "text-red-600"}`}>
+            ⚠️ La ganancia no puede ser negativa
+          </p>
+          <p className={`text-[10px] mt-1 ${dark ? "text-red-400" : "text-red-500"}`}>
+            El precio de venta (${pvNum.toLocaleString()}) es menor al de compra (${pcNum.toLocaleString()}). Ganancia por unidad: -${Math.abs(ganancia).toLocaleString()}
+          </p>
+        </div>
+      )}
+      {!ventaMenorQueCompra && pvNum > 0 && pcNum > 0 && (
+        <p className={`text-xs font-medium ${dark ? "text-green-400" : "text-green-600"}`}>
+          ✓ Ganancia: ${ganancia.toLocaleString()} por unidad
+        </p>
+      )}
+
       <div>
         <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>
           Stock inicial
         </label>
-        <input
-          type="number"
-          step="1"
-          placeholder="0"
-          className={inputClass}
-          value={stock}
-          onChange={(e) => setStock(e.target.value)}
-        />
+        {talles.length > 0 ? (
+          <p className={`text-[10px] ${textSecondary}`}>
+            El stock se define por talle arriba (total: {Object.values(stockTalles).reduce((a, b) => a + (Number(b) || 0), 0)} unidades).
+          </p>
+        ) : (
+          <input
+            type="number"
+            step="1"
+            placeholder="0"
+            className={inputClass}
+            value={stock}
+            onChange={(e) => setStock(e.target.value)}
+          />
+        )}
       </div>
 
       <textarea

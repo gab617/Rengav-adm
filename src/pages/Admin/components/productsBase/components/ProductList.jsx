@@ -580,7 +580,7 @@ export function ProductList({ products = [], categories = [], subcategories = []
             )}
           </div>
         ) : (
-          <div className="divide-y divide-gray-200 dark:divide-gray-700 max-h-[60vh] overflow-y-auto">
+          <div className="divide-y divide-gray-200 dark:divide-gray-700 max-h-[75vh] md:max-h-[calc(100vh-26rem)] overflow-y-auto">
               {productsWithSubcatFilter.map((p) => {
               const subcat = p.subcategories;
               const galeria = baseGallery[p.id] || [];

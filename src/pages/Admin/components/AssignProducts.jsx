@@ -9,7 +9,8 @@ import { StockPorTalle, stockTallesToPayload, sumStockTalles } from "./productsB
 import { repartirStockEntreTalles } from "../../../utils/talles";
 
 export function AssignProducts() {
-  const { preferencias, profile, syncProductFromAdmin } = useAppContext();
+  const { preferencias, profile, syncProductFromAdmin, refetch } =
+    useAppContext();
   const dark = preferencias?.theme === "dark";
   const esSuperAdmin = profile?.role === "super_admin";
   const { 
@@ -50,6 +51,22 @@ export function AssignProducts() {
   const [filtroPeso, setFiltroPeso] = useState(false);
   const [userCategories, setUserCategories] = useState([]);
   const [editDataBase, setEditDataBase] = useState({});
+  const [assignedEstado, setAssignedEstado] = useState("activos"); // "activos" | "inactivos"
+  const [assignedChips, setAssignedChips] = useState({
+    destacado: false,
+    conStock: false,
+    ocultos: false,
+  });
+  const [expandedItems, setExpandedItems] = useState(() => new Set());
+  const [dirtyIdsBase, setDirtyIdsBase] = useState(() => new Set());
+  const [bulkEditMode, setBulkEditMode] = useState(false);
+  const [showBulkAsignarBase, setShowBulkAsignarBase] = useState(true);
+  const [bulkPanelOpen, setBulkPanelOpen] = useState(true);
+  const [selectedBaseEdit, setSelectedBaseEdit] = useState(() => new Set());
+  const [bulkSaving, setBulkSaving] = useState(false);
+  const [bulkVentaBase, setBulkVentaBase] = useState("");
+  const [bulkCompraBase, setBulkCompraBase] = useState("");
+  const [bulkStockBase, setBulkStockBase] = useState("");
   const [tenants, setTenants] = useState([]);
   const { getProductSizes } = useSizes();
 
@@ -363,7 +380,15 @@ const ids = new Set();
         descripcion: ap.descripcion ?? "",
       };
     });
-    setEditDataBase(next);
+    setEditDataBase((prev) => {
+      // Mezcla: la base se refresca desde assignedProductsData, pero las
+      // ediciones sin guardar de cada producto se preservan.
+      const merged = {};
+      Object.keys(next).forEach((k) => {
+        merged[k] = prev[k] !== undefined ? prev[k] : next[k];
+      });
+      return merged;
+    });
   }, [assignedProductsData]);
 
   const updateEditFieldBase = (upId, field, value) => {
@@ -371,6 +396,41 @@ const ids = new Set();
       ...prev,
       [upId]: { ...prev[upId], [field]: value },
     }));
+    setDirtyIdsBase((prev) => new Set(prev).add(upId));
+  };
+
+  const buildEditPayloadBase = (upId, prod) => {
+    const data = editDataBase[upId];
+    if (!data) return null;
+
+    const payload = {
+      precio_venta: Number(data.precio_venta) || 0,
+      precio_compra: Number(data.precio_compra) || 0,
+      stock: Number(data.stock) || 0,
+      descripcion: data.descripcion || null,
+    };
+
+    const tieneTalles = getProductSizes(prod).length > 0;
+    if (tieneTalles) {
+      const st = stockTallesToPayload(data.stock_talles, { force: true });
+      if (st && Object.keys(st).length) {
+        payload.stock_talles = st;
+        payload.stock = sumStockTalles(st);
+      } else if (Number(data.stock) > 0) {
+        const repartido = repartirStockEntreTalles(
+          Number(data.stock),
+          getProductSizes(prod)
+        );
+        payload.stock_talles = repartido;
+        payload.stock = sumStockTalles(repartido);
+      } else {
+        payload.stock_talles = null;
+      }
+    } else {
+      payload.stock_talles = null;
+    }
+
+    return payload;
   };
 
   async function handleSaveEditBase(upId, prod) {
@@ -378,32 +438,7 @@ const ids = new Set();
     if (!data) return;
 
     try {
-      const payload = {
-        precio_venta: Number(data.precio_venta) || 0,
-        precio_compra: Number(data.precio_compra) || 0,
-        stock: Number(data.stock) || 0,
-        descripcion: data.descripcion || null,
-      };
-
-      const tieneTalles = getProductSizes(prod).length > 0;
-      if (tieneTalles) {
-        const st = stockTallesToPayload(data.stock_talles, { force: true });
-        if (st && Object.keys(st).length) {
-          payload.stock_talles = st;
-          payload.stock = sumStockTalles(st);
-        } else if (Number(data.stock) > 0) {
-          const repartido = repartirStockEntreTalles(
-            Number(data.stock),
-            getProductSizes(prod)
-          );
-          payload.stock_talles = repartido;
-          payload.stock = sumStockTalles(repartido);
-        } else {
-          payload.stock_talles = null;
-        }
-      } else {
-        payload.stock_talles = null;
-      }
+      const payload = buildEditPayloadBase(upId, prod);
 
       const { error } = await supabase
         .from("user_products")
@@ -422,9 +457,173 @@ const ids = new Set();
 
       syncProductFromAdmin(upId, payload);
       showNotification("Producto actualizado", "success");
+      setDirtyIdsBase((prev) => {
+        const n = new Set(prev);
+        n.delete(upId);
+        return n;
+      });
     } catch (err) {
       console.error("Error actualizando producto:", err);
       showNotification("Error al actualizar el producto", "error");
+    }
+  }
+
+  const toggleBaseEditSelect = (upId) => {
+    setSelectedBaseEdit((prev) => {
+      const next = new Set(prev);
+      if (next.has(upId)) next.delete(upId);
+      else next.add(upId);
+      return next;
+    });
+  };
+
+  const selectAllBaseEdit = () => {
+    setSelectedBaseEdit(
+      new Set(productosLista.map((p) => p.id).filter(Boolean))
+    );
+    showNotification(`${productosLista.length} producto(s) seleccionado(s)`);
+  };
+
+  const clearBaseEditSelection = () => {
+    setSelectedBaseEdit(new Set());
+    showNotification("Selección limpiada");
+  };
+
+  const enableBulkEdit = () => {
+    setSelectedToDelete(new Set());
+    setBulkEditMode(true);
+    setBulkPanelOpen(true);
+  };
+
+  const exitBulkEdit = () => {
+    setSelectedBaseEdit(new Set());
+    setBulkEditMode(false);
+    setBulkPanelOpen(false);
+  };
+
+  const applyBulkEditBase = (field, value) => {
+    if (value === "") return;
+    if (selectedBaseEdit.size === 0) {
+      showNotification("Primero seleccioná productos", "warning");
+      return;
+    }
+    const val =
+      field === "stock" ? parseInt(value, 10) || 0 : parseFloat(value) || 0;
+
+    const upIds = [...selectedBaseEdit];
+    // El stock es POR TALLE: el bulk solo aplica a productos sin talles.
+    const skippedIds = upIds.filter((upId) => {
+      if (field !== "stock") return false;
+      const prod = assignedProductsData.find((p) => p.id === upId);
+      return prod && getProductSizes(prod).length > 0;
+    });
+    const aplicados = upIds.length - skippedIds.length;
+
+    setEditDataBase((prev) => {
+      const next = { ...prev };
+      upIds.forEach((upId) => {
+        if (skippedIds.includes(upId)) return;
+        const base = prev[upId];
+        if (!base) return;
+        next[upId] = { ...base, [field]: val };
+      });
+      return next;
+    });
+
+    const labels = {
+      precio_venta: "Precio venta",
+      precio_compra: "Precio compra",
+      stock: "Stock",
+    };
+
+    if (field === "stock" && aplicados === 0) {
+      showNotification(
+        "Stock no aplicado: los productos seleccionados tienen talles (se editan por talle)",
+        "warning"
+      );
+    } else if (field === "stock" && skippedIds.length > 0) {
+      showNotification(
+        `${labels[field]} $${value} aplicado a ${aplicados} producto(s) (${skippedIds.length} con talles se editan por talle)`
+      );
+    } else {
+      showNotification(
+        `${labels[field]} $${value} aplicado a ${aplicados} producto(s)`
+      );
+    }
+  };
+
+  async function handleSaveBulkEditBase() {
+    if (selectedBaseEdit.size === 0) return;
+
+    const items = [...selectedBaseEdit]
+      .map((upId) => {
+        const prod = productosLista.find((p) => p.id === upId);
+        if (!prod) return null;
+        const payload = buildEditPayloadBase(upId, prod);
+        return payload ? { upId, prod, payload } : null;
+      })
+      .filter(Boolean);
+
+    if (items.length === 0) {
+      showNotification("No hay datos para guardar", "warning");
+      return;
+    }
+
+    setBulkSaving(true);
+
+    try {
+      const rows = items.map(({ upId, payload }) => ({
+        id: upId,
+        ...payload,
+      }));
+
+      const { data, error } = await supabase.rpc(
+        "bulk_update_user_products",
+        { payloads: rows }
+      );
+
+      if (error) throw error;
+
+      const aplicadosIds = new Set(data?.ids || []);
+      const noAplicados = data?.no_aplicados ?? 0;
+      const aplicados = items.filter(({ upId }) => aplicadosIds.has(upId));
+
+      const map = {};
+      aplicados.forEach(({ upId, payload }) => { map[upId] = payload; });
+      setAssignedProductsData((prev) =>
+        prev.map((ap) =>
+          map[ap.id]
+            ? { ...ap, ...map[ap.id], active: ap.active, destacado: ap.destacado }
+            : ap
+        )
+      );
+
+      aplicados.forEach(({ upId, payload }) =>
+        syncProductFromAdmin(upId, payload)
+      );
+
+      // Los que no se pudieron aplicar quedan seleccionados y sucios
+      // para reintentarlos.
+      setSelectedBaseEdit(
+        new Set(items.filter(({ upId }) => !aplicadosIds.has(upId)).map(({ upId }) => upId))
+      );
+      setDirtyIdsBase((prev) => {
+        const n = new Set(prev);
+        aplicadosIds.forEach((id) => n.delete(id));
+        return n;
+      });
+      setBulkEditMode(false);
+
+      showNotification(
+        noAplicados > 0
+          ? `${aplicados.length} actualizado(s), ${noAplicados} no aplicado(s)`
+          : `${aplicados.length} producto(s) actualizado(s)`
+      );
+    } catch (err) {
+      console.error("Error actualizando productos:", err);
+      showNotification("Error al actualizar los productos", "error");
+    } finally {
+      setBulkSaving(false);
     }
   }
 
@@ -554,6 +753,78 @@ const ids = new Set();
     [productosAsignadosFiltrados]
   );
 
+  const productosLista = useMemo(() => {
+    if (assignedEstado === "inactivos") {
+      if (!search) return productosInactivos;
+      const lower = search.toLowerCase();
+      return productosInactivos.filter(
+        (p) =>
+          p.name.toLowerCase().includes(lower) ||
+          (p.brand && p.brand.toLowerCase().includes(lower))
+      );
+    }
+
+    let result = productosActivos;
+
+    if (assignedChips.destacado)
+      result = result.filter((p) => p.destacado);
+    if (assignedChips.conStock)
+      result = result.filter((p) => {
+        if (p.stock_talles && Object.keys(p.stock_talles).length > 0)
+          return sumStockTalles(p.stock_talles) > 0;
+        return Number(p.stock) > 0;
+      });
+    if (assignedChips.ocultos)
+      result = result.filter((p) => p.visible === false);
+
+    if (search) {
+      const lower = search.toLowerCase();
+      result = result.filter(
+        (p) =>
+          p.name.toLowerCase().includes(lower) ||
+          (p.brand && p.brand.toLowerCase().includes(lower))
+      );
+    }
+
+    return result;
+  }, [
+    productosActivos,
+    productosInactivos,
+    search,
+    assignedEstado,
+    assignedChips,
+  ]);
+
+  const toggleAssignedChip = (key) => {
+    setAssignedChips((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const allExpanded = useMemo(
+    () =>
+      productosLista.length > 0 &&
+      productosLista.every((p) => expandedItems.has(p.id)),
+    [productosLista, expandedItems]
+  );
+
+  const toggleExpand = (upId) => {
+    setExpandedItems((prev) => {
+      const next = new Set(prev);
+      if (next.has(upId)) next.delete(upId);
+      else next.add(upId);
+      return next;
+    });
+  };
+
+  const toggleExpandAll = () => {
+    if (allExpanded) {
+      setExpandedItems(new Set());
+    } else {
+      setExpandedItems(
+        new Set(productosLista.map((p) => p.id).filter(Boolean))
+      );
+    }
+  };
+
   const toggleProduct = (id) => {
     if (selectedProducts[id]) {
       const newSelected = { ...selectedProducts };
@@ -585,7 +856,7 @@ const ids = new Set();
   };
 
   const selectAllToDelete = () => {
-    setSelectedToDelete(new Set(assignedProductsData.map((ap) => ap.base_id)));
+    setSelectedToDelete(new Set(productosActivos.map((ap) => ap.base_id)));
   };
 
   const deselectAllToDelete = () => setSelectedToDelete(new Set());
@@ -613,14 +884,39 @@ const ids = new Set();
 
   const applyBaseToAll = (field, value) => {
     if (value === "" && field !== "stock") return;
-    const updated = {};
     const val = field === "stock" ? parseInt(value) || 0 : parseFloat(value) || 0;
-    Object.keys(selectedProducts).forEach((id) => {
+
+    const ids = Object.keys(selectedProducts);
+    // El stock es POR TALLE: el bulk solo aplica a productos sin talles.
+    const skippedIds = ids.filter((id) => {
+      if (field !== "stock") return false;
+      const p = products.find((x) => x.id === Number(id));
+      return p && getProductSizes(p).length > 0;
+    });
+    const aplicados = ids.length - skippedIds.length;
+
+    const updated = {};
+    ids.forEach((id) => {
+      if (skippedIds.includes(id)) return;
       updated[id] = { ...selectedProducts[id], [field]: val };
     });
-    setSelectedProducts(updated);
+
+    if (aplicados > 0) setSelectedProducts(updated);
+
     const labels = { precio_venta: "precio venta", precio_compra: "precio compra", stock: "stock" };
-    showNotification(`${labels[field]} ${value} aplicado a ${Object.keys(updated).length} productos`);
+
+    if (field === "stock" && aplicados === 0) {
+      showNotification(
+        "Stock no aplicado: los productos seleccionados tienen talles (se editan por talle)",
+        "warning"
+      );
+    } else if (field === "stock" && skippedIds.length > 0) {
+      showNotification(
+        `${labels[field]} ${value} aplicado a ${aplicados} productos (${skippedIds.length} con talles se editan por talle)`
+      );
+    } else {
+      showNotification(`${labels[field]} ${value} aplicado a ${aplicados} productos`);
+    }
   };
 
   const selectAll = () => {
@@ -700,6 +996,13 @@ const ids = new Set();
       await supabase.from("user_products").insert(productsToInsert);
 
       await reloadUserProducts();
+      if (selectedUser.id === profile?.id) {
+        try {
+          await refetch?.();
+        } catch (e) {
+          console.error("Error refrescando el catálogo:", e);
+        }
+      }
       setPrecioBaseVenta("");
       setPrecioBaseCompra("");
       setStockBase("");
@@ -732,10 +1035,17 @@ const ids = new Set();
       for (const baseId of selectedToDelete) {
         const product = productosActivos.find((p) => p.base_id === baseId);
         if (product) {
+          const tieneStockTalles =
+            product.stock_talles &&
+            Object.keys(product.stock_talles).length > 0;
+          const update = { active: false };
+          // Solo vaciamos el stock general si NO hay stocks por talle:
+          // con talles, el stock general deriva de la suma de los talles.
+          if (!tieneStockTalles) update.stock = 0;
           updates.push(
             supabase
               .from("user_products")
-              .update({ active: false, stock: 0 })
+              .update(update)
               .eq("id", product.id)
           );
         }
@@ -744,6 +1054,13 @@ const ids = new Set();
       await Promise.all(updates);
 
       await reloadUserProducts();
+      if (selectedUser.id === profile?.id) {
+        try {
+          await refetch?.();
+        } catch (e) {
+          console.error("Error refrescando el catálogo:", e);
+        }
+      }
       setSelectedToDelete(new Set());
       showNotification(`${countToDelete} productos desactivados`, "success");
     } catch (err) {
@@ -754,14 +1071,32 @@ const ids = new Set();
     }
   };
 
-  const handleReactivar = async (productId) => {
+  const handleReactivar = async (prod) => {
+    const productId = prod.id;
     try {
+      const tieneStockTalles =
+        prod.stock_talles && Object.keys(prod.stock_talles).length > 0;
+
+      // El stock general es dato derivado de los stocks por talle:
+      // al reactivar, lo recalculamos para no quedar en 0.
+      const update = { active: true };
+      if (tieneStockTalles) {
+        update.stock = sumStockTalles(prod.stock_talles);
+      }
+
       await supabase
         .from("user_products")
-        .update({ active: true })
+        .update(update)
         .eq("id", productId);
 
       await reloadUserProducts();
+      if (selectedUser.id === profile?.id) {
+        try {
+          await refetch?.();
+        } catch (e) {
+          console.error("Error refrescando el catálogo:", e);
+        }
+      }
       showNotification("Producto reactivado", "success");
     } catch (err) {
       console.error(err);
@@ -781,6 +1116,7 @@ const ids = new Set();
           p.id === prod.id ? { ...p, destacado: !prod.destacado } : p
         )
       );
+      syncProductFromAdmin(prod.id, { destacado: !prod.destacado });
       showNotification(
         prod.destacado
           ? "Producto quitado de destacados"
@@ -806,6 +1142,7 @@ const ids = new Set();
           p.id === prod.id ? { ...p, visible: nuevoVisible } : p
         )
       );
+      syncProductFromAdmin(prod.id, { visible: nuevoVisible });
       showNotification(
         nuevoVisible
           ? "Producto visible en el catálogo"
@@ -994,139 +1331,127 @@ const ids = new Set();
 
               {activeTab === "asignar" ? (
                 <>
-                  <div className={`rounded-xl p-2 md:p-3 mb-3 md:mb-4 ${baseCard} border`}>
-                    <div className="grid grid-cols-1 sm:flex sm:flex-wrap gap-2 md:gap-4 items-end">
-                      {/* Precio Venta */}
-                      <div className="flex-1 min-w-24">
-                        <label className={`text-xs block mb-1 ${textSecondary}`}>Precio Venta</label>
-                        <div className="flex gap-1">
-                          <input
-                            type="number"
-                            placeholder="$"
-                            value={precioBaseVenta}
-                            onChange={(e) => setPrecioBaseVenta(e.target.value)}
-                            className={`flex-1 p-2 rounded-lg border ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
-                          />
+                  <div className={`rounded-xl border overflow-hidden mb-3 md:mb-4 ${baseCard}`}>
+                    <button
+                      type="button"
+                      onClick={() => setShowBulkAsignarBase((v) => !v)}
+                      className="w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium transition-colors hover:bg-blue-500/10"
+                    >
+                      <span className={textPrimary}>
+                        ⚙️ Valores generales para seleccionados
+                        {Object.keys(selectedProducts).length > 0 && (
+                          <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-500">
+                            {Object.keys(selectedProducts).length}
+                          </span>
+                        )}
+                      </span>
+                      <span className={`text-xs ${textSecondary}`}>
+                        {showBulkAsignarBase ? "−" : "＋"}
+                      </span>
+                    </button>
+
+                    {showBulkAsignarBase && (
+                      <div className="px-3 pb-3 pt-2 border-t border-gray-600/20 space-y-3">
+                        <div className="grid grid-cols-3 gap-2">
+                          <div>
+                            <label className={`block text-[10px] mb-0.5 ${textSecondary}`}>Precio venta</label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={precioBaseVenta}
+                              onChange={(e) => setPrecioBaseVenta(e.target.value)}
+                              placeholder="0"
+                              className={`w-full p-1.5 rounded border text-xs text-right ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
+                            />
+                          </div>
+                          <div>
+                            <label className={`block text-[10px] mb-0.5 ${textSecondary}`}>Precio compra</label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={precioBaseCompra}
+                              onChange={(e) => setPrecioBaseCompra(e.target.value)}
+                              placeholder="0"
+                              className={`w-full p-1.5 rounded border text-xs text-right ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
+                            />
+                          </div>
+                          <div>
+                            <label className={`block text-[10px] mb-0.5 ${textSecondary}`}>Stock</label>
+                            <input
+                              type="number"
+                              value={stockBase}
+                              onChange={(e) => setStockBase(e.target.value)}
+                              placeholder="0"
+                              className={`w-full p-1.5 rounded border text-xs text-right ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
+                            />
+                          </div>
+                        </div>
+
+                        {Number(precioBaseCompra) > 0 &&
+                          Number(precioBaseVenta) > 0 &&
+                          Number(precioBaseCompra) > Number(precioBaseVenta) && (
+                            <div className="px-2 py-1.5 rounded-lg bg-red-500/20 border border-red-500/30 text-red-400 text-[11px] font-medium">
+                              ⚠️ Compra ($ {Number(precioBaseCompra)}) &gt; venta ($ {Number(precioBaseVenta)})
+                            </div>
+                          )}
+
+                        <div className="flex flex-wrap items-center gap-1.5">
                           <button
-                            onClick={() => applyBaseToAll("precio_venta", precioBaseVenta)}
-                            disabled={!precioBaseVenta || Object.keys(selectedProducts).length === 0}
-                            className="px-3 py-2 bg-purple-500 text-white rounded-lg text-xs disabled:opacity-40 hover:bg-purple-600 transition-colors sm:hidden"
+                            onClick={() => {
+                              if (precioBaseVenta !== "") applyBaseToAll("precio_venta", precioBaseVenta);
+                              if (precioBaseCompra !== "") applyBaseToAll("precio_compra", precioBaseCompra);
+                              if (stockBase !== "") applyBaseToAll("stock", stockBase);
+                            }}
+                            disabled={Object.keys(selectedProducts).length === 0}
+                            className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-500 transition-colors disabled:opacity-40"
                           >
-                            ✓
+                            ⚡ Aplicar
+                          </button>
+                          <button
+                            onClick={selectAll}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium border ${borderColor} ${textSecondary} hover:bg-blue-500/10 transition-colors`}
+                          >
+                            ✅ Todos ({productosFiltrados.length})
+                          </button>
+                          <button
+                            onClick={deselectAll}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium border ${borderColor} ${textSecondary} hover:bg-red-500/10 transition-colors`}
+                          >
+                            ✕ Limpiar
                           </button>
                         </div>
-                      </div>
-                      <button
-                        onClick={() => applyBaseToAll("precio_venta", precioBaseVenta)}
-                        disabled={!precioBaseVenta || Object.keys(selectedProducts).length === 0}
-                        className="hidden sm:block px-3 py-2 bg-purple-500 text-white rounded-lg text-xs disabled:opacity-40 hover:bg-purple-600 transition-colors"
-                      >
-                        Aplicar
-                      </button>
-                      
-                      {/* Precio Compra */}
-                      <div className="flex-1 min-w-24">
-                        <label className={`text-xs block mb-1 ${textSecondary}`}>Precio Compra</label>
-                        <div className="flex gap-1">
-                          <input
-                            type="number"
-                            placeholder="$"
-                            value={precioBaseCompra}
-                            onChange={(e) => setPrecioBaseCompra(e.target.value)}
-                            className={`flex-1 p-2 rounded-lg border ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
-                          />
+
+                        <div className="flex flex-wrap gap-1.5">
+                          {[5, 10, 25].map((n) => (
+                            <button
+                              key={n}
+                              onClick={() => selectFirst(n)}
+                              className={`px-3 py-1 rounded-full text-xs ${dark ? "bg-gray-700 hover:bg-gray-600" : "bg-gray-200 hover:bg-gray-300"} ${textSecondary}`}
+                            >
+                              Primeros {n}
+                            </button>
+                          ))}
                           <button
-                            onClick={() => applyBaseToAll("precio_compra", precioBaseCompra)}
-                            disabled={!precioBaseCompra || Object.keys(selectedProducts).length === 0}
-                            className="px-3 py-2 bg-blue-500 text-white rounded-lg text-xs disabled:opacity-40 hover:bg-blue-600 transition-colors sm:hidden"
+                            onClick={() => {
+                              const cleared = {};
+                              Object.keys(selectedProducts).forEach((id) => {
+                                cleared[id] = { precio_venta: 0, precio_compra: 0, stock: 0, stock_talles: {} };
+                              });
+                              setSelectedProducts(cleared);
+                            }}
+                            className={`px-3 py-1 rounded-full text-xs bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors`}
                           >
-                            ✓
+                            Limpiar Valores
                           </button>
                         </div>
+
+                        <p className={`text-[10px] ${textSecondary}`}>
+                          Los valores se aplican a los seleccionados y se pueden ajustar
+                          en cada producto antes de asignar. El stock es por talle: en
+                          productos con talles se edita individualmente.
+                        </p>
                       </div>
-                      <button
-                        onClick={() => applyBaseToAll("precio_compra", precioBaseCompra)}
-                        disabled={!precioBaseCompra || Object.keys(selectedProducts).length === 0}
-                        className="hidden sm:block px-3 py-2 bg-blue-500 text-white rounded-lg text-xs disabled:opacity-40 hover:bg-blue-600 transition-colors"
-                      >
-                        Aplicar
-                      </button>
-
-                      {/* Stock */}
-                      <div className="flex-1 min-w-24">
-                        <label className={`text-xs block mb-1 ${textSecondary}`}>Stock</label>
-                        <div className="flex gap-1">
-                          <input
-                            type="number"
-                            placeholder="0"
-                            value={stockBase}
-                            onChange={(e) => setStockBase(e.target.value)}
-                            className={`flex-1 p-2 rounded-lg border ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
-                          />
-                          <button
-                            onClick={() => applyBaseToAll("stock", stockBase)}
-                            disabled={!stockBase && stockBase !== "0" || Object.keys(selectedProducts).length === 0}
-                            className="px-3 py-2 bg-green-500 text-white rounded-lg text-xs disabled:opacity-40 hover:bg-green-600 transition-colors sm:hidden"
-                          >
-                            ✓
-                          </button>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => applyBaseToAll("stock", stockBase)}
-                        disabled={!stockBase && stockBase !== "0" || Object.keys(selectedProducts).length === 0}
-                        className="hidden sm:block px-3 py-2 bg-green-500 text-white rounded-lg text-xs disabled:opacity-40 hover:bg-green-600 transition-colors"
-                      >
-                        Aplicar
-                      </button>
-
-                      <button
-                        onClick={Object.keys(selectedProducts).length === productosFiltrados.length ? deselectAll : selectAll}
-                        className="px-3 py-2 bg-gray-500 text-white rounded-lg text-sm hover:bg-gray-600 transition-colors"
-                      >
-                        {Object.keys(selectedProducts).length === productosFiltrados.length ? "Limpiar" : "Todos"}
-                      </button>
-                      
-                      <button
-                        onClick={() => applyBaseToAll("stock", stockBase)}
-                        disabled={!stockBase && stockBase !== "0" || Object.keys(selectedProducts).length === 0}
-                        className="px-2 py-2 bg-green-500 text-white rounded-lg text-xs disabled:opacity-40 hover:bg-green-600 transition-colors"
-                      >
-                        Aplicar
-                      </button>
-
-                      <button
-                        onClick={Object.keys(selectedProducts).length === productosFiltrados.length ? deselectAll : selectAll}
-                        className="px-3 py-2 bg-gray-500 text-white rounded-lg text-sm hover:bg-gray-600 transition-colors"
-                      >
-                        {Object.keys(selectedProducts).length === productosFiltrados.length ? "Limpiar" : "Todos"}
-                      </button>
-                      
-                      <button 
-                        onClick={() => {
-                          const cleared = {};
-                          Object.keys(selectedProducts).forEach(id => {
-                            cleared[id] = { precio_venta: 0, precio_compra: 0, stock: 0, stock_talles: {} };
-                          });
-                          setSelectedProducts(cleared);
-                        }}
-                        className="px-3 py-2 bg-red-500/20 text-red-400 rounded-lg text-sm hover:bg-red-500/30 transition-colors"
-                      >
-                        Limpiar Valores
-                      </button>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2 mt-3">
-                      <button onClick={() => selectFirst(5)} className={`px-3 py-1 rounded-full text-xs ${dark ? "bg-gray-700 hover:bg-gray-600" : "bg-gray-200 hover:bg-gray-300"} ${textSecondary}`}>
-                        Primeros 5
-                      </button>
-                      <button onClick={() => selectFirst(10)} className={`px-3 py-1 rounded-full text-xs ${dark ? "bg-gray-700 hover:bg-gray-600" : "bg-gray-200 hover:bg-gray-300"} ${textSecondary}`}>
-                        Primeros 10
-                      </button>
-                      <button onClick={() => selectFirst(25)} className={`px-3 py-1 rounded-full text-xs ${dark ? "bg-gray-700 hover:bg-gray-600" : "bg-gray-200 hover:bg-gray-300"} ${textSecondary}`}>
-                        Primeros 25
-                      </button>
-                    </div>
+                    )}
                   </div>
 
                   <div className={`rounded-xl p-3 mb-4 ${baseCard} border`}>
@@ -1541,278 +1866,510 @@ const ids = new Set();
                 </>
               ) : (
                 <>
-                  <div className={`rounded-xl p-3 mb-4 ${baseCard} border`}>
-                    <div className="flex flex-wrap gap-2 items-center">
-                      <button onClick={selectAllToDelete} className="px-3 py-2 bg-red-500 text-white rounded-lg text-sm hover:bg-red-600 transition-colors">
-                        Seleccionar todos
+                  <div className={`rounded-xl p-3 mb-3 ${baseCard} border`}>
+                    {/* Estado: Activos / Inactivos */}
+                    <div className={`flex gap-1 p-1 rounded-xl ${dark ? "bg-gray-700/50" : "bg-gray-200/70"}`}>
+                      <button
+                        onClick={() => setAssignedEstado("activos")}
+                        className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-medium transition-all ${
+                          assignedEstado === "activos"
+                            ? "bg-green-500 text-white shadow"
+                            : `${textSecondary}`
+                        }`}
+                      >
+                        ✓ Activos ({productosActivos.length})
                       </button>
-                      <button onClick={deselectAllToDelete} className="px-3 py-2 bg-gray-500 text-white rounded-lg text-sm hover:bg-gray-600 transition-colors">
-                        Ninguno
+                      <button
+                        onClick={() => setAssignedEstado("inactivos")}
+                        className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-medium transition-all ${
+                          assignedEstado === "inactivos"
+                            ? "bg-red-500 text-white shadow"
+                            : `${textSecondary}`
+                        }`}
+                      >
+                        ✗ Inactivos ({productosInactivos.length})
                       </button>
-                      <span className={`text-sm ${textSecondary}`}>
-                        {selectedToDelete.size} de {productosActivos.length} activos
-                      </span>
+                    </div>
+
+                    {/* Búsqueda */}
+                    <input
+                      type="text"
+                      placeholder="🔍 Buscar producto..."
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      className={`w-full mt-3 p-2 rounded-lg border text-sm ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
+                    />
+
+                    {/* Filtros rápidos */}
+                    <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                      {[
+                        { key: "destacado", label: "★ Destacados" },
+                        { key: "conStock", label: "📦 Con stock" },
+                        { key: "ocultos", label: "👁 Ocultos" },
+                      ].map((chip) => (
+                        <button
+                          key={chip.key}
+                          onClick={() => toggleAssignedChip(chip.key)}
+                          className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-all border ${
+                            assignedChips[chip.key]
+                              ? dark
+                                ? "bg-blue-500/30 border-blue-400 text-blue-300"
+                                : "bg-blue-500/15 border-blue-400 text-blue-600"
+                              : `${dark ? "border-gray-600 text-gray-400" : "border-gray-200 text-gray-500"}`
+                          }`}
+                        >
+                          {chip.label}
+                        </button>
+                      ))}
+                      <div className="flex-1" />
+                      <button
+                        onClick={toggleExpandAll}
+                        disabled={productosLista.length === 0}
+                        className={`text-[11px] px-2 py-1 rounded-full border transition-colors disabled:opacity-40 ${
+                          dark ? "border-gray-600 text-gray-400" : "border-gray-200 text-gray-500"
+                        }`}
+                      >
+                        {allExpanded ? "− Colapsar todo" : "＋ Expandir todo"}
+                      </button>
                     </div>
                   </div>
 
-                  <div className={`rounded-xl p-3 mb-4 ${baseCard} border`}>
-                    <input
-                      type="text"
-                      placeholder="Buscar asignados..."
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                      className={`w-full p-2 rounded-lg border ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
-                    />
-                  </div>
+                  {assignedEstado === "activos" && (
+                    <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                      {!bulkEditMode ? (
+                        <>
+                          <button
+                            onClick={enableBulkEdit}
+                            className={`px-2.5 py-1.5 rounded-lg text-[11px] font-medium border transition-colors ${borderColor} ${textSecondary} hover:bg-blue-500/10`}
+                          >
+                            ✏️ Edición masiva
+                          </button>
+                          <button
+                            onClick={selectAllToDelete}
+                            className="px-2.5 py-1.5 bg-red-500/15 text-red-500 border border-red-400/40 rounded-lg text-[11px] font-medium hover:bg-red-500/25 transition-colors"
+                          >
+                            Seleccionar todos
+                          </button>
+                          <button
+                            onClick={deselectAllToDelete}
+                            className={`px-2.5 py-1.5 rounded-lg text-[11px] font-medium border transition-colors ${borderColor} ${textSecondary}`}
+                          >
+                            Ninguno
+                          </button>
+                          <span className={`text-xs ${textSecondary}`}>
+                            {selectedToDelete.size} seleccionados
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            onClick={exitBulkEdit}
+                            className={`px-2.5 py-1.5 rounded-lg text-[11px] font-medium border transition-colors ${borderColor} ${textSecondary} hover:bg-gray-500/10`}
+                          >
+                            ✕ Salir
+                          </button>
+                          <button
+                            onClick={selectAllBaseEdit}
+                            className={`px-2.5 py-1.5 rounded-lg text-[11px] font-medium border transition-colors ${borderColor} ${textSecondary} hover:bg-blue-500/10`}
+                          >
+                            ✅ Todos ({productosLista.length})
+                          </button>
+                          <button
+                            onClick={clearBaseEditSelection}
+                            className={`px-2.5 py-1.5 rounded-lg text-[11px] font-medium border transition-colors ${borderColor} ${textSecondary} hover:bg-red-500/10`}
+                          >
+                            ✕ Limpiar
+                          </button>
+                          <span className={`text-xs ${textSecondary}`}>
+                            {selectedBaseEdit.size} seleccionado(s)
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {bulkEditMode && assignedEstado === "activos" && (
+                    <div className={`rounded-xl border overflow-hidden mb-3 ${baseCard}`}>
+                      <button
+                        type="button"
+                        onClick={() => setBulkPanelOpen((v) => !v)}
+                        className="w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium transition-colors hover:bg-blue-500/10"
+                      >
+                        <span className={textPrimary}>
+                          ⚙️ Edición masiva
+                          {selectedBaseEdit.size > 0 && (
+                            <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-500">
+                              {selectedBaseEdit.size}
+                            </span>
+                          )}
+                        </span>
+                        <span className={`text-xs ${textSecondary}`}>
+                          {bulkPanelOpen ? "−" : "＋"}
+                        </span>
+                      </button>
+
+                      {bulkPanelOpen && (
+                        <div className="px-3 pb-3 pt-2 border-t border-gray-600/20 space-y-3">
+                          <div className="grid grid-cols-3 gap-2">
+                            <div>
+                              <label className={`block text-[10px] mb-0.5 ${textSecondary}`}>
+                                Precio venta
+                              </label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={bulkVentaBase}
+                                onChange={(e) => setBulkVentaBase(e.target.value)}
+                                placeholder="0"
+                                className={`w-full p-1.5 rounded border text-xs text-right ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
+                              />
+                            </div>
+                            <div>
+                              <label className={`block text-[10px] mb-0.5 ${textSecondary}`}>
+                                Precio compra
+                              </label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={bulkCompraBase}
+                                onChange={(e) => setBulkCompraBase(e.target.value)}
+                                placeholder="0"
+                                className={`w-full p-1.5 rounded border text-xs text-right ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
+                              />
+                            </div>
+                            <div>
+                              <label className={`block text-[10px] mb-0.5 ${textSecondary}`}>
+                                Stock
+                              </label>
+                              <input
+                                type="number"
+                                value={bulkStockBase}
+                                onChange={(e) => setBulkStockBase(e.target.value)}
+                                placeholder="0"
+                                className={`w-full p-1.5 rounded border text-xs text-right ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
+                              />
+                            </div>
+                          </div>
+
+                          {Number(bulkCompraBase) > 0 &&
+                            Number(bulkVentaBase) > 0 &&
+                            Number(bulkCompraBase) > Number(bulkVentaBase) && (
+                              <div className="px-2 py-1.5 rounded-lg bg-red-500/20 border border-red-500/30 text-red-400 text-[11px] font-medium">
+                                ⚠️ Compra ($ {Number(bulkCompraBase)}) &gt; venta ($ {Number(bulkVentaBase)})
+                              </div>
+                            )}
+
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <button
+                              onClick={() => {
+                                if (bulkVentaBase !== "") applyBulkEditBase("precio_venta", bulkVentaBase);
+                                if (bulkCompraBase !== "") applyBulkEditBase("precio_compra", bulkCompraBase);
+                                if (bulkStockBase !== "") applyBulkEditBase("stock", bulkStockBase);
+                              }}
+                              disabled={selectedBaseEdit.size === 0}
+                              className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-500 transition-colors disabled:opacity-40"
+                            >
+                              ⚡ Aplicar
+                            </button>
+                            <button
+                              onClick={handleSaveBulkEditBase}
+                              disabled={bulkSaving || selectedBaseEdit.size === 0}
+                              className="px-4 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-500 transition-colors disabled:opacity-40"
+                            >
+                              {bulkSaving ? "Guardando..." : `💾 Guardar ${selectedBaseEdit.size}`}
+                            </button>
+                          </div>
+
+                          <p className={`text-[10px] ${textSecondary}`}>
+                            Los valores se aplican a los productos seleccionados y se
+                            guardan al tocar "Guardar". El stock es por talle: en
+                            productos con talles se edita individualmente.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {productosActivos.length === 0 && productosInactivos.length === 0 ? (
                     <div className={`text-center py-12 ${textSecondary}`}>
                       <div className="text-5xl mb-4">📦</div>
                       <p>No hay productos asignados</p>
                     </div>
+                  ) : productosLista.length === 0 ? (
+                    <div className={`text-center py-10 ${textSecondary}`}>
+                      <div className="text-4xl mb-3">🔍</div>
+                      <p className="text-sm">Ningún producto coincide con los filtros</p>
+                    </div>
                   ) : (
-                    <>
-                      {productosActivos.length > 0 && (
-                        <div className="space-y-2">
-                          <h3 className={`text-sm font-semibold ${textSecondary}`}>
-                            ✓ Activos ({productosActivos.length})
-                          </h3>
-                          {productosActivos.map((prod) => {
-                            const isSelected = selectedToDelete.has(prod.base_id);
-                            const upId = prod.id;
-                            const ed = editDataBase[upId] || {};
-                            const compra = Number(ed.precio_compra) || 0;
-                            const venta = Number(ed.precio_venta) || 0;
-                            const compraMayorVenta = compra > 0 && venta > 0 && compra > venta;
-                            const prodSizes = getProductSizes(prod);
-                            return (
-                              <div
-                                key={prod.base_id}
-                                onClick={() => toggleProductToDelete(prod.base_id)}
-                                className={`p-4 rounded-xl border cursor-pointer transition-all ${
-                                  isSelected ? "border-red-500 bg-red-500/10 ring-2 ring-red-500" : `${baseCard} hover:border-red-400`
-                                }`}
-                              >
-                                <div className="flex items-center justify-between gap-3">
-                                  <div className="flex items-center gap-3 min-w-0">
-                                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
-                                      isSelected ? "border-red-500 bg-red-500" : "border-gray-400"
-                                    }`}>
-                                      {isSelected && <span className="text-white text-xs">✓</span>}
-                                    </div>
-                                    {prod.image_url ? (
-                                      <img
-                                        src={publicUrl(prod.image_url)}
-                                        alt={prod.name}
-                                        onError={(e) => { e.currentTarget.style.display = "none"; }}
-                                        className="w-10 h-10 rounded-lg object-cover border flex-shrink-0"
-                                        style={{ borderColor: dark ? "#4b5563" : "#e5e7eb" }}
-                                      />
-                                    ) : (
-                                      <div
-                                        className={`w-10 h-10 rounded-lg border flex-shrink-0 flex items-center justify-center text-lg ${dark ? "bg-gray-700 border-gray-600" : "bg-gray-100 border-gray-200"}`}
-                                      >
-                                        📦
-                                      </div>
-                                    )}
-                                    <div className="min-w-0">
-                                      <p className={`font-medium truncate ${textPrimary}`}>{prod.name}</p>
-                                      <p className={`text-xs ${textSecondary}`}>{prod.brand}</p>
-                                    </div>
-                                  </div>
-                                  <div className="text-right shrink-0 flex flex-col items-end gap-1">
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleToggleDestacado(prod);
-                                      }}
-                                      title={
-                                        prod.destacado
-                                          ? "Quitar de destacados"
-                                          : "Marcar como destacado"
-                                      }
-                                      className={`text-xl leading-none transition-colors ${
-                                        prod.destacado
-                                          ? "text-yellow-400"
-                                          : "text-gray-400 hover:text-yellow-400"
-                                      }`}
-                                    >
-                                      ★
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleToggleVisible(prod);
-                                      }}
-                                      title={
-                                        prod.visible === false
-                                          ? "Mostrar en el catálogo"
-                                          : "Ocultar del catálogo"
-                                      }
-                                      className={`text-xl leading-none transition-colors ${
-                                        prod.visible === false
-                                          ? "text-gray-500"
-                                          : "text-gray-400 hover:text-gray-200"
-                                      }`}
-                                    >
-                                      {prod.visible === false ? "👁‍🗨" : "👁"}
-                                    </button>
-                                    <div className="text-right">
-                                      <p className={`font-bold ${textPrimary}`}>${prod.precio_venta}</p>
-                                      <p className={`text-xs ${textSecondary}`}>ID: {prod.base_id}</p>
-                                    </div>
-                                  </div>
-                                </div>
+                    <div className="space-y-2">
+                      {productosLista.map((prod) => {
+                        const upId = prod.id;
+                        const isSelected = selectedToDelete.has(prod.base_id);
+                        const isExpanded = expandedItems.has(upId);
+                        const ed = editDataBase[upId] || {};
+                        const compra = Number(ed.precio_compra) || 0;
+                        const venta = Number(ed.precio_venta) || 0;
+                        const compraMayorVenta = compra > 0 && venta > 0 && compra > venta;
+                        const prodSizes = getProductSizes(prod);
+                        const stockTotal =
+                          prodSizes.length > 0
+                            ? sumStockTalles(ed?.stock_talles || prod.stock_talles || {})
+                            : Number(ed?.stock ?? prod.stock) || 0;
+                        const stockOk = stockTotal > 0;
+                        const precioShow = Number(ed?.precio_venta ?? prod.precio_venta) || 0;
 
-                                <div
+                        return assignedEstado === "inactivos" ? (
+                          <div
+                            key={prod.base_id}
+                            className={`flex items-center gap-2 sm:gap-3 p-2 sm:p-3 rounded-xl border ${dark ? "bg-red-900/20 border-red-800" : "bg-red-50 border-red-200"}`}
+                          >
+                            {prod.image_url ? (
+                              <img
+                                src={publicUrl(prod.image_url)}
+                                alt={prod.name}
+                                onError={(e) => { e.currentTarget.style.display = "none"; }}
+                                className="w-9 h-9 rounded-lg object-cover border flex-shrink-0 opacity-60"
+                                style={{ borderColor: dark ? "#4b5563" : "#e5e7eb" }}
+                              />
+                            ) : (
+                              <div className={`w-9 h-9 rounded-lg border flex-shrink-0 flex items-center justify-center text-base opacity-60 ${dark ? "bg-gray-700 border-gray-600" : "bg-gray-100 border-gray-200"}`}>
+                                📦
+                              </div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <p className={`font-medium line-through opacity-60 text-sm truncate ${textPrimary}`}>{prod.name}</p>
+                              <p className={`text-[10px] opacity-60 truncate ${textSecondary}`}>{prod.brand}</p>
+                            </div>
+                            <button
+                              onClick={() => handleReactivar(prod)}
+                              className="px-3 py-1.5 bg-green-500 text-white rounded-lg text-xs font-medium hover:bg-green-600 transition-colors shrink-0"
+                            >
+                              ⟳ Reactivar
+                            </button>
+                          </div>
+                        ) : (
+                          <div
+                            key={prod.base_id}
+                            className={`rounded-xl border overflow-hidden transition-colors ${
+                              bulkEditMode && assignedEstado === "activos"
+                                ? selectedBaseEdit.has(upId)
+                                  ? "border-blue-500 ring-2 ring-blue-500/50"
+                                  : baseCard
+                                : isSelected
+                                  ? "border-red-500 bg-red-500/10"
+                                  : baseCard
+                            }`}
+                          >
+                            {/* Fila compacta */}
+                            <div
+                              onClick={() => toggleExpand(upId)}
+                              className="flex items-center gap-2 sm:gap-3 p-2 sm:p-3 cursor-pointer select-none"
+                            >
+                              {bulkEditMode && assignedEstado === "activos" ? (
+                                <input
+                                  type="checkbox"
+                                  checked={selectedBaseEdit.has(upId)}
+                                  onChange={(e) => {
+                                    e.stopPropagation();
+                                    toggleBaseEditSelect(upId);
+                                  }}
                                   onClick={(e) => e.stopPropagation()}
-                                  className="mt-3 pt-3 border-t border-gray-600/20 grid grid-cols-2 md:grid-cols-4 gap-2"
+                                  className="w-4 h-4 accent-blue-500 flex-shrink-0"
+                                />
+                              ) : (
+                                <div
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleProductToDelete(prod.base_id);
+                                  }}
+                                  className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 cursor-pointer transition-colors ${
+                                    isSelected ? "border-red-500 bg-red-500" : "border-gray-400"
+                                  }`}
                                 >
-                                  <div>
-                                    <label className={`block text-[10px] mb-0.5 ${textSecondary}`}>Compra</label>
-                                    <input
-                                      type="number"
-                                      step="0.01"
-                                      value={ed?.precio_compra ?? ""}
-                                      onChange={(e) => updateEditFieldBase(upId, "precio_compra", e.target.value)}
-                                      className={`w-full p-1.5 rounded border text-xs text-right ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
-                                    />
-                                  </div>
-                                  <div>
-                                    <label className={`block text-[10px] mb-0.5 ${textSecondary}`}>Venta</label>
-                                    <input
-                                      type="number"
-                                      step="0.01"
-                                      value={ed?.precio_venta ?? ""}
-                                      onChange={(e) => updateEditFieldBase(upId, "precio_venta", e.target.value)}
-                                      className={`w-full p-1.5 rounded border text-xs text-right ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
-                                    />
-                                  </div>
-                                  {prodSizes.length > 0 ? (
-                                    <div className="col-span-2 md:col-span-2">
-                                      <label className={`block text-[10px] mb-0.5 ${textSecondary}`}>
-                                        📏 Stock general (suma de talles)
-                                      </label>
-                                      <div className={`px-1.5 py-1.5 rounded border text-xs text-right font-semibold ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}>
-                                        {sumStockTalles(ed?.stock_talles)}
-                                      </div>
-                                    </div>
-                                  ) : (
-                                    <div>
-                                      <label className={`block text-[10px] mb-0.5 ${textSecondary}`}>Stock</label>
-                                      <input
-                                        type="number"
-                                        value={ed?.stock ?? ""}
-                                        onChange={(e) => updateEditFieldBase(upId, "stock", e.target.value)}
-                                        className={`w-full p-1.5 rounded border text-xs text-right ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
-                                      />
-                                    </div>
-                                  )}
-                                  <div className="col-span-2 md:col-span-4">
-                                    <label className={`block text-[10px] mb-0.5 ${textSecondary}`}>Descripción</label>
-                                    <input
-                                      type="text"
-                                      value={ed?.descripcion ?? ""}
-                                      onChange={(e) => updateEditFieldBase(upId, "descripcion", e.target.value)}
-                                      placeholder="Descripción del producto"
-                                      className={`w-full p-1.5 rounded border text-xs ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
-                                    />
-                                  </div>
+                                  {isSelected && <span className="text-white text-[10px]">✓</span>}
                                 </div>
+                              )}
 
-                                {prodSizes.length > 0 && (
-                                  <div
-                                    onClick={(e) => e.stopPropagation()}
-                                    className="mt-3 pt-3 border-t border-gray-600/20"
-                                  >
-                                    <StockPorTalle
-                                      sizes={prodSizes}
-                                      value={ed?.stock_talles || {}}
-                                      onChange={(v) => updateEditFieldBase(upId, "stock_talles", v)}
-                                      dark={dark}
-                                    />
-                                    <p className={`text-[10px] mt-1 ${textSecondary}`}>
-                                      El stock general se calcula como la suma de los talles.
-                                    </p>
-                                  </div>
-                                )}
+                              {prod.image_url ? (
+                                <img
+                                  src={publicUrl(prod.image_url)}
+                                  alt={prod.name}
+                                  onError={(e) => { e.currentTarget.style.display = "none"; }}
+                                  className="w-9 h-9 rounded-lg object-cover border flex-shrink-0"
+                                  style={{ borderColor: dark ? "#4b5563" : "#e5e7eb" }}
+                                />
+                              ) : (
+                                <div className={`w-9 h-9 rounded-lg border flex-shrink-0 flex items-center justify-center text-base ${dark ? "bg-gray-700 border-gray-600" : "bg-gray-100 border-gray-200"}`}>
+                                  📦
+                                </div>
+                              )}
 
-                                {compraMayorVenta && (
-                                  <div
-                                    className={`mt-2 px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2 ${
-                                      dark
-                                        ? "bg-red-500/20 text-red-400"
-                                        : "bg-red-50 text-red-600"
+                              <div className="flex-1 min-w-0">
+                                <p className={`font-medium text-sm truncate ${textPrimary}`}>
+                                  {prod.name}
+                                  {prod.destacado && <span className="text-yellow-400 ml-1">★</span>}
+                                  {prod.visible === false && <span className="text-gray-500 ml-1">👁‍🗨</span>}
+                                  {dirtyIdsBase.has(upId) && (
+                                    <span className="text-amber-400 ml-1" title="Cambios sin guardar">●</span>
+                                  )}
+                                </p>
+                                <p className={`text-[10px] truncate ${textSecondary}`}>{prod.brand}</p>
+                              </div>
+
+                              <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                                <div className="text-right">
+                                  <p className={`text-sm font-bold ${textPrimary}`}>
+                                    ${precioShow.toLocaleString()}
+                                  </p>
+                                  <p
+                                    className={`text-[10px] font-medium ${
+                                      stockOk
+                                        ? dark ? "text-green-400" : "text-green-600"
+                                        : textSecondary
                                     }`}
                                   >
-                                    ⚠️ El precio de compra (${compra}) es mayor que el de venta (${venta})
-                                  </div>
-                                )}
+                                    {stockTotal} {prodSizes.length > 0 ? "uds talle" : "uds"}
+                                  </p>
+                                </div>
+                                <div
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleExpand(upId);
+                                  }}
+                                  className={`w-6 h-6 rounded-full flex items-center justify-center border transition-all ${
+                                    isExpanded
+                                      ? "rotate-180 border-amber-400 text-amber-400"
+                                      : dark ? "border-gray-600" : "border-gray-300"
+                                  } ${dark ? "text-gray-400" : "text-gray-500"}`}
+                                >
+                                  <span className="text-sm leading-none">▼</span>
+                                </div>
+                              </div>
+                            </div>
 
+                            {/* Cuerpo expandible */}
+                            <div
+                              className={`grid transition-all duration-300 ease-in-out ${
+                                isExpanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+                              }`}
+                            >
+                              <div className="overflow-hidden min-h-0">
                                 <div
                                   onClick={(e) => e.stopPropagation()}
-                                  className="mt-2 flex justify-end"
+                                  className="px-2.5 pb-2.5 pt-2 border-t border-gray-600/20"
                                 >
-                                  <button
-                                    onClick={() => handleSaveEditBase(upId, prod)}
-                                    className="px-4 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-500 transition-colors"
-                                  >
-                                    💾 Guardar
-                                  </button>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
+                                  {/* toolbar compacta: acciones + guardar */}
+                                  <div className="flex items-center justify-between gap-2 mb-2">
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleToggleDestacado(prod)}
+                                        title={prod.destacado ? "Quitar de destacados" : "Marcar como destacado"}
+                                        className={`w-7 h-7 rounded-lg border flex items-center justify-center text-xs transition-colors ${
+                                          prod.destacado
+                                            ? "bg-yellow-400/20 border-yellow-400 text-yellow-500"
+                                            : `${borderColor} ${textSecondary} hover:bg-yellow-400/10`
+                                        }`}
+                                      >
+                                        ★
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleToggleVisible(prod)}
+                                        title={prod.visible === false ? "Mostrar en el catálogo" : "Ocultar del catálogo"}
+                                        className={`w-7 h-7 rounded-lg border flex items-center justify-center text-xs transition-colors ${borderColor} ${textSecondary} hover:bg-gray-500/10`}
+                                      >
+                                        {prod.visible === false ? "👁‍🗨" : "👁"}
+                                      </button>
+                                    </div>
 
-                      {productosInactivos.length > 0 && (
-                        <div className="space-y-2 mt-4">
-                          <h3 className={`text-sm font-semibold text-red-500`}>
-                            ✗ Inactivos ({productosInactivos.length})
-                          </h3>
-                          {productosInactivos.map((prod) => (
-                            <div
-                              key={prod.base_id}
-                              className={`p-4 rounded-xl border flex items-center justify-between ${dark ? "bg-red-900/20 border-red-800" : "bg-red-50 border-red-200"}`}
-                            >
-                              <div className="flex items-center gap-3">
-                                <div className="w-6 h-6 rounded-full bg-red-500 flex items-center justify-center opacity-50">
-                                  <span className="text-white text-xs">✗</span>
-                                </div>
-                                {prod.image_url ? (
-                                  <img
-                                    src={publicUrl(prod.image_url)}
-                                    alt={prod.name}
-                                    onError={(e) => { e.currentTarget.style.display = "none"; }}
-                                    className="w-10 h-10 rounded-lg object-cover border flex-shrink-0 opacity-60"
-                                    style={{ borderColor: dark ? "#4b5563" : "#e5e7eb" }}
-                                  />
-                                ) : (
-                                  <div
-                                    className={`w-10 h-10 rounded-lg border flex-shrink-0 flex items-center justify-center text-lg opacity-60 ${dark ? "bg-gray-700 border-gray-600" : "bg-gray-100 border-gray-200"}`}
-                                  >
-                                    📦
+                                    <button
+                                      onClick={() => handleSaveEditBase(upId, prod)}
+                                      disabled={!dirtyIdsBase.has(upId)}
+                                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-40 ${
+                                        dirtyIdsBase.has(upId)
+                                          ? "bg-amber-500 text-white hover:bg-amber-600"
+                                          : "bg-blue-600 text-white hover:bg-blue-500"
+                                      }`}
+                                    >
+                                      {dirtyIdsBase.has(upId) ? "● Guardar" : "💾 Guardar"}
+                                    </button>
                                   </div>
-                                )}
-                                <div>
-                                  <p className={`font-medium line-through opacity-60 ${textPrimary}`}>{prod.name}</p>
-                                  <p className={`text-xs opacity-60 ${textSecondary}`}>{prod.brand}</p>
+
+                                  <div className="grid grid-cols-2 gap-1.5">
+                                    <div>
+                                      <label className={`block text-[10px] mb-0.5 ${textSecondary}`}>Compra</label>
+                                      <input
+                                        type="number"
+                                        step="0.01"
+                                        value={ed?.precio_compra ?? ""}
+                                        onChange={(e) => updateEditFieldBase(upId, "precio_compra", e.target.value)}
+                                        className={`w-full p-1 rounded border text-xs text-right ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className={`block text-[10px] mb-0.5 ${textSecondary}`}>Venta</label>
+                                      <input
+                                        type="number"
+                                        step="0.01"
+                                        value={ed?.precio_venta ?? ""}
+                                        onChange={(e) => updateEditFieldBase(upId, "precio_venta", e.target.value)}
+                                        className={`w-full p-1 rounded border text-xs text-right ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
+                                      />
+                                    </div>
+                                    {prodSizes.length === 0 && (
+                                      <div className="col-span-2">
+                                        <label className={`block text-[10px] mb-0.5 ${textSecondary}`}>Stock</label>
+                                        <input
+                                          type="number"
+                                          value={ed?.stock ?? ""}
+                                          onChange={(e) => updateEditFieldBase(upId, "stock", e.target.value)}
+                                          className={`w-full p-1 rounded border text-xs text-right ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
+                                        />
+                                      </div>
+                                    )}
+                                    <div className="col-span-2">
+                                      <label className={`block text-[10px] mb-0.5 ${textSecondary}`}>Descripción</label>
+                                      <input
+                                        type="text"
+                                        value={ed?.descripcion ?? ""}
+                                        onChange={(e) => updateEditFieldBase(upId, "descripcion", e.target.value)}
+                                        placeholder="Descripción del producto"
+                                        className={`w-full p-1 rounded border text-xs ${inputBg} ${dark ? "border-gray-600" : "border-gray-200"}`}
+                                      />
+                                    </div>
+                                  </div>
+
+                                  {prodSizes.length > 0 && (
+                                    <div className="mt-2">
+                                      <StockPorTalle
+                                        sizes={prodSizes}
+                                        value={ed?.stock_talles || {}}
+                                        onChange={(v) => updateEditFieldBase(upId, "stock_talles", v)}
+                                        dark={dark}
+                                      />
+                                      <p className={`text-[10px] mt-0.5 ${textSecondary}`}>
+                                        Total: {sumStockTalles(ed?.stock_talles)} uds (suma de talles)
+                                      </p>
+                                    </div>
+                                  )}
+
+                                  {compraMayorVenta && (
+                                    <div
+                                      className={`mt-1.5 px-2 py-1.5 rounded-lg text-[11px] font-medium flex items-center gap-1.5 ${
+                                        dark ? "bg-red-500/20 text-red-400" : "bg-red-50 text-red-600"
+                                      }`}
+                                    >
+                                      ⚠️ Compra ($ {compra}) &gt; venta ($ {venta})
+                                    </div>
+                                  )}
                                 </div>
                               </div>
-                              <button
-                                onClick={() => handleReactivar(prod.id)}
-                                className="px-3 py-1 bg-green-500 text-white rounded-lg text-xs hover:bg-green-600 transition-colors"
-                              >
-                                ⟳ Reactivar
-                              </button>
                             </div>
-                          ))}
-                        </div>
-                      )}
-                    </>
+                          </div>
+                        );
+                      })}
+                    </div>
                   )}
 
                   {selectedToDelete.size > 0 && (

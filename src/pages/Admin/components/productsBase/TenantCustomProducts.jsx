@@ -46,6 +46,9 @@ export function TenantCustomProducts({ dark, tenantId, categories, subcategories
   const [formSubcategoryId, setFormSubcategoryId] = useState("");
   const [formBrandInput, setFormBrandInput] = useState("");
   const [formTalles, setFormTalles] = useState([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [asignFilter, setAsignFilter] = useState("todos"); // "todos" | "sinAsignar" | "asignados"
+  const [subcatFilters, setSubcatFilters] = useState({}); // { catName: subName }
 
   const textPrimary = dark ? "text-white" : "text-gray-900";
   const textSecondary = dark ? "text-gray-400" : "text-gray-500";
@@ -216,6 +219,90 @@ export function TenantCustomProducts({ dark, tenantId, categories, subcategories
 
   const isCollapsed = (name) =>
     allCollapsed ? true : !!collapsedCats[name];
+
+  const hasGlobalFilter =
+    searchTerm.trim().length > 0 || asignFilter !== "todos";
+
+  const groupDetails = useMemo(() => {
+    return groups.map((g) => {
+      let items = g.items;
+
+      if (searchTerm.trim()) {
+        const lower = searchTerm.toLowerCase();
+        items = items.filter(
+          (c) =>
+            c.name.toLowerCase().includes(lower) ||
+            (brandName(c) || "").toLowerCase().includes(lower) ||
+            (assignments[c.id] || []).some((n) =>
+              n.toLowerCase().includes(lower)
+            )
+        );
+      }
+
+      if (asignFilter === "sinAsignar")
+        items = items.filter((c) => (assignments[c.id] || []).length === 0);
+      if (asignFilter === "asignados")
+        items = items.filter((c) => (assignments[c.id] || []).length > 0);
+
+      const subMap = {};
+      items.forEach((c) => {
+        const name = c.subcategories?.name || "Sin subcategoría";
+        if (!subMap[name]) subMap[name] = [];
+        subMap[name].push(c);
+      });
+      let subs = Object.entries(subMap).map(([name, list]) => ({
+        name,
+        list,
+      }));
+      subs.sort((a, b) => {
+        if (a.name === "Sin subcategoría") return 1;
+        if (b.name === "Sin subcategoría") return -1;
+        return a.name.localeCompare(b.name);
+      });
+
+      const activeSub = subcatFilters[g.name] || null;
+      const visibleSubs = activeSub
+        ? subs.filter((s) => s.name === activeSub)
+        : subs;
+      const visibleSubsList = visibleSubs.reduce(
+        (acc, s) => acc.concat(s.list),
+        []
+      );
+
+      return {
+        ...g,
+        totalCount: g.items.length,
+        filteredCount: items.length,
+        subs,
+        activeSub,
+        visibleSubs,
+        visibleSubsList,
+        hasSubFilter: !!activeSub,
+      };
+    });
+  }, [groups, searchTerm, asignFilter, subcatFilters, assignments]);
+
+  const resultCount = useMemo(
+    () => groupDetails.reduce((acc, g) => acc + g.filteredCount, 0),
+    [groupDetails]
+  );
+
+  const totalCustoms = customs.length;
+
+  const toggleSubFilter = (catName, subName) => {
+    setSubcatFilters((prev) => {
+      const next = { ...prev };
+      if (!subName || next[catName] === subName) delete next[catName];
+      else next[catName] = subName;
+      return next;
+    });
+  };
+
+  const clearFilters = () => {
+    setSearchTerm("");
+    setAsignFilter("todos");
+    setSubcatFilters({});
+  };
 
   const openLightbox = (customId, index) => {
     const imgs = (gallery[customId] || []).map(publicUrl);
@@ -555,8 +642,8 @@ export function TenantCustomProducts({ dark, tenantId, categories, subcategories
             ⭐ Productos custom del negocio
           </h2>
           <p className={`text-xs mt-0.5 ${textSecondary}`}>
-            Solo este negocio · compartidos por todos sus vendedores. Cada uno
-            define su precio y stock en "Asignar".
+            {resultCount} de {totalCustoms} productos · compartidos por todos
+            sus vendedores. Cada uno define su precio y stock en "Asignar".
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -679,6 +766,50 @@ export function TenantCustomProducts({ dark, tenantId, categories, subcategories
         </div>
       )}
 
+      {customs.length > 0 && (
+        <div className={`px-4 py-3 border-b space-y-2.5 ${borderColor}`}>
+        <input
+          type="text"
+          placeholder="🔍 Buscar por nombre, marca o asignado..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className={`w-full p-2 rounded-lg border text-sm ${inputBg}`}
+        />
+        <div className="flex flex-wrap items-center gap-1.5">
+          {[
+            { key: "todos", label: "Todos", emoji: "🗂️" },
+            { key: "sinAsignar", label: "Sin asignar", emoji: "🚫" },
+            { key: "asignados", label: "Asignados", emoji: "✅" },
+          ].map((chip) => (
+            <button
+              key={chip.key}
+              onClick={() => setAsignFilter(chip.key)}
+              className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-all border ${
+                asignFilter === chip.key
+                  ? dark
+                    ? "bg-blue-500/30 border-blue-400 text-blue-300"
+                    : "bg-blue-500/15 border-blue-400 text-blue-600"
+                  : `${dark ? "border-gray-600 text-gray-400" : "border-gray-200 text-gray-500"}`
+              }`}
+            >
+              {chip.emoji} {chip.label}
+            </button>
+          ))}
+
+          {(hasGlobalFilter || Object.keys(subcatFilters).length > 0) && (
+            <button
+              onClick={clearFilters}
+              className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-all border ${
+                dark ? "border-gray-600 text-gray-400" : "border-gray-200 text-gray-500"
+              }`}
+            >
+              ✕ Limpiar
+            </button>
+          )}
+        </div>
+      </div>
+      )}
+
       {customs.length === 0 ? (
         <div className={`text-center py-10 ${textSecondary}`}>
           <div className="text-4xl mb-3">⭐</div>
@@ -686,10 +817,13 @@ export function TenantCustomProducts({ dark, tenantId, categories, subcategories
         </div>
       ) : (
         <div className={`divide-y ${borderColor}`}>
-          {groups.map((g) => {
-            const collapsed = isCollapsed(g.name);
+          {groupDetails.map((g) => {
+            const collapsed =
+              !(hasGlobalFilter || g.hasSubFilter) && isCollapsed(g.name);
+            const oculta =
+              g.filteredCount === 0 && (hasGlobalFilter || g.hasSubFilter);
             return (
-              <div key={g.name}>
+              <div key={g.name} className={oculta ? "hidden" : ""}>
                 <button
                   type="button"
                   onClick={() => toggleCat(g.name)}
@@ -703,14 +837,15 @@ export function TenantCustomProducts({ dark, tenantId, categories, subcategories
                     📁 {g.name}
                   </span>
                   <span className="flex items-center gap-2">
-                    <span
-                      className={`text-xs px-2 py-0.5 rounded-full ${
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${
                         dark
                           ? "bg-purple-500/20 text-purple-400"
                           : "bg-purple-100 text-purple-600"
                       }`}
                     >
-                      {g.items.length}
+                      {g.filteredCount !== g.totalCount
+                        ? `${g.filteredCount}/${g.totalCount}`
+                        : g.totalCount}
                     </span>
                     <span className={`text-xs ${textSecondary}`}>
                       {collapsed ? "▶" : "▼"}
@@ -718,8 +853,56 @@ export function TenantCustomProducts({ dark, tenantId, categories, subcategories
                   </span>
                 </button>
                 {!collapsed && (
-                  <div className={`divide-y ${dark ? "divide-gray-700/60" : "divide-gray-100"}`}>
-                    {g.items.map((c) => {
+                  <div>
+                    {g.subs.length > 1 && (
+                      <div
+                        className={`px-4 py-2 flex flex-wrap items-center gap-1.5 border-b ${
+                          dark ? "bg-gray-800/60" : "bg-gray-50/80"
+                        } ${borderColor}`}
+                      >
+                        <span
+                          className={`text-[10px] font-semibold uppercase tracking-wide ${textSecondary} mr-1`}
+                        >
+                          Subcat.
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => toggleSubFilter(g.name)}
+                          className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-all border ${
+                            !g.hasSubFilter
+                              ? dark
+                                ? "bg-blue-500/30 border-blue-400 text-blue-300"
+                                : "bg-blue-500/15 border-blue-400 text-blue-600"
+                              : `${dark ? "border-gray-600 text-gray-400" : "border-gray-200 text-gray-500"}`
+                          }`}
+                        >
+                          Todas
+                        </button>
+                        {g.subs.map((s) => {
+                          const act = g.activeSub === s.name;
+                          return (
+                            <button
+                              key={s.name}
+                              type="button"
+                              onClick={() =>
+                                toggleSubFilter(g.name, s.name)
+                              }
+                              className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-all border ${
+                                act
+                                  ? dark
+                                    ? "bg-blue-500/30 border-blue-400 text-blue-300"
+                                    : "bg-blue-500/15 border-blue-400 text-blue-600"
+                                  : `${dark ? "border-gray-600 text-gray-400" : "border-gray-200 text-gray-500"}`
+                              }`}
+                            >
+                              {s.name} ({s.list.length})
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                    <div className={`divide-y ${dark ? "divide-gray-700/60" : "divide-gray-100"}`}>
+                      {g.visibleSubsList.map((c) => {
                       const asignados = assignments[c.id] || [];
                       const galeria = gallery[c.id] || [];
                       const creador = userNames[c.user_id];
@@ -1127,6 +1310,15 @@ export function TenantCustomProducts({ dark, tenantId, categories, subcategories
                         </div>
                       );
                     })}
+
+                    {g.filteredCount > 0 && g.visibleSubsList.length === 0 && (
+                      <div
+                        className={`px-4 py-6 text-center text-sm ${textSecondary}`}
+                      >
+                        Sin productos en "{g.activeSub}"
+                      </div>
+                    )}
+                    </div>
                   </div>
                 )}
               </div>

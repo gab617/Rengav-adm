@@ -4,6 +4,9 @@ import { supabase } from "../../../services/supabaseClient";
 import { useAppContext } from "../../../contexto/Context";
 import { toast } from "react-toastify";
 import { ProductImagesEditor } from "../../usuario/components/ProductImagesEditor";
+import { useSizesContext } from "../../../contexto/SizesContext";
+import { SizeSelector } from "../../Admin/components/productsBase/components/SizeSelector";
+import { StockPorTalle } from "../../Admin/components/productsBase/components/StockPorTalle";
 
 export function FormCustomProduct({ userId }) {
   const {
@@ -16,6 +19,7 @@ export function FormCustomProduct({ userId }) {
     unifiedBrands,
     profile,
   } = useAppContext();
+  const { getSizesByCategory } = useSizesContext();
   const dark = preferencias?.theme === "dark";
   console.log(unifiedBrands);
 
@@ -39,6 +43,8 @@ export function FormCustomProduct({ userId }) {
   const [precioVenta, setPrecioVenta] = useState("");
   const [proveedor, setProveedor] = useState("");
   const [stock, setStock] = useState("");
+  const [talles, setTalles] = useState([]);
+  const [stockTalles, setStockTalles] = useState({});
   const [imagenes, setImagenes] = useState([]);
 
   // subcategorías filtradas según categoría seleccionada
@@ -98,13 +104,24 @@ export function FormCustomProduct({ userId }) {
     setPrecioVenta("");
     setProveedor("");
     setStock("");
+    setTalles([]);
+    setStockTalles({});
     setImagenes([]);
   }
 
   async function handleSubmit(e) {
     e.preventDefault();
 
-    if (!name || !categoryId || !precioCompra || !precioVenta || stock === "") {
+    const stockSimple = stock !== "";
+    const hayTalles = talles.length > 0;
+
+    if (
+      !name ||
+      !categoryId ||
+      !precioCompra ||
+      !precioVenta ||
+      (!hayTalles && !stockSimple)
+    ) {
       toast.error("⚠️ Faltan datos obligatorios", {
         position: "top-center",
         autoClose: 2500,
@@ -124,9 +141,11 @@ export function FormCustomProduct({ userId }) {
         precioVenta,
         proveedor,
         stock,
+        stockTalles,
         userId,
         imagenes,
         tenantId: profile?.tenant_id,
+        talles,
       });
 
       toast.success("✨ Producto creado con éxito", {
@@ -145,6 +164,12 @@ export function FormCustomProduct({ userId }) {
   }
 
   // estilos
+  const pvNum = parseFloat(precioVenta) || 0;
+  const pcNum = parseFloat(precioCompra) || 0;
+  const ganancia = pvNum - pcNum;
+  const ventaMenorQueCompra =
+    pvNum > 0 && pcNum > 0 && pcNum > pvNum;
+
   const inputClass = dark
     ? "border p-2 rounded w-full bg-gray-700 text-gray-200 border-gray-600 placeholder-gray-400"
     : "border p-2 rounded w-full bg-white text-gray-900 border-gray-300 placeholder-gray-500";
@@ -182,7 +207,12 @@ export function FormCustomProduct({ userId }) {
             {/* --- CATEGORÍA --- */}
             <select
               value={categoryId}
-              onChange={(e) => setCategoryId(e.target.value)}
+              onChange={(e) => {
+                setCategoryId(e.target.value);
+                setSubcategoryId("");
+                setTalles([]);
+                setStockTalles({});
+              }}
               className={inputClass}
             >
               <option value="">Seleccionar categoría</option>
@@ -207,6 +237,52 @@ export function FormCustomProduct({ userId }) {
                 </option>
               ))}
             </select>
+
+            {/* --- TALLES --- */}
+            {categoryId && getSizesByCategory(categoryId).length > 0 && (
+              <div
+                className={`p-3 rounded-xl border ${
+                  dark
+                    ? "border-gray-600 bg-gray-900/50"
+                    : "border-gray-200 bg-gray-50"
+                }`}
+              >
+                <label className="block text-xs font-semibold mb-1">
+                  📏 Talles del producto
+                </label>
+                <p className={`text-[10px] mb-2 ${dark ? "text-gray-500" : "text-gray-400"}`}>
+                  Si la prenda se vende con talles, elegí cuáles ofrece y definí
+                  el stock de cada uno. Dejá vacío si se vende sin talles.
+                </p>
+                <SizeSelector
+                  sizes={getSizesByCategory(categoryId)}
+                  selected={talles}
+                  onChange={(newTalles) => {
+                    setTalles(newTalles);
+                    const prevStock = { ...stockTalles };
+                    const newStock = {};
+                    getSizesByCategory(categoryId).forEach((s) => {
+                      if (newTalles.includes(s.id)) {
+                        newStock[s.name] = prevStock[s.name] ?? "";
+                      }
+                    });
+                    setStockTalles(newStock);
+                  }}
+                  dark={dark}
+                />
+
+                {talles.length > 0 && (
+                  <StockPorTalle
+                    sizes={getSizesByCategory(categoryId).filter((s) =>
+                      talles.includes(s.id)
+                    )}
+                    value={stockTalles}
+                    onChange={setStockTalles}
+                    dark={dark}
+                  />
+                )}
+              </div>
+            )}
 
             <select
               value={selectedBrandKey}
@@ -323,14 +399,61 @@ export function FormCustomProduct({ userId }) {
               className={inputClass}
             />
 
-            <input
-              value={stock}
-              onChange={(e) => setStock(e.target.value)}
-              placeholder="Stock inicial"
-              type="number"
-              step="1"
-              className={inputClass}
-            />
+            {ventaMenorQueCompra && (
+              <div
+                className={`p-3 rounded-lg border-2 ${
+                  dark
+                    ? "bg-red-900/30 border-red-400"
+                    : "bg-red-50 border-red-400"
+                }`}
+              >
+                <p
+                  className={`text-xs font-semibold ${
+                    dark ? "text-red-300" : "text-red-600"
+                  }`}
+                >
+                  ⚠️ La ganancia no puede ser negativa
+                </p>
+                <p
+                  className={`text-[10px] mt-1 ${
+                    dark ? "text-red-400" : "text-red-500"
+                  }`}
+                >
+                  El precio de venta (${pvNum.toLocaleString()}) es menor al de
+                  compra (${pcNum.toLocaleString()}). Ganancia por unidad:
+                  -${Math.abs(ganancia).toLocaleString()}
+                </p>
+              </div>
+            )}
+            {!ventaMenorQueCompra && pvNum > 0 && pcNum > 0 && (
+              <p
+                className={`text-xs font-medium ${
+                  dark ? "text-green-400" : "text-green-600"
+                }`}
+              >
+                ✓ Ganancia: ${ganancia.toLocaleString()} por unidad
+              </p>
+            )}
+
+            {talles.length > 0 ? (
+              <p className={`text-xs ${dark ? "text-gray-400" : "text-gray-500"}`}>
+                📏 Stock total:{" "}
+                {Object.values(stockTalles).reduce(
+                  (a, b) => a + (Number(b) || 0),
+                  0
+                )}{" "}
+                unidades (definido por talle arriba)
+              </p>
+            ) : (
+              <input
+                value={stock}
+                onChange={(e) => setStock(e.target.value)}
+                placeholder="Stock inicial"
+                type="number"
+                step="1"
+                className={inputClass}
+              />
+            )}
 
             <input
               value={proveedor}

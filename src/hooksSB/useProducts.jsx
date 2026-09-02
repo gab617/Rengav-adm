@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { supabase } from "../services/supabaseClient";
+import { sumStockTalles } from "../pages/Admin/components/productsBase/components/StockPorTalle";
 
 const normalizarNombre = (texto) => {
   const limpio = String(texto || "")
@@ -232,7 +233,10 @@ export const useProducts = (
     precioVenta,
     proveedor,
     stock,
+    stockTalles = {},
     userId,
+    userIdAsignado = null,
+    crearSinAsignar = false,
     imagenes,
     tenantId,
     talles = [],
@@ -344,61 +348,105 @@ export const useProducts = (
 
       /* ----------------------------------
         2️⃣ CREAR PRODUCTO USUARIO
-    ---------------------------------- */
-      const { data: newProduct, error: err2 } = await supabase
-        .from("user_products")
-        .insert([
-          {
-            user_id: userId,
-            custom_id: customProd.id,
-            descripcion: descripcion || null,
-            precio_compra: Number(precioCompra),
-            precio_venta: Number(precioVenta),
-            proveedor_nombre: proveedor || null,
-            stock: Number(stock),
-            active: true,
-            ...(imagenesFinales.length
-              ? { imagenes: imagenesFinales }
-              : {}),
-          },
-        ])
-        .select()
-        .single();
-
-      if (err2) throw err2;
-
-      /* ----------------------------------
-       3️⃣ NORMALIZAR MARCA (CLAVE)
+        Solo se crea la instancia (user_products) cuando hay un
+        destino claro (sucursal elegida o flujo de usuario).
+        En el flujo admin SIN sucursal (crearSinAsignar) la ficha
+        queda disponible para asignar después, sin instancia.
     ---------------------------------- */
       const brandName =
         (customProd.brand_id && brandsMap?.[customProd.brand_id]) ||
         customProd.brand_text ||
         null;
 
-      /* ----------------------------------
-       4️⃣ OBJETO FINAL NORMALIZADO
-    ---------------------------------- */
-      const productFull = {
-        ...newProduct,
-        imagenes: imagenesFinales.length ? imagenesFinales : [],
-        tipo: "custom",
-        products_base: {
-          name: customProd.name,
-          brand_id: customProd.brand_id,
-          brand_text: customProd.brand_text,
-          brand: brandName, // 👈 ahora SIEMPRE existe
-          category_id: customProd.category_id,
-          subcategory_id: customProd.subcategory_id,
-          image_url: customProd.image_url || null,
-        },
-        user_custom_products: customProd,
-      };
+      let newProduct = null;
+      let productFull;
+
+      if (!crearSinAsignar) {
+        const tieneStockTalles =
+          stockTalles && Object.keys(stockTalles).length > 0;
+        const stockFinal = tieneStockTalles
+          ? sumStockTalles(stockTalles)
+          : Number(stock);
+        const usuarioDestino = userIdAsignado || userId;
+
+        const { data, error: err2 } = await supabase
+          .from("user_products")
+          .insert([
+            {
+              user_id: usuarioDestino,
+              custom_id: customProd.id,
+              descripcion: descripcion || null,
+              precio_compra: Number(precioCompra),
+              precio_venta: Number(precioVenta),
+              proveedor_nombre: proveedor || null,
+              stock: stockFinal,
+              ...(tieneStockTalles ? { stock_talles: stockTalles } : {}),
+              active: true,
+              ...(imagenesFinales.length
+                ? { imagenes: imagenesFinales }
+                : {}),
+            },
+          ])
+          .select()
+          .single();
+
+        if (err2) throw err2;
+        newProduct = data;
+
+        /* ----------------------------------
+          3️⃣ OBJETO FINAL NORMALIZADO (con instancia)
+        ---------------------------------- */
+        productFull = {
+          ...newProduct,
+          imagenes: imagenesFinales.length ? imagenesFinales : [],
+          tipo: "custom",
+          products_base: {
+            name: customProd.name,
+            brand_id: customProd.brand_id,
+            brand_text: customProd.brand_text,
+            brand: brandName, // 👈 ahora SIEMPRE existe
+            category_id: customProd.category_id,
+            subcategory_id: customProd.subcategory_id,
+            talles: customProd.talles || [],
+            image_url: customProd.image_url || null,
+          },
+          user_custom_products: customProd,
+        };
+      } else {
+        /* ----------------------------------
+          Caso admin SIN sucursal: solo ficha, sin user_products.
+          Se agrega al estado de customProducts como disponible.
+        ---------------------------------- */
+        productFull = {
+          id: customProd.id,
+          imagenes: imagenesFinales.length ? imagenesFinales : [],
+          tipo: "custom",
+          disponible: true,
+          products_base: {
+            name: customProd.name,
+            brand_id: customProd.brand_id,
+            brand_text: customProd.brand_text,
+            brand: brandName,
+            category_id: customProd.category_id,
+            subcategory_id: customProd.subcategory_id,
+            talles: customProd.talles || [],
+            image_url: customProd.image_url || null,
+          },
+          user_custom_products: customProd,
+        };
+      }
 
       /* ----------------------------------
-       5️⃣ ACTUALIZAR ESTADO
+        4️⃣ ACTUALIZAR ESTADO
+        En el caso admin SIN sucursal (crearSinAsignar) NO se agrega
+        al estado de products/customProducts: la ficha disponible se
+        muestra en prods-base vía refetch (TenantCustomProducts), y
+        no corresponde a ningún user_products del usuario.
     ---------------------------------- */
-      setProducts((prev) => [...prev, productFull]);
-      setCustomProducts((prev) => [...prev, productFull]);
+      if (!crearSinAsignar) {
+        setProducts((prev) => [...prev, productFull]);
+        setCustomProducts((prev) => [...prev, productFull]);
+      }
 
       return productFull;
     } catch (error) {
@@ -665,6 +713,8 @@ export const useProducts = (
               active: updates.active ?? p.active,
               descripcion: updates.descripcion ?? p.descripcion,
               imagenes: updates.imagenes ?? p.imagenes,
+              destacado: updates.destacado ?? p.destacado,
+              visible: updates.visible ?? p.visible,
             }
           : p
       );
