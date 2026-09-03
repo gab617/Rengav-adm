@@ -66,17 +66,20 @@ export function ConsolaAdmin() {
       {/* Botón */}
       <button
         ref={buttonRef}
+        title="Eliminar ventas"
+        aria-label="Eliminar ventas"
         className="
-    fixed z-20 px-4 py-2 rounded-full shadow-lg bg-blue-600 text-white
+    fixed z-20 w-10 h-10 rounded-full shadow-lg bg-red-600 text-white flex items-center justify-center text-lg
 
     top-4 left-4
-
     max-md:left-1/2
     max-md:-translate-x-1/2
+
+    hover:scale-110 transition-transform duration-200
   "
         onClick={() => setIsOpen(true)}
       >
-        Consola Admin
+        🗑️
       </button>
 
       {/* Overlay mobile */}
@@ -103,7 +106,7 @@ export function ConsolaAdmin() {
           `}
         >
           <h3 className="text-center text-black font-bold text-lg">
-            Consola de administración
+            Eliminar ventas
           </h3>
 
           {actions.map((action) => (

@@ -3,7 +3,11 @@ export default {
   darkMode: "class", // importante: "class" permite toggle manual
   content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   theme: {
-    extend: {},
+    extend: {
+      screens: {
+        940: "940px",
+      },
+    },
   },
   plugins: [],
 };

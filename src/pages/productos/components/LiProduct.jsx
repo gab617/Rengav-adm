@@ -60,6 +60,7 @@ export function LiProduct({
   });
   const [pesoSeleccionado, setPesoSeleccionado] = useState(null);
   const [cantidad, setCantidad] = useState(1);
+  const [adminMenuOpen, setAdminMenuOpen] = useState(false);
 
   useEffect(() => {
     setEditedProduct({
@@ -185,7 +186,7 @@ export function LiProduct({
     tamano === "chico"
       ? "scale-90 text-sm"
       : tamano === "grande"
-        ? "scale-105 text-xl"
+        ? "scale-105 text-lg xl:text-xl"
         : "text-base";
 
   const enCarritoClass = enCarrito
@@ -308,258 +309,234 @@ export function LiProduct({
 
       {/* ================= VISTA LISTADO ================= */}
       {vista === "listado" ? (
+<div
+  className={`relative flex flex-wrap items-center gap-x-2 gap-y-1.5 w-full px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl transition-colors ${
+    dark ? "text-white bg-gray-900/40" : "text-gray-900 bg-white"
+  }`}
+>
+  {/* Imagen / Thumb */}
+  {imagenPrincipal ? (
+    <div
+      className="flex w-9 h-9 sm:w-10 sm:h-10 rounded-lg shrink-0 items-center justify-center overflow-hidden transition-transform duration-200 cursor-pointer hover:scale-105 active:scale-95 shadow-sm"
+      style={{ backgroundColor: color }}
+      onClick={() => setShowProductModal(true)}
+      title="Ver detalle"
+    >
+      <img
+        src={publicUrl(imagenPrincipal)}
+        alt=""
+        onError={(e) => { e.currentTarget.style.display = "none"; }}
+        className="w-full h-full object-contain p-0.5"
+      />
+    </div>
+  ) : (
+    <div
+      className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg shrink-0 shadow-sm"
+      style={{ backgroundColor: color }}
+    />
+  )}
+
+  {/* Información compacta: nombre + talles + código */}
+  <div className="flex flex-col min-w-0 w-full sm:w-auto sm:flex-1">
+    <div className="flex items-center gap-1.5 min-w-0">
+      <span
+        className="font-medium text-sm truncate inline-flex items-center gap-1 leading-snug"
+        title={prod.tipo === "custom" ? prod.user_custom_products?.name : prod.products_base?.name}
+      >
+        {prod.tipo === "custom" ? prod.user_custom_products?.name : prod.products_base?.name}
+        {esPeso && <span className="text-xs shrink-0" title="Producto por peso">⚖️</span>}
+        {enCarrito && <span className="text-green-500 text-xs font-bold shrink-0">✓</span>}
+      </span>
+      {prod.visible === false && (
+        <span className="text-[9px] leading-none px-1 py-0.5 rounded-full bg-gray-600 text-white font-medium shrink-0">
+          Oculto
+        </span>
+      )}
+    </div>
+    <div className="flex flex-wrap items-center gap-1.5 mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">
+      {tieneStockTalles && (
+        <TallesStock
+          sizes={productSizes}
+          stockTalles={prod.stock_talles}
+          dark={dark}
+        />
+      )}
+      <span className="font-mono">{`#${prod.custom_id ? "C-" : ""}${prod.id}`}</span>
+    </div>
+  </div>
+
+  {/* Derecha: precio + asignación al carrito (izq) con admin a la derecha en mobile */}
+  <div className="flex flex-wrap items-center justify-start gap-1.5 shrink-0 flex-1 min-w-0 sm:w-auto sm:flex-1 sm:justify-end sm:flex-nowrap">
+    <span className={`text-sm font-bold whitespace-nowrap ${dark ? "text-green-400" : "text-green-700"}`}>
+      ${precioFormateado}
+    </span>
+
+    {/* Asignación al carrito según tipo de producto */}
+    {esPeso ? (
+      <Balanza
+        dark={dark}
+        peso={pesoSeleccionado}
+        onChange={setPesoSeleccionado}
+      />
+    ) : esUnitario ? (
+      <StepperCantidad
+        cantidad={cantidad}
+        max={stockDisponible}
+        onChange={setCantidad}
+        dark={dark}
+      />
+    ) : (
+      <button
+        onClick={() => setShowProductModal(true)}
+        className="h-8 w-8 flex items-center justify-center text-sm rounded-lg bg-green-600 hover:bg-green-500 text-white transition-colors shadow-sm active:scale-95"
+        title="Elegir talle"
+      >
+        👕
+      </button>
+    )}
+
+    {/* Acción principal: agregar/quitar al carrito */}
+    {esUnitario ? (
+      enCarrito ? (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            eliminarProductoCarrito(prod.id);
+          }}
+          title="Quitar del carrito"
+          className="h-8 w-8 flex items-center justify-center text-sm rounded-lg bg-red-500 hover:bg-red-600 active:scale-95 text-white transition-all shadow-sm shrink-0"
+        >
+          ✕
+        </button>
+      ) : (
+        <button
+          onClick={() => handleAgregarCarrito({ cantidad })}
+          className={`h-8 px-2.5 flex items-center justify-center text-sm font-medium rounded-lg transition-all duration-150 shadow-sm active:scale-95 ${
+            sinPrecios
+              ? "bg-gray-500/20 text-gray-400 cursor-not-allowed border border-gray-500/30"
+              : "bg-green-600 hover:bg-green-500 text-white"
+          }`}
+          disabled={sinPrecios}
+          title={sinPrecios ? "Faltan precios" : "Agregar al carrito"}
+        >
+          🛒
+        </button>
+      )
+    ) : esPeso && !enCarrito ? (
+      <button
+        onClick={handleAgregarCarrito}
+        className={`h-8 px-2.5 flex items-center justify-center text-sm font-medium rounded-lg transition-all duration-150 shadow-sm active:scale-95 ${
+          sinPrecios
+            ? "bg-gray-500/20 text-gray-400 cursor-not-allowed border border-gray-500/30"
+            : !pesoSeleccionado
+              ? "bg-gray-300 text-gray-500 cursor-not-allowed shadow-none"
+              : "bg-green-600 hover:bg-green-500 text-white"
+        }`}
+        disabled={sinPrecios || !pesoSeleccionado}
+        title={sinPrecios ? "Faltan precios" : "Agregar al carrito"}
+      >
+        {pesoSeleccionado ? `${pesoSeleccionado.toFixed(2)}kg` : "🛒"}
+      </button>
+    ) : enCarrito ? (
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          eliminarProductoCarrito(prod.id);
+        }}
+        title="Quitar del carrito"
+        className="h-8 w-8 flex items-center justify-center text-sm rounded-lg bg-red-500 hover:bg-red-600 active:scale-95 text-white transition-all shadow-sm shrink-0"
+      >
+        ✕
+      </button>
+    ) : null}
+  </div>
+
+  {/* Botonera admin desplegable */}
+  {esAdmin && (
+    <div className="relative shrink-0">
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          setAdminMenuOpen((v) => !v);
+        }}
+        title="Acciones de administración"
+        className={`h-8 w-8 flex items-center justify-center rounded-lg transition-colors shadow-sm active:scale-95 ${
+          dark
+            ? "bg-gray-800 hover:bg-gray-700 text-gray-300"
+            : "bg-gray-100 hover:bg-gray-200 text-gray-600"
+        }`}
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <circle cx="3" cy="8" r="1.4" />
+          <circle cx="8" cy="8" r="1.4" />
+          <circle cx="13" cy="8" r="1.4" />
+        </svg>
+      </button>
+
+      {adminMenuOpen && (
         <div
-          className={`flex flex-col md:flex-row justify-between w-full px-2 gap-2 ${
-            dark ? "text-white" : "text-gray-900"
+          className={`absolute right-0 top-9 z-30 flex items-center gap-1 p-1 rounded-xl shadow-xl border ${
+            dark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"
           }`}
         >
-          <div className="flex flex-col md:flex-row w-full md:items-center gap-1 md:gap-2 overflow-hidden">
-            {enCarrito && (
-              <div className="absolute left-1 top-1/2 -translate-y-1/2">
-                <div className={`w-2 h-2 rounded-full ${dark ? "bg-yellow-500" : "bg-yellow-400"} animate-pulse`} />
-              </div>
-            )}
-            {imagenPrincipal ? (
-              <div
-                className="flex w-10 h-10 rounded-md shrink-0 items-center justify-center overflow-hidden transition-all duration-200 cursor-pointer md:group-hover:scale-110 md:group-hover:shadow-lg"
-                style={{ backgroundColor: color }}
-                onClick={() => setShowProductModal(true)}
-                title="Ver detalle"
-              >
-                <img
-                  src={publicUrl(imagenPrincipal)}
-                  alt=""
-                  onError={(e) => { e.currentTarget.style.display = "none"; }}
-                  className="w-full h-full object-contain"
-                />
-              </div>
-            ) : (
-              <div
-                className="block w-6 h-6 rounded-md shrink-0"
-                style={{ backgroundColor: color }}
-              ></div>
-            )}
+          <button
+            className="h-8 w-8 flex items-center justify-center text-xs sm:text-sm bg-blue-500 hover:bg-blue-400 text-white rounded-lg transition-colors shadow-sm active:scale-95"
+            onClick={() => {
+              setIsEditing(!isEditing);
+              setAdminMenuOpen(false);
+            }}
+            title="Editar producto"
+          >
+            ✏️
+          </button>
 
-            <div className="flex flex-col sm:flex-row sm:items-center w-full truncate">
-              <div className="flex gap-1 items-center">
-                <span 
-                  className="font-semibold text-base md:text-xl truncate max-w-full flex items-center gap-1"
-                  title={prod.tipo === "custom"
-                    ? prod.user_custom_products?.name
-                    : prod.products_base?.name}
-                >
-                  {prod.tipo === "custom"
-                    ? prod.user_custom_products?.name
-                    : prod.products_base?.name}
-                  {esPeso && (
-                    <span className="text-lg" title="Producto por peso">⚖️</span>
-                  )}
-                  {enCarrito && (
-                    <span className="text-green-500 text-sm">✓</span>
-                  )}
-                </span>
+          <button
+            className={`h-8 w-8 flex items-center justify-center text-xs sm:text-sm rounded-lg transition-all shadow-sm active:scale-95 ${
+              prod.destacado
+                ? "bg-yellow-400 text-black shadow-md hover:bg-yellow-300"
+                : dark
+                  ? "bg-gray-700 text-gray-400 hover:text-yellow-400 hover:bg-gray-600"
+                  : "bg-gray-100 text-gray-400 hover:text-yellow-500 hover:bg-gray-200"
+            }`}
+            onClick={() => actualizarProducto(prod.id, { destacado: !prod.destacado })}
+            title={prod.destacado ? "Quitar de destacados" : "Marcar como destacado"}
+          >
+            ★
+          </button>
 
-                {prod.visible === false && (
-                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-gray-600 text-white font-semibold shrink-0 whitespace-nowrap">
-                    👁 Oculto tienda
-                  </span>
-                )}
+          <button
+            className={`h-8 w-8 flex items-center justify-center text-xs sm:text-sm rounded-lg transition-all shadow-sm active:scale-95 ${
+              prod.visible === false
+                ? "bg-violet-500 text-white hover:bg-violet-600"
+                : dark
+                  ? "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+            }`}
+            onClick={() => actualizarProducto(prod.id, { visible: prod.visible === false })}
+            title={prod.visible === false ? "Mostrar en catálogo" : "Ocultar del catálogo"}
+          >
+            {prod.visible === false ? "👁‍🗨" : "👁"}
+          </button>
 
-                <div
-                  className={`border rounded-xl px-2 md:px-3 py-0.5 md:py-1 shadow-md text-sm md:text-base ${
-                    dark
-                      ? "bg-white/5 border-white/10 text-white"
-                      : "bg-gray-100/40 border-gray-600/40 text-gray-900"
-                  }`}
-                >
-                  <strong className="block truncate max-w-[10rem] md:max-w-none">
-                    {capitalizarMayus(
-                      prod.products_base?.brand ??
-                        prod.products_base?.brand_text ??
-                        "-",
-                    )}
-                  </strong>
-                </div>
-              </div>
-              <div
-                className={`flex items-center justify-between w-full px-[0.1em] py-1 rounded-md border
-  ${
-    dark
-      ? "bg-white/5 border-white/10 text-white"
-      : "bg-gray-100/40 border-gray-600/40 text-gray-900"
-  }`}
-              >
-                <span className="font-medium">
-                  #️⃣​{`${prod.custom_id ? " C-" : ""}${prod.id}`}
-                </span>
-
-                {esPeso && (
-                  <Balanza
-                    dark={dark}
-                    onChange={(peso) => {
-                      setPesoSeleccionado(peso);
-                    }}
-                  />
-                )}
-              </div>
-              {tieneStockTalles && (
-                <div className="mt-0.5">
-                  <TallesStock
-                    sizes={productSizes}
-                    stockTalles={prod.stock_talles}
-                    dark={dark}
-                  />
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="flex justify-between items-center w-full md:w-auto md:mt-0">
-            <div className="flex justify-between items-center w-full md:w-auto md:mt-0">
-              <div
-                className={`flex items-center gap-2 px-1 py-1 md:py-0 rounded-lg border ${
-                  dark
-                    ? "border-gray-600 bg-gray-800"
-                    : "border-gray-300 bg-gray-50"
-                }`}
-              >
-                <span
-                  className={`text-base md:text-xl font-bold tracking-tight ${
-                    dark ? "text-green-400" : "text-green-900"
-                  }`}
-                >
-                  ${precioFormateado}
-                </span>
-
-                <span
-                  className={`text-sm ${dark ? "text-gray-500" : "text-gray-400"}`}
-                >
-                  |
-                </span>
-
-                {tieneStockTalles ? (
-                  <span
-                    className={`text-xs md:text-sm font-medium whitespace-nowrap ${
-                      dark ? "text-gray-400" : "text-gray-600"
-                    }`}
-                    title={`Stock total: ${sumStockTalles(prod.stock_talles)} unidades`}
-                  >
-                    👕 {productSizes.length} talles
-                  </span>
-                ) : (
-                  <>
-                    <span
-                      className={`text-sm md:text-base md:text-center font-medium ${
-                        prod.stock <= 5
-                          ? "text-red-500"
-                          : dark
-                            ? "text-gray-300"
-                            : "text-gray-600"
-                      }`}
-                    >
-                      Stock: {prod.stock}
-                    </span>
-                    {hayTalles && (
-                      <span className="text-sm" title="Producto con talles">👕</span>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-
-            <div className="flex gap-1">
-              {enCarrito && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    eliminarProductoCarrito(prod.id);
-                  }}
-                  title="Quitar del carrito"
-                  className="px-2 py-1 md:px-2 md:py-1 text-base md:text-lg rounded bg-red-500 hover:bg-red-600 text-white transition-colors"
-                >
-                  ✕
-                </button>
-              )}
-              <button
-                className={`
-                px-2 py-1 md:px-[.3em] md:p-[.2em]
-                text-lg md:text-xl
-                rounded
-                active:scale-90
-                transition-all duration-200
-                ${sinPrecios
-                  ? "bg-gray-500 text-gray-300 cursor-not-allowed"
-                  : enCarrito
-                    ? "bg-yellow-500 hover:bg-yellow-400 text-black"
-                    : "bg-green-600 text-white hover:bg-green-500 active:bg-green-700"
-                }
-              `}
-                onClick={handleAgregarCarrito}
-                title={sinPrecios 
-                  ? `No se puede agregar: ${faltaPrecioVenta && faltaPrecioCompra ? "falta precio de venta y compra" : faltaPrecioVenta ? "falta precio de venta" : "falta precio de compra"}` 
-                  : hayTalles ? "Elegir talle" : enCarrito ? "Agregar más" : "Agregar al carrito"}
-              >
-                {sinPrecios ? "⚠️" : hayTalles ? "👕" : enCarrito ? "➕" : "🛒"}
-              </button>
-
-              {esAdmin && (
-                <button
-                  className="px-2 py-1 md:px-2 md:py-1 text-base md:text-lg bg-blue-500 hover:bg-blue-400 text-white rounded-lg shadow-md transition-colors"
-                  onClick={() => setIsEditing(!isEditing)}
-                  title="Editar producto"
-                >
-                  ✏️
-                </button>
-              )}
-
-              {esAdmin && (
-                <button
-                  className={`px-2 py-1 text-sm md:text-base rounded-lg transition-all shadow-sm ${
-                    prod.destacado
-                      ? "bg-yellow-400 text-black shadow-md hover:bg-yellow-300"
-                      : dark
-                        ? "bg-gray-700 text-gray-400 hover:text-yellow-400 hover:bg-gray-600"
-                        : "bg-gray-100 text-gray-400 hover:text-yellow-500 hover:bg-yellow-100"
-                  }`}
-                  onClick={() => actualizarProducto(prod.id, { destacado: !prod.destacado })}
-                  title={prod.destacado ? "Quitar de destacados" : "Marcar como destacado"}
-                >
-                  ★
-                </button>
-              )}
-
-              {esAdmin && (
-                <button
-                  className={`px-2 py-1 text-sm md:text-base rounded-lg transition-all shadow-sm ${
-                    prod.visible === false
-                      ? "bg-violet-500 text-white shadow-md hover:bg-violet-600"
-                      : dark
-                        ? "bg-gray-700 text-gray-300 hover:text-gray-100 hover:bg-gray-600"
-                        : "bg-gray-100 text-gray-500 hover:text-gray-700 hover:bg-gray-200"
-                  }`}
-                  onClick={() => actualizarProducto(prod.id, { visible: prod.visible === false ? true : false })}
-                  title={prod.visible === false ? "Mostrar en catálogo" : "Ocultar del catálogo"}
-                >
-                  {prod.visible === false ? "👁‍🗨" : "👁"}
-                </button>
-              )}
-
-              {esAdmin && (
-                <button
-                  className={`px-2 py-1 md:px-2 md:py-1 text-sm md:text-base rounded-lg transition-all shadow-sm ${
-                    dark
-                      ? "bg-gray-700 text-red-400 hover:bg-red-600 hover:text-white"
-                      : "bg-gray-100 text-red-500 hover:bg-red-500 hover:text-white"
-                  }`}
-                  onClick={() => setShowConfirmDelete(true)}
-                  title="Eliminar producto"
-                >
-                  🗑️
-                </button>
-              )}
-            </div>
-          </div>
+          <button
+            className={`h-8 w-8 flex items-center justify-center text-xs sm:text-sm rounded-lg transition-all shadow-sm active:scale-95 ${
+              dark
+                ? "bg-gray-700 text-red-400 hover:bg-red-600 hover:text-white"
+                : "bg-gray-100 text-red-500 hover:bg-red-500 hover:text-white"
+            }`}
+            onClick={() => {
+              setShowConfirmDelete(true);
+              setAdminMenuOpen(false);
+            }}
+            title="Eliminar producto"
+          >
+            🗑️
+          </button>
         </div>
+      )}
+    </div>
+  )}
+</div>
       ) : (
         <div className="w-full flex flex-col">
           {imagenPrincipal && (

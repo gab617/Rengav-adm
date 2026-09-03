@@ -33,7 +33,7 @@ export function ProductosCategorizados({ productosPorCategoria }) {
         : tamano === "grande"
           ? "grid-cols-2 md:grid-cols-3"
           : esMobile
-            ? "grid-cols-2 md:grid-cols-3 lg:grid-cols-4"
+            ? "grid-cols-2 md:grid-cols-3 xl:grid-cols-4"
             : "grid-cols-3 md:grid-cols-4";
 
   return (
@@ -137,7 +137,7 @@ export function ProductosCategorizados({ productosPorCategoria }) {
               style={{ background: categoria.color }}
             >
               <h2
-                className=" text-2xl font-bold mb-1 text-white px-2 py-1 rounded-t-lg"
+                className=" text-xl xl:text-2xl font-bold mb-1 text-white px-2 py-1 rounded-t-lg"
                 style={{ background: categoria.color }}
               >
                 {categoria.nombre}
@@ -146,13 +146,13 @@ export function ProductosCategorizados({ productosPorCategoria }) {
               {/* SIN SUBCATEGORÍA */}
               {productosSinSubcategoria.length > 0 && (
                 <div
-                  className={`shadow-md rounded-lg p-1.5 md:p-4 mb-2 transition-colors ${
+                  className={`shadow-md rounded-lg p-1.5 md:p-3 lg:p-4 mb-2 transition-colors ${
                     dark
                       ? "bg-gray-800/90 text-white"
                       : "bg-white/85 text-gray-900"
                   }`}
                 >
-                  <h3 className="text-xl font-semibold mb-1">
+                  <h3 className="text-lg xl:text-xl font-semibold mb-1">
                     Productos sin subcategoría
                   </h3>
                   <ul
@@ -180,13 +180,13 @@ export function ProductosCategorizados({ productosPorCategoria }) {
                   productos.length > 0 && (
                     <div
                       key={subcategoria.id}
-                      className={`shadow-md rounded-lg p-1 md:p-4 mb-2 transition-colors ${
+                      className={`shadow-md rounded-lg p-1 md:p-3 lg:p-4 mb-2 transition-colors ${
                         dark
                           ? "bg-gray-800/90 text-white"
                           : "bg-white/85 text-gray-900"
                       }`}
                     >
-                      <h3 className="px-1 md:px-2 py-1 text-xl font-semibold mb-1">
+                      <h3 className="px-1 md:px-2 py-1 text-lg xl:text-xl font-semibold mb-1">
                         {subcategoria.nombre}
                       </h3>
                       <ul

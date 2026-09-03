@@ -10,11 +10,13 @@ export function NavBar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { preferencias, updatePreferencias } = useAppContext();
+  const { preferencias, updatePreferencias, profile } = useAppContext();
   const [openMenu, setOpenMenu] = useState(false);
   const [pendientes, setPendientes] = useState(0);
 
   const dark = preferencias?.theme === "dark";
+
+  const esAdmin = profile?.role === "admin" || profile?.role === "super_admin";
 
   const toggleTheme = () => {
     updatePreferencias({ theme: dark ? "light" : "dark" });
@@ -99,7 +101,7 @@ export function NavBar() {
         </button>
 
         {/* Menú horizontal DESKTOP */}
-        <ul className="hidden md:flex gap-4 justify-center items-center mx-auto">
+        <ul className="hidden md:flex gap-x-1.5 940:gap-x-2 xl:gap-x-4 justify-center items-center flex-1 min-w-0">
           {menuItems?.map(({ title, icon, path }) => {
             const isActive = location.pathname === path;
 
@@ -107,7 +109,7 @@ export function NavBar() {
               <li key={path}>
                 <Link
                   to={path}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-full border-2 transition-colors duration-300
+                  className={`flex items-center gap-1 px-2 py-1 text-xs 940:gap-1.5 940:px-2.5 940:py-1.5 940:text-sm xl:gap-2 xl:px-4 xl:py-2 xl:text-base rounded-full border-2 transition-colors duration-300
                     ${
                       isActive
                         ? dark
@@ -119,22 +121,43 @@ export function NavBar() {
                     }
                   `}
                 >
-                  <span className="text-lg">{icon}</span>
-                  <span className="font-medium">{title}</span>
+                  <span className="text-sm 940:text-base xl:text-lg">{icon}</span>
+                  <span className="font-medium whitespace-nowrap">{title}</span>
                 </Link>
               </li>
             );
           })}
+          {esAdmin && (
+            <li>
+              <Link
+                to="/admin"
+                className={`flex items-center gap-1 px-2 py-1 text-xs 940:gap-1.5 940:px-2.5 940:py-1.5 940:text-sm xl:gap-2 xl:px-4 xl:py-2 xl:text-base rounded-full border-2 border-purple-500 shadow-md transition-colors duration-300
+                  ${
+                    location.pathname.startsWith("/admin")
+                      ? dark
+                        ? "bg-purple-500 text-white border-purple-400"
+                        : "bg-purple-500 text-white border-purple-500"
+                      : dark
+                        ? "text-purple-300 hover:bg-purple-600/30"
+                        : "text-purple-700 hover:bg-purple-100"
+                  }
+                `}
+              >
+                <span className="text-sm 940:text-base xl:text-lg">🛠️</span>
+                <span className="font-semibold whitespace-nowrap">Admin</span>
+              </Link>
+            </li>
+          )}
         </ul>
 
         {/* Acciones a la derecha: campanita de pedidos + tema */}
-        <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
+        <div className="flex items-center gap-1 940:gap-1.5 xl:gap-2 shrink-0">
           <button
             onClick={() => navigate("/pedidos-web")}
             title="Pedidos web pendientes"
-            className="relative w-[3em] h-[3em] rounded-full border flex items-center justify-center backdrop-blur-md transition-all duration-300 hover:scale-110"
+            className="relative w-[2em] h-[2em] 940:w-[2.5em] 940:h-[2.5em] xl:w-[3em] xl:h-[3em] rounded-full border flex items-center justify-center backdrop-blur-md transition-all duration-300 hover:scale-110"
           >
-            <span className="text-xl">🔔</span>
+            <span className="text-base 940:text-lg xl:text-xl">🔔</span>
             {pendientes > 0 && (
               <span
                 className="absolute -top-1 -right-1 min-w-[1.25rem] h-5 px-1 rounded-full bg-red-500 text-white text-xs font-bold flex items-center justify-center"
@@ -146,12 +169,12 @@ export function NavBar() {
 
           <button
             onClick={toggleTheme}
-            className="w-[3em] h-[3em] rounded-full border flex items-center justify-center backdrop-blur-md transition-all duration-300 hover:scale-110"
+            className="w-[2em] h-[2em] 940:w-[2.5em] 940:h-[2.5em] xl:w-[3em] xl:h-[3em] rounded-full border flex items-center justify-center backdrop-blur-md transition-all duration-300 hover:scale-110"
           >
             <img
               src={dark ? "./tema-dark.png" : "./tema-light.png"}
               alt="theme toggle"
-              className="w-[2em] h-[2em] opacity-90"
+              className="w-[1.25em] h-[1.25em] 940:w-[1.5em] 940:h-[1.5em] xl:w-[2em] xl:h-[2em] opacity-90"
             />
           </button>
         </div>
@@ -161,7 +184,7 @@ export function NavBar() {
       <div
         className={`
           md:hidden overflow-hidden transition-all duration-300 
-          ${openMenu ? "max-h-96 opacity-100" : "max-h-0 opacity-0"}
+          ${openMenu ? "max-h-[28rem] opacity-100" : "max-h-0 opacity-0"}
         `}
       >
         <ul className="flex flex-col gap-2 p-4 pt-0">
@@ -191,6 +214,18 @@ export function NavBar() {
               </li>
             );
           })}
+          {esAdmin && (
+            <li>
+              <Link
+                to="/admin"
+                onClick={() => setOpenMenu(false)}
+                className="flex items-center gap-3 px-4 py-3 rounded-xl border-2 border-purple-500 shadow-md transition-colors duration-300"
+              >
+                <span className="text-xl">🛠️</span>
+                <span className="font-semibold">Admin</span>
+              </Link>
+            </li>
+          )}
         </ul>
       </div>
     </nav>

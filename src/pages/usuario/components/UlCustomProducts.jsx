@@ -406,14 +406,14 @@ export function UlCustomProducts({ customProducts }) {
                               📦
                             </div>
                           )}
-                          <span className={`text-lg ${isExpanded ? "rotate-90 transition-transform" : ""}`}>
+                          <span className={`text-sm ${isExpanded ? "rotate-90 transition-transform" : ""}`}>
                             ▶
                           </span>
                           <h4 className={`font-semibold truncate ${textPrimary}`}>
                             {prod.user_custom_products?.name || prod.products_base?.name}
                           </h4>
                         </div>
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1 shrink-0">
                           {esAdmin && (
                             <button
                               type="button"
@@ -426,11 +426,17 @@ export function UlCustomProducts({ customProducts }) {
                                 dark ? "bg-blue-600 text-white hover:bg-blue-500" : "bg-blue-500 text-white hover:bg-blue-400"
                               }`}
                             >
-                              ✏️ Editar
+                              ✏️
                             </button>
                           )}
+                        </div>
+                      </div>
+
+                      {/* BADGES subcategoría + marca */}
+                      {(subcat || prod.products_base?.brand || prod.products_base?.brand_text) && (
+                        <div className="flex flex-wrap items-center gap-1.5 mt-2">
                           {subcat && (
-                            <span className={`text-xs px-1.5 py-0.5 rounded ${
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${
                               dark ? "bg-gray-600/50 text-gray-400" : "bg-gray-100 text-gray-500"
                             }`}>
                               {subcat.nombre}
@@ -442,7 +448,7 @@ export function UlCustomProducts({ customProducts }) {
                             {prod.products_base?.brand || prod.products_base?.brand_text || "Sin marca"}
                           </span>
                         </div>
-                      </div>
+                      )}
 
                       {/* DETALLES */}
                       {isExpanded && (

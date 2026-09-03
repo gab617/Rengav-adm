@@ -1,34 +1,30 @@
-import { useState } from "react";
+const quickOptions = [
+  { label: "50", value: 0.05 },
+  { label: "100", value: 0.1 },
+  { label: "500", value: 0.5 },
+  { label: "1k", value: 1 },
+];
 
-export function Balanza({ dark, onChange }) {
-  const [digits, setDigits] = useState("");
+const formatWeight = (nums) => {
+  if (!nums) return "";
 
-  const quickOptions = [
-    { label: "50g", value: 0.05 },
-    { label: "100g", value: 0.1 },
-    { label: "500g", value: 0.5 },
-    { label: "1kg", value: 1 },
-  ];
+  const padded = nums.padStart(4, "0");
+  const int = padded.slice(0, -3);
+  const dec = padded.slice(-3);
 
-  const formatWeight = (nums) => {
-    if (!nums) return "";
+  return `${Number(int)}.${dec}`;
+};
 
-    const padded = nums.padStart(4, "0");
-    const int = padded.slice(0, -3);
-    const dec = padded.slice(-3);
+export function Balanza({ dark, peso, onChange }) {
+  const grams = peso !== null && peso !== undefined ? Math.round(peso * 1000) : null;
 
-    return `${Number(int)}.${dec}`;
-  };
-
-  const updateWeight = (grams) => {
-    if (!grams) {
-      setDigits("");
+  const updateWeight = (gramsValue) => {
+    if (!gramsValue) {
       onChange?.(null);
       return;
     }
 
-    setDigits(String(grams));
-    onChange?.(grams / 1000);
+    onChange?.(gramsValue / 1000);
   };
 
   const handleChange = (e) => {
@@ -40,36 +36,41 @@ export function Balanza({ dark, onChange }) {
     if (e.key === "Backspace") {
       e.preventDefault();
 
-      const newDigits = digits.slice(0, -1);
-
-      if (!newDigits) {
-        updateWeight(null);
+      if (!grams) {
         return;
       }
 
-      updateWeight(Number(newDigits));
+      const newDigits = String(grams).slice(0, -1);
+
+      if (!newDigits) {
+        onChange?.(null);
+        return;
+      }
+
+      onChange?.(Number(newDigits) / 1000);
     }
   };
 
   const handleBalanzaClick = () => {
-    updateWeight(null);
+    onChange?.(null);
   };
 
   const addWeight = (value) => {
-    const current = Number(digits || 0);
+    const current = Number(grams || 0);
     const add = Math.round(value * 1000);
     const total = current + add;
 
     updateWeight(total);
   };
 
-  const displayValue = formatWeight(digits);
+  const displayValue = grams !== null ? formatWeight(String(grams)) : "";
 
   return (
-    <div className="flex justify-end items-center gap-1">
+    <div className="flex items-center gap-1">
       <div
-        className={`flex items-center gap-1 rounded-md border
-        ${dark ? "border-white/10 bg-black/20" : "border-gray-300 bg-white/70"}`}
+        className={`flex items-center gap-0.5 rounded-md border px-0.5 py-[2px] ${
+          dark ? "border-white/10 bg-black/20" : "border-gray-300 bg-white/70"
+        }`}
       >
         <input
           type="text"
@@ -79,7 +80,7 @@ export function Balanza({ dark, onChange }) {
           onKeyDown={handleKeyDown}
           placeholder="kg"
           className={`
-          w-16 text-sm px-1 py-[2px] rounded border text-center transition
+          w-11 text-xs px-1 py-[1px] rounded border text-center transition
           ${
             dark
               ? "bg-black/40 border-white/20 focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400"
@@ -93,8 +94,9 @@ export function Balanza({ dark, onChange }) {
           <button
             key={b.label}
             onClick={() => addWeight(b.value)}
+            title={`Agregar ${b.value >= 1 ? "1 kg" : b.value * 1000 + "g"}`}
             className={`
-            text-xs font-medium px-[.5em] py-[.3em]
+            text-[10px] leading-none font-medium px-1 py-1
             rounded border shadow-sm
             transition-all duration-150
             active:scale-95
@@ -112,12 +114,12 @@ export function Balanza({ dark, onChange }) {
 
       <img
         onClick={handleBalanzaClick}
-        className="cursor-pointer w-[9%] sm:w-[10%] md:w-[20%] lg:w-[10%] xl:w-[9%]
-        rounded-md shadow-md ring-2 ring-yellow-400/70 bg-yellow-50
-        hover:shadow-lg hover:scale-105
-        transition-all duration-200"
-        src="./balanza.png"
+        className="cursor-pointer w-7 h-7 rounded-md shadow-sm ring-1 ring-yellow-400/70 bg-yellow-50
+        hover:shadow-md hover:scale-105
+        transition-all duration-200 shrink-0"
+        src="/balanza.png"
         alt="Venta por peso"
+        title="Limpiar peso"
       />
     </div>
   );
