@@ -6,6 +6,7 @@ import { Productos } from "./tabs/Productos";
 import { Categorias } from "./tabs/Categorias";
 import { Configuracion } from "./tabs/Configuracion";
 import { ContactoPagos } from "./tabs/configuracion/ContactoPagos";
+import { UserSummaryCard } from "./UserSummaryCard";
 
 const TABS = [
   { id: "productos", label: "Productos" },
@@ -40,29 +41,8 @@ export function UserDetail() {
         </h1>
       </div>
 
-      {/* User card */}
-      <div className="bg-white rounded-xl shadow p-5 grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div>
-          <p className="text-xs text-gray-500">ID</p>
-          <p className="font-medium">{user.id}</p>
-        </div>
-
-        <div>
-          <p className="text-xs text-gray-500">Rol</p>
-          <p className="font-medium capitalize">{user.role}</p>
-        </div>
-        <div>
-          <p className="text-xs text-gray-500">Nombre</p>
-          <p className="font-medium capitalize">{user.name}</p>
-        </div>
-
-        <div>
-          <p className="text-xs text-gray-500">Registrado</p>
-          <p className="font-medium">
-            {new Date(user.created_at).toLocaleDateString()}
-          </p>
-        </div>
-      </div>
+      {/* User summary */}
+      <UserSummaryCard user={user} />
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-gray-200">

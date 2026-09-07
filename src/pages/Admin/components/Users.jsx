@@ -30,25 +30,41 @@ function shortId(id) {
   return id.slice(0, 8) + "…";
 }
 
-function StatCard({ icon, label, value, color = "blue" }) {
+function StatPill({ icon, label, value, color = "blue" }) {
   const { preferencias } = useAppContext();
   const dark = preferencias?.theme === "dark";
-  
+
   const colors = {
-    blue: dark ? "bg-blue-500/20 text-blue-400" : "bg-blue-50 text-blue-600",
-    green: dark ? "bg-green-500/20 text-green-400" : "bg-green-50 text-green-600",
-    red: dark ? "bg-red-500/20 text-red-400" : "bg-red-50 text-red-600",
-    yellow: dark ? "bg-yellow-500/20 text-yellow-400" : "bg-yellow-50 text-yellow-600",
-    purple: dark ? "bg-purple-500/20 text-purple-400" : "bg-purple-50 text-purple-600",
+    blue: dark ? "bg-blue-500/20 text-blue-400" : "bg-blue-100 text-blue-600",
+    green: dark ? "bg-green-500/20 text-green-400" : "bg-green-100 text-green-600",
+    red: dark ? "bg-red-500/20 text-red-400" : "bg-red-100 text-red-600",
+    yellow: dark ? "bg-yellow-500/20 text-yellow-400" : "bg-yellow-100 text-yellow-600",
+    purple: dark ? "bg-purple-500/20 text-purple-400" : "bg-purple-100 text-purple-600",
   };
 
   return (
-    <div className={`p-3 rounded-xl ${dark ? "bg-gray-800" : "bg-white"} border ${dark ? "border-gray-700" : "border-gray-200"}`}>
-      <div className="flex items-center gap-2 mb-1">
-        <span className="text-lg">{icon}</span>
-        <span className={`text-xs ${dark ? "text-gray-400" : "text-gray-500"}`}>{label}</span>
+    <div
+      className={`flex items-center gap-2 rounded-xl px-2.5 py-2 border transition-all hover:-translate-y-0.5 hover:shadow-md ${
+        dark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"
+      }`}
+    >
+      <span
+        className={`h-8 w-8 shrink-0 rounded-lg flex items-center justify-center text-sm ${colors[color]}`}
+      >
+        {icon}
+      </span>
+      <div className="min-w-0">
+        <p
+          className={`text-[10px] uppercase tracking-wide leading-tight ${
+            dark ? "text-gray-400" : "text-gray-500"
+          }`}
+        >
+          {label}
+        </p>
+        <p className={`text-sm font-bold leading-tight ${dark ? "text-white" : "text-gray-900"}`}>
+          {value}
+        </p>
       </div>
-      <span className={`text-xl font-bold ${colors[color].split(" ")[1]}`}>{value}</span>
     </div>
   );
 }
@@ -419,6 +435,28 @@ function UserExpandedDetail({ user, onClose, invalidateUserCategories }) {
   const textSecondary = dark ? "text-gray-400" : "text-gray-500";
   const bgCard = dark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200";
 
+  const statsItems = [
+    { icon: "📦", label: "Activos", value: stats.productosActivos, color: "green" },
+    { icon: "🏭", label: "Base", value: stats.productosBase, color: "blue" },
+    { icon: "✨", label: "Custom", value: stats.productosCustom, color: "purple" },
+    { icon: "🏪", label: "Stock", value: stats.stockTotal, color: "blue" },
+    { icon: "⚠️", label: "Sin stock", value: stats.productosSinStock, color: "yellow" },
+    { icon: "🧾", label: "Ventas", value: stats.ventasTotales, color: "purple" },
+    { icon: "💰", label: "Total", value: `$${stats.montoTotal.toLocaleString()}`, color: "green" },
+    {
+      icon: "📊",
+      label: "Ticket",
+      value: `$${Math.round(stats.ticketsPromedio).toLocaleString()}`,
+      color: "purple",
+    },
+    {
+      icon: viewingAllData ? "👥" : "📅",
+      label: viewingAllData ? "Users" : filterLabels[dateFilter],
+      value: viewingAllData ? stats.usuarios : stats.ventasTotales,
+      color: "blue",
+    },
+  ];
+
   if (loading) {
     return (
       <div className={`p-6 text-center ${textSecondary}`}>
@@ -461,20 +499,11 @@ function UserExpandedDetail({ user, onClose, invalidateUserCategories }) {
         </button>
       </div>
 
-      {/* STATS GRID */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3">
-        <StatCard icon="📦" label="Activos" value={stats.productosActivos} color="green" />
-        <StatCard icon="🏭" label="Base" value={stats.productosBase} color="blue" />
-        <StatCard icon="✨" label="Custom" value={stats.productosCustom} color="purple" />
-        <StatCard icon="🏪" label="Stock" value={stats.stockTotal} color="blue" />
-        <StatCard icon="⚠️" label="Sin stock" value={stats.productosSinStock} color="yellow" />
-      </div>
-
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
-        <StatCard icon="🧾" label="Ventas" value={stats.ventasTotales} color="purple" />
-        <StatCard icon="💰" label="Total" value={`$${stats.montoTotal.toLocaleString()}`} color="green" />
-        <StatCard icon="📊" label="Ticket" value={`$${Math.round(stats.ticketsPromedio).toLocaleString()}`} color="purple" />
-        <StatCard icon={viewingAllData ? "👥" : "📅"} label={viewingAllData ? "Users" : filterLabels[dateFilter]} value={viewingAllData ? stats.usuarios : stats.ventasTotales} color="blue" />
+      {/* RESUMEN EN GRILLA: mobile 2 columnas, desktop 5 */}
+      <div className="grid grid-cols-2 gap-2 mb-4 md:grid-cols-5">
+        {statsItems.map((s) => (
+          <StatPill key={s.label} {...s} />
+        ))}
       </div>
 
       {/* SECTION TABS */}
@@ -1264,57 +1293,57 @@ export function Users() {
     <div key={u.id} className={`rounded-xl border ${bgCard} overflow-hidden`}>
       {/* USER ROW */}
       <div
-        className="p-3 md:p-4 flex items-center justify-between cursor-pointer hover:bg-opacity-50 transition"
+        className="p-3 md:p-4 cursor-pointer hover:bg-opacity-50 transition"
         onClick={() => setExpandedUser(expandedUser === u.id ? null : u.id)}
       >
-        <div className="flex items-center gap-3">
-          <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${
-            u.role === "admin"
-              ? "bg-red-500/20 text-red-500"
-              : "bg-blue-500/20 text-blue-500"
-          }`}>
-            {u.name?.charAt(0)?.toUpperCase() || "?"}
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className={`w-10 h-10 rounded-full shrink-0 flex items-center justify-center font-bold ${
+              u.role === "admin"
+                ? "bg-red-500/20 text-red-500"
+                : "bg-blue-500/20 text-blue-500"
+            }`}>
+              {u.name?.charAt(0)?.toUpperCase() || "?"}
+            </div>
+            <div className="min-w-0">
+              <p className={`font-medium truncate ${textPrimary}`}>{u.name}</p>
+              <p className={`text-xs ${textSecondary}`}>
+                {shortId(u.id)} · {new Date(u.created_at).toLocaleDateString("es-AR")}
+              </p>
+            </div>
           </div>
-          <div>
-            <p className={`font-medium ${textPrimary}`}>{u.name}</p>
-            <p className={`text-xs ${textSecondary}`}>
-              {shortId(u.id)} · {new Date(u.created_at).toLocaleDateString("es-AR")}
-            </p>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+              u.role === "admin"
+                ? "bg-red-500/20 text-red-400"
+                : "bg-blue-500/20 text-blue-400"
+            }`}>
+              {u.role}
+            </span>
+            {isSuperAdmin && tenantsMap[u.tenant_id] && (
+              <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-500/20 text-gray-400">
+                {tenantsMap[u.tenant_id]}
+              </span>
+            )}
+            <span className={`text-2xl ${textSecondary} transition-transform ${expandedUser === u.id ? "rotate-180" : ""}`}>
+              ▼
+            </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-            u.role === "admin"
-              ? "bg-red-500/20 text-red-400"
-              : "bg-blue-500/20 text-blue-400"
-          }`}>
-            {u.role}
-          </span>
-          {isSuperAdmin && tenantsMap[u.tenant_id] && (
-            <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-500/20 text-gray-400">
-              {tenantsMap[u.tenant_id]}
-            </span>
-          )}
-          {userCategoriesMap[u.id]?.length > 0 && (
-            <div className="flex gap-1">
-              {userCategoriesMap[u.id].slice(0, 2).map(catId => {
-                const cat = systemCategories.find(c => c.id === catId);
-                return cat ? (
-                  <span key={catId} className="px-1.5 py-0.5 rounded text-xs bg-purple-500/20 text-purple-400">
-                    {cat.name}
-                  </span>
-                ) : null;
-              })}
-              {userCategoriesMap[u.id].length > 2 && (
-                <span className={`text-xs ${textSecondary}`}>+{userCategoriesMap[u.id].length - 2}</span>
-              )}
-            </div>
-          )}
-          <span className={`text-2xl ${textSecondary} transition-transform ${expandedUser === u.id ? "rotate-180" : ""}`}>
-            ▼
-          </span>
-        </div>
+        {userCategoriesMap[u.id]?.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1">
+            {userCategoriesMap[u.id].map(catId => {
+              const cat = systemCategories.find(c => c.id === catId);
+              return cat ? (
+                <span key={catId} className="px-1.5 py-0.5 rounded text-xs bg-purple-500/20 text-purple-400">
+                  {cat.name}
+                </span>
+              ) : null;
+            })}
+          </div>
+        )}
       </div>
 
       {/* EXPANDED DETAIL */}
