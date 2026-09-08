@@ -1,15 +1,30 @@
 import { createContext, useContext, useState, useEffect, useMemo } from "react";
 import { supabase } from "../services/supabaseClient";
+import { useAuth } from "./AuthContext";
 
 const SizesContext = createContext();
 
 export function SizesProvider({ children }) {
+  const { user, loading: authLoading } = useAuth();
   const [sizes, setSizes] = useState([]);
   const [categorySizes, setCategorySizes] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
+
+    // Nada de fetch ANÓNIMO: si no hay sesión no pedimos nada.
+    // loading se mantiene true para que la UI espere (loader) sin pintar talles vacíos.
+    if (authLoading || !user) {
+      setSizes([]);
+      setCategorySizes([]);
+      setLoading(true);
+      return () => {
+        active = false;
+      };
+    }
+
+    setLoading(true);
 
     async function load() {
       const [sizesRes, csRes] = await Promise.all([
@@ -26,8 +41,10 @@ export function SizesProvider({ children }) {
 
     load();
 
-    return () => { active = false; };
-  }, []);
+    return () => {
+      active = false;
+    };
+  }, [authLoading, user]);
 
   const sizesById = useMemo(() => {
     const map = {};

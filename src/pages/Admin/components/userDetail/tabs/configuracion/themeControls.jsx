@@ -217,3 +217,100 @@ export function PalettePicker({ onApply }) {
     </div>
   );
 }
+
+const FIT_OPTIONS = [
+  { value: "", label: "Heredar" },
+  { value: "cover", label: "Cubrir" },
+  { value: "contain", label: "Entrera" },
+  { value: "fill", label: "Estirar" },
+  { value: "none", label: "Natural" },
+];
+
+const ZOOM_OPTIONS = [
+  { value: "", label: "Heredar" },
+  { value: "0.5", label: "0.5x" },
+  { value: "0.75", label: "0.75x" },
+  { value: "1", label: "1x" },
+  { value: "1.25", label: "1.25x" },
+  { value: "1.5", label: "1.5x" },
+  { value: "1.75", label: "1.75x" },
+  { value: "2", label: "2x" },
+];
+
+const POSITION_OPTIONS = [
+  { value: "", label: "Heredar" },
+  { value: "center", label: "⦿ Centro" },
+  { value: "top", label: "↑ Arriba" },
+  { value: "bottom", label: "↓ Abajo" },
+  { value: "left", label: "← Izquierda" },
+  { value: "right", label: "→ Derecha" },
+];
+
+function Segmented({ options, value, onChange }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {options.map((o) => (
+        <button
+          key={o.value || "_inherit"}
+          type="button"
+          onClick={() => onChange(o.value)}
+          className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+            value === o.value
+              ? "border-blue-500 bg-blue-50 text-blue-700"
+              : "border-gray-200 text-gray-600 hover:border-blue-300 hover:bg-gray-50"
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function ImageLookEditor({ title, fit, zoom, position, onChange }) {
+  return (
+    <div className="rounded-xl border border-gray-200 p-3 space-y-3">
+      <p className="text-sm font-medium text-gray-800">{title}</p>
+
+      <div>
+        <p className="text-xs text-gray-500 mb-1.5">Ajuste</p>
+        <Segmented
+          options={FIT_OPTIONS}
+          value={fit.value}
+          onChange={(v) => onChange(fit.key, v)}
+        />
+        <InheritHint base={fit.base} options={FIT_OPTIONS} value={fit.value} prefix="El negocio usa" />
+      </div>
+
+      <div>
+        <p className="text-xs text-gray-500 mb-1.5">Zoom</p>
+        <Segmented
+          options={ZOOM_OPTIONS}
+          value={zoom.value}
+          onChange={(v) => onChange(zoom.key, v)}
+        />
+        <InheritHint base={zoom.base} options={ZOOM_OPTIONS} value={zoom.value} prefix="El negocio usa" />
+      </div>
+
+      <div>
+        <p className="text-xs text-gray-500 mb-1.5">Posición del recorte</p>
+        <Segmented
+          options={POSITION_OPTIONS}
+          value={position.value}
+          onChange={(v) => onChange(position.key, v)}
+        />
+        <InheritHint base={position.base} options={POSITION_OPTIONS} value={position.value} prefix="El negocio usa" />
+      </div>
+
+      <p className="text-[11px] text-gray-400">
+        El ajuste usa la misma regla de herencia que los colores: un valor
+        vacío hereda lo configurado en el negocio.
+      </p>
+
+      <p className="text-[11px] text-gray-400">
+        Tip: en la vista previa podés arrastrar la portada (hero) para
+        acomodar la posición del encuadre.
+      </p>
+    </div>
+  );
+}

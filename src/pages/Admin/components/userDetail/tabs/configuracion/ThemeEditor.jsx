@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
-import { ThemePreview } from "./ThemePreview";
+import { ThemePreview, DeviceToggle } from "./ThemePreview";
 import { PreviewFab, PreviewModal } from "./PreviewModal";
 import { ImageUpload } from "./ImageUpload";
-import { COLORS, FONT_OPTIONS, SHAPE_OPTIONS } from "./themeData";
+import { COLORS, FONT_OPTIONS, IMAGE_LOOK_KEYS, SHAPE_OPTIONS } from "./themeData";
 import { ColorZones } from "./ColorZones";
 import {
   FontPicker,
   GroupCard,
+  ImageLookEditor,
   PalettePicker,
   TokenSelect,
 } from "./themeControls";
@@ -26,6 +27,7 @@ export function ThemeEditor({
   const previewColRef = useRef(null);
   const previewPanelRef = useRef(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [viewMode, setViewMode] = useState("desktop");
 
   useEffect(() => {
     const col = previewColRef.current;
@@ -171,7 +173,7 @@ export function ThemeEditor({
     if (saving) return;
     if (
       !confirm(
-        "¿Restaurar las imágenes de esta sucursal?\n\nEl logo y la portada propios se eliminan y vuelve a usar las del negocio. El resto del formulario se guarda tal cual está."
+        "¿Restaurar las imágenes de esta sucursal?\n\nEl logo y la portada propios se eliminan, los ajustes de encuadre se limpian y vuelve a usar las del negocio. El resto del formulario se guarda tal cual está."
       )
     )
       return;
@@ -181,7 +183,10 @@ export function ThemeEditor({
       heroRef.current?.removeOwn(),
     ]);
 
-    const res = await onSave({ ...form, logo_url: null, hero_url: null });
+    const theme = { ...form.theme };
+    for (const k of IMAGE_LOOK_KEYS) theme[k] = "";
+
+    const res = await onSave({ ...form, logo_url: null, hero_url: null, theme });
     if (res?.ok) {
       syncFromSaved(res);
       toast.success("Imágenes restauradas: hereda del negocio");
@@ -321,6 +326,28 @@ export function ThemeEditor({
               value={form.hero_url}
               onChange={(path) => setForm((f) => ({ ...f, hero_url: path }))}
             />
+
+            <div className="pt-4 border-t border-gray-100 space-y-4">
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                Encuadre de imágenes
+              </p>
+
+              <ImageLookEditor
+                title="Cómo se ve el logo"
+                fit={{ key: "logo-fit", value: form.theme["logo-fit"] || "", base: baseTheme["logo-fit"] }}
+                zoom={{ key: "logo-zoom", value: form.theme["logo-zoom"] || "", base: baseTheme["logo-zoom"] }}
+                position={{ key: "logo-position", value: form.theme["logo-position"] || "", base: baseTheme["logo-position"] }}
+                onChange={(key, v) => setToken(key, v)}
+              />
+
+              <ImageLookEditor
+                title="Cómo se ve la portada (hero)"
+                fit={{ key: "hero-fit", value: form.theme["hero-fit"] || "", base: baseTheme["hero-fit"] }}
+                zoom={{ key: "hero-zoom", value: form.theme["hero-zoom"] || "", base: baseTheme["hero-zoom"] }}
+                position={{ key: "hero-position", value: form.theme["hero-position"] || "", base: baseTheme["hero-position"] }}
+                onChange={(key, v) => setToken(key, v)}
+              />
+            </div>
           </div>
         </GroupCard>
 
@@ -419,17 +446,24 @@ export function ThemeEditor({
         <div
           ref={previewPanelRef}
           className="flex max-h-[calc(100vh-2rem)] flex-col gap-2 will-change-transform">
-          <p className="text-sm font-medium text-gray-600 shrink-0">Vista previa en vivo</p>
+          <div className="flex items-center justify-between gap-2 shrink-0">
+            <p className="text-sm font-medium text-gray-600">Vista previa en vivo</p>
+            <DeviceToggle value={viewMode} onChange={setViewMode} />
+          </div>
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain rounded-xl">
-            <ThemePreview
-              nombre={profile.name}
-              tenantNombre={tenantNombre}
-              theme={form.theme}
-              lema={form.lema}
-              descripcion={form.descripcion}
-              logoUrl={form.logo_url}
-              heroUrl={form.hero_url}
-            />
+            <div className={viewMode === "mobile" ? "mx-auto w-[390px] max-w-full" : "w-full"}>
+              <ThemePreview
+                device={viewMode}
+                nombre={profile.name}
+                tenantNombre={tenantNombre}
+                theme={form.theme}
+                lema={form.lema}
+                descripcion={form.descripcion}
+                logoUrl={form.logo_url}
+                heroUrl={form.hero_url}
+                onHeroPositionChange={(v) => setToken("hero-position", v)}
+              />
+            </div>
           </div>
           <p className="text-xs text-gray-400 shrink-0">
             Así se ve la tienda con los tokens actuales. Se guarda recién al tocar
@@ -443,6 +477,8 @@ export function ThemeEditor({
       <PreviewModal
         open={previewOpen}
         onClose={() => setPreviewOpen(false)}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
         nombre={profile.name}
         tenantNombre={tenantNombre}
         theme={form.theme}
@@ -450,6 +486,7 @@ export function ThemeEditor({
         descripcion={form.descripcion}
         logoUrl={form.logo_url}
         heroUrl={form.hero_url}
+        onHeroPositionChange={(v) => setToken("hero-position", v)}
       />
     </div>
   );

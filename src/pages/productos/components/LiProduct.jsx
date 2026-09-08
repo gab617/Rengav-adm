@@ -34,6 +34,7 @@ export function LiProduct({
     actualizarStockEnCarrito,
     profile,
     sizesById,
+    loadingSizes,
   } = useAppContext();
 
   const dark = preferencias?.theme === "dark";
@@ -359,6 +360,7 @@ export function LiProduct({
           sizes={productSizes}
           stockTalles={prod.stock_talles}
           dark={dark}
+          loading={loadingSizes}
         />
       )}
       <span className="font-mono">{`#${prod.custom_id ? "C-" : ""}${prod.id}`}</span>
@@ -588,6 +590,7 @@ export function LiProduct({
                   stockTalles={prod.stock_talles}
                   dark={dark}
                   repartido
+                  loading={loadingSizes}
                 />
               )}
             </div>

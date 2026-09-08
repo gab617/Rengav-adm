@@ -698,7 +698,7 @@ export const useProducts = (
     if (loadingBrands) return;
 
     fetchProductos();
-  }, [categoryId, subcategoryId, loadingBrands]);
+  }, [userId, categoryId, subcategoryId, loadingBrands]);
 
   const syncProductFromAdmin = (id, updates) => {
     const applyUpdates = (list) =>

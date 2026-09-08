@@ -1,4 +1,4 @@
-import { ThemePreview } from "./ThemePreview";
+import { DeviceToggle, ThemePreview } from "./ThemePreview";
 
 export function PreviewFab({ onOpen }) {
   return (
@@ -16,6 +16,8 @@ export function PreviewFab({ onOpen }) {
 export function PreviewModal({
   open,
   onClose,
+  viewMode,
+  onViewModeChange,
   nombre,
   tenantNombre,
   theme,
@@ -23,6 +25,7 @@ export function PreviewModal({
   descripcion,
   logoUrl,
   heroUrl,
+  onHeroPositionChange,
 }) {
   if (!open) return null;
 
@@ -34,7 +37,10 @@ export function PreviewModal({
       onClick={onClose}
     >
       <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-white/10 bg-gray-900">
-        <p className="text-sm font-medium text-white">Vista previa en vivo</p>
+        <div className="flex items-center gap-3 min-w-0">
+          <p className="text-sm font-medium text-white shrink-0">Vista previa en vivo</p>
+          <DeviceToggle value={viewMode} onChange={onViewModeChange} />
+        </div>
         <button
           type="button"
           onClick={onClose}
@@ -48,8 +54,9 @@ export function PreviewModal({
         className="flex-1 overflow-y-auto overscroll-contain p-4"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="max-w-sm mx-auto space-y-3 pb-4">
+        <div className={viewMode === "mobile" ? "mx-auto max-w-[390px] space-y-3 pb-4" : "space-y-3 pb-4"}>
           <ThemePreview
+            device={viewMode}
             nombre={nombre}
             tenantNombre={tenantNombre}
             theme={theme}
@@ -57,6 +64,7 @@ export function PreviewModal({
             descripcion={descripcion}
             logoUrl={logoUrl}
             heroUrl={heroUrl}
+            onHeroPositionChange={onHeroPositionChange}
           />
           <p className="text-[11px] text-center text-gray-400">
             Así se ve la tienda con los tokens actuales. Se guarda recién al

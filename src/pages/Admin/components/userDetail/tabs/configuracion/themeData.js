@@ -385,6 +385,15 @@ export const FONT_OPTIONS = [
   { value: "'Courier New', ui-monospace, monospace", label: "Mono" },
 ];
 
+export const IMAGE_LOOK_KEYS = [
+  "logo-fit",
+  "logo-zoom",
+  "logo-position",
+  "hero-fit",
+  "hero-zoom",
+  "hero-position",
+];
+
 export const SHAPE_OPTIONS = {
   radio: [
     { value: "", label: "Heredar (del negocio)" },
