@@ -17,7 +17,7 @@ const DEFAULTS = {
   "logo-fit": "cover",
   "logo-zoom": "1",
   "logo-position": "center",
-  "hero-fit": "contain",
+  "hero-fit": "cover",
   "hero-zoom": "1",
   "hero-position": "center",
 };
@@ -191,7 +191,18 @@ function FeaturedCardPreview({ p, t }) {
 
 function FeaturedSectionPreview({ t }) {
   return (
-    <div className="pt-4">
+    <div className="relative z-10 mt-1 pt-3 sm:mt-3 sm:pt-4">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 -top-4 -z-10 h-14 sm:-top-8 sm:h-24"
+        style={{
+          background: `linear-gradient(to bottom,
+            transparent 0%,
+            color-mix(in srgb, ${t.tarjeta} 55%, transparent) 30%,
+            ${t.tarjeta} 55%,
+            ${t.tarjeta} 100%)`,
+        }}
+      />
       <div className="flex items-center justify-between mb-2 px-4">
         <h2
           className="flex items-center gap-1.5 text-sm font-semibold tracking-tight"
@@ -364,12 +375,13 @@ export function ThemePreview({
 
   return (
     <div
-      className="rounded-xl overflow-hidden border bg-white"
+      className="overflow-hidden border shadow-sm"
       style={{
-        background: t.fondo,
+        background: t.tarjeta,
         color: t.texto,
         fontFamily: t["font-cuerpo"],
         borderColor: t.borde,
+        borderRadius: mobile ? 0 : t.radio,
       }}
     >
       {/* Header (igual a StoreHeader del storefront) */}
@@ -412,7 +424,10 @@ export function ThemePreview({
 
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_-20%,rgba(255,255,255,0.14),transparent_45%)] pointer-events-none" />
 
-        <div className={`relative ${mobile ? "px-3 py-3" : "px-4 py-3.5"}`}>
+        <div
+          className={`relative z-10 ${mobile ? "px-3 pb-7 pt-4" : "px-4 pb-10 pt-5"}`}
+          style={heroUrl ? { textShadow: "0 1px 3px rgba(0,0,0,0.4)" } : undefined}
+        >
           {logoUrl && (
             <div
               className={`mb-2 overflow-hidden rounded-xl ring-2 ring-white/30 bg-white/10 shadow-lg ${

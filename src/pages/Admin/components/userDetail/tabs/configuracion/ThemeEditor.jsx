@@ -126,6 +126,23 @@ export function ThemeEditor({
     }
   };
 
+  const handleCancelChanges = () => {
+    if (saving) return;
+    if (
+      !confirm(
+        "¿Cancelar los cambios sin guardar?\n\nEl formulario vuelve a los valores guardados actualmente."
+      )
+    )
+      return;
+    setForm({
+      lema: effective.lema || "",
+      descripcion: effective.descripcion || "",
+      logo_url: effective.logo_url || null,
+      hero_url: effective.hero_url || null,
+      theme: { ...effective.theme },
+    });
+  };
+
   const handleRestore = async () => {
     if (saving) return;
     if (
@@ -429,6 +446,14 @@ export function ThemeEditor({
             className="w-full sm:w-auto px-5 py-2.5 rounded-xl text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
           >
             {saving ? "Guardando..." : "Guardar estilo"}
+          </button>
+
+          <button
+            onClick={handleCancelChanges}
+            disabled={saving}
+            className="w-full sm:w-auto px-5 py-2.5 rounded-xl text-sm font-medium border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+          >
+            Cancelar cambios
           </button>
 
           <button
