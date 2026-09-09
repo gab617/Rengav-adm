@@ -62,6 +62,7 @@ export function LiProduct({
   const [pesoSeleccionado, setPesoSeleccionado] = useState(null);
   const [cantidad, setCantidad] = useState(1);
   const [adminMenuOpen, setAdminMenuOpen] = useState(false);
+  const [imagenIndex, setImagenIndex] = useState(0);
 
   useEffect(() => {
     setEditedProduct({
@@ -73,6 +74,7 @@ export function LiProduct({
     setShowConfirmDelete(false);
     setShowProductModal(false);
     setCantidad(1);
+    setImagenIndex(0);
   }, [prod.id]);
 
   const esPeso = prod.products_base?.type_unit === "weight";
@@ -190,15 +192,30 @@ export function LiProduct({
         ? "scale-105 text-lg xl:text-xl"
         : "text-base";
 
-  const enCarritoClass = enCarrito
-    ? dark
-      ? "border-yellow-500 shadow-yellow-500/30 shadow-lg"
-      : "border-yellow-400 shadow-yellow-400/50 shadow-lg"
-    : "";
-
   const sinStock = prod.stock <= 0;
 
   const imagenPrincipal = prod.imagenes?.[0] || prod.products_base?.image_url || null;
+  const imagenes = useMemo(() => {
+    const lista = Array.isArray(prod.imagenes) && prod.imagenes.length
+      ? prod.imagenes.filter(Boolean)
+      : [];
+    return lista.length
+      ? lista
+      : prod.products_base?.image_url
+        ? [prod.products_base.image_url]
+        : [];
+  }, [prod]);
+  const imagenActual = imagenes[imagenIndex] || null;
+  const nextImagen = (e) => {
+    e.stopPropagation();
+    if (imagenes.length < 2) return;
+    setImagenIndex((i) => (i + 1) % imagenes.length);
+  };
+  const prevImagen = (e) => {
+    e.stopPropagation();
+    if (imagenes.length < 2) return;
+    setImagenIndex((i) => (i - 1 + imagenes.length) % imagenes.length);
+  };
   const publicUrl = (path) => {
     if (!path) return null;
     if (path.startsWith("http")) return path;
@@ -541,19 +558,56 @@ export function LiProduct({
 </div>
       ) : (
         <div className="w-full flex flex-col">
-          {imagenPrincipal && (
+          {imagenActual && (
             <div
-              className="h-24 md:h-32 overflow-hidden rounded-lg border cursor-pointer"
+              className="relative aspect-[4/5] w-full overflow-hidden rounded-lg border cursor-pointer"
               style={{ borderColor: dark ? "#374151" : "#e5e7eb", backgroundColor: dark ? "#111827" : "#f9fafb" }}
               onClick={() => setShowProductModal(true)}
               title="Ver detalle"
             >
               <img
-                src={publicUrl(imagenPrincipal)}
+                src={publicUrl(imagenActual)}
                 alt={prod.products_base?.name || "Producto"}
                 onError={(e) => { e.currentTarget.style.display = "none"; }}
                 className="w-full h-full object-contain"
               />
+              {imagenes.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={prevImagen}
+                    title="Imagen anterior"
+                    aria-label="Imagen anterior"
+                    className="absolute top-1/2 left-1 z-10 flex h-7 w-7 -translate-y-1/2 select-none items-center justify-center rounded-full bg-black/35 text-lg font-bold text-white backdrop-blur-sm transition hover:bg-black/60 active:scale-95"
+                  >
+                    ⟨
+                  </button>
+                  <button
+                    type="button"
+                    onClick={nextImagen}
+                    title="Imagen siguiente"
+                    aria-label="Imagen siguiente"
+                    className="absolute top-1/2 right-1 z-10 flex h-7 w-7 -translate-y-1/2 select-none items-center justify-center rounded-full bg-black/35 text-lg font-bold text-white backdrop-blur-sm transition hover:bg-black/60 active:scale-95"
+                  >
+                    ⟩
+                  </button>
+                  <span className="absolute top-1.5 right-1.5 z-10 rounded-full bg-black/40 px-1.5 py-0.5 text-[10px] font-semibold text-white backdrop-blur-sm">
+                    {imagenIndex + 1}/{imagenes.length}
+                  </span>
+                  <div className="absolute inset-x-0 bottom-1.5 z-10 flex items-center justify-center gap-1">
+                    {imagenes.map((_, i) => (
+                      <span
+                        key={i}
+                        className={
+                          i === imagenIndex
+                            ? "h-1.5 w-1.5 rounded-full bg-white shadow"
+                            : "h-1.5 w-1.5 rounded-full bg-white/40"
+                        }
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           )}
           <div className="flex flex-col items-start justify-between gap-2 mb-2">

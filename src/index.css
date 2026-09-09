@@ -35,4 +35,74 @@ div.Toastify__toast.toast-pedido-alerta.toast-pedido-alerta.toast-pedido-flash {
     0 14px 30px rgba(0, 0, 0, 0.45) !important;
 }
 
+/* ============================================================
+   Login (dark + glass): animaciones y texturas del fondo.
+   3 blobs difuminados se desplazan en loop; un grano SVG sutil
+   quita la "planitud" digital del degradado meshing.
+   ============================================================ */
+
+@keyframes blob-float {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(30px, -40px) scale(1.08);
+  }
+  66% {
+    transform: translate(-20px, 28px) scale(0.96);
+  }
+}
+
+@keyframes blob-float-2 {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(-32px, 26px) scale(1.05);
+  }
+  66% {
+    transform: translate(24px, -30px) scale(0.98);
+  }
+}
+
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-blob {
+  animation: blob-float 16s ease-in-out infinite;
+}
+
+.animate-blob-2 {
+  animation: blob-float-2 20s ease-in-out infinite;
+}
+
+.animate-card-in {
+  animation: card-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.bg-noise {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+}
+
+/* Autofill del navegador: evita que pinte los inputs en blanco sobre el dark.
+   El box-shadow inset falsifica el fondo oscuro y text-fill-color el texto. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px #14141d inset;
+  -webkit-text-fill-color: #fff;
+  caret-color: #fff;
+  transition: background-color 9999s ease-in-out 0s;
+}
+
 

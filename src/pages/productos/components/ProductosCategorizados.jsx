@@ -126,90 +126,149 @@ export function ProductosCategorizados({ productosPorCategoria }) {
 
       {/* === CONTENIDO === */}
       {productosPorCategoria.map(
-        ({ categoria, productosConSubcategoria, productosSinSubcategoria }) =>
-          (productosConSubcategoria.some(
-            ({ productos }) => productos.length > 0
-          ) ||
-            productosSinSubcategoria.length > 0) && (
+        ({ categoria, productosConSubcategoria, productosSinSubcategoria }) => {
+          const tieneProductos =
+            productosConSubcategoria.some(
+              ({ productos }) => productos.length > 0
+            ) || productosSinSubcategoria.length > 0;
+          if (!tieneProductos) return null;
+
+          const totalProductos =
+            productosSinSubcategoria.length +
+            productosConSubcategoria.reduce(
+              (acc, s) => acc + s.productos.length,
+              0
+            );
+
+          return (
             <div
               key={categoria.id}
-              className="mb-3 p-1 rounded-xl transition-colors"
-              style={{ background: categoria.color }}
+              className="mb-3 overflow-hidden rounded-2xl border transition-colors"
+              style={{
+                borderColor: dark
+                  ? "rgba(255,255,255,0.08)"
+                  : "rgba(0,0,0,0.06)",
+                background: `color-mix(in srgb, ${categoria.color} 8%, ${
+                  dark ? "#0f172a" : "#ffffff"
+                })`,
+              }}
             >
-              <h2
-                className=" text-xl xl:text-2xl font-bold mb-1 text-white px-2 py-1 rounded-t-lg"
-                style={{ background: categoria.color }}
+              <div
+                className="flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2 shadow-sm sm:px-4 sm:py-2.5"
+                style={{
+                  background: `linear-gradient(100deg, ${categoria.color}, color-mix(in srgb, ${categoria.color} 78%, #000))`,
+                }}
               >
-                {categoria.nombre}
-              </h2>
+                <h2 className="text-lg font-bold tracking-wide text-white sm:text-xl">
+                  {categoria.nombre}
+                </h2>
+                <span className="rounded-full bg-white/20 px-2 py-0.5 text-[11px] font-semibold text-white">
+                  {totalProductos} productos
+                </span>
+              </div>
 
-              {/* SIN SUBCATEGORÍA */}
-              {productosSinSubcategoria.length > 0 && (
-                <div
-                  className={`shadow-md rounded-lg p-1.5 md:p-3 lg:p-4 mb-2 transition-colors ${
-                    dark
-                      ? "bg-gray-800/90 text-white"
-                      : "bg-white/85 text-gray-900"
-                  }`}
-                >
-                  <h3 className="text-lg xl:text-xl font-semibold mb-1">
-                    Productos sin subcategoría
-                  </h3>
-                  <ul
-                    className={`grid ${gridCols} items-start gap-2 ${
-                      vista === "listado" ? "divide-y gap-1" : ""
+              <div className="space-y-2 p-2 sm:p-3">
+                {/* SIN SUBCATEGORÍA */}
+                {productosSinSubcategoria.length > 0 && (
+                  <section
+                    className={`rounded-xl border p-1.5 sm:p-2 ${
+                      dark
+                        ? "border-white/10 bg-gray-900/60"
+                        : "border-black/5 bg-white/70"
                     }`}
                   >
-                    {productosSinSubcategoria.map((prod) => (
-                      <LiProduct
-                        key={prod.id_producto}
-                        prod={prod}
-                        color={categoria.color}
-                        vista={vista}
-                        tamano={tamano}
-                        dark={dark}
+                    <div className="mb-1.5 flex items-center gap-1.5 px-1.5 pt-0.5">
+                      <span
+                        className="h-3.5 w-1 shrink-0 rounded-full"
+                        style={{ background: categoria.color }}
                       />
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* CON SUBCATEGORÍA */}
-              {productosConSubcategoria.map(
-                ({ subcategoria, productos }) =>
-                  productos.length > 0 && (
-                    <div
-                      key={subcategoria.id}
-                      className={`shadow-md rounded-lg p-1 md:p-3 lg:p-4 mb-2 transition-colors ${
-                        dark
-                          ? "bg-gray-800/90 text-white"
-                          : "bg-white/85 text-gray-900"
-                      }`}
-                    >
-                      <h3 className="px-1 md:px-2 py-1 text-lg xl:text-xl font-semibold mb-1">
-                        {subcategoria.nombre}
-                      </h3>
-                      <ul
-                        className={`grid ${gridCols} items-start gap-2 ${
-                          vista === "listado" ? "divide-y gap-1" : ""
+                      <h3
+                        className={`text-[11px] font-semibold uppercase tracking-wider ${
+                          dark ? "text-gray-200" : "text-gray-600"
                         }`}
                       >
-                        {productos.map((prod) => (
-                          <LiProduct
-                            key={prod.id_producto}
-                            prod={prod}
-                            color={categoria.color}
-                            vista={vista}
-                            tamano={tamano}
-                            dark={dark}
-                          />
-                        ))}
-                      </ul>
+                        Productos sin subcategoría
+                      </h3>
+                      <span
+                        className="ml-auto shrink-0 rounded-full px-1.5 py-px text-[10px] font-semibold text-white"
+                        style={{ background: categoria.color }}
+                      >
+                        {productosSinSubcategoria.length}
+                      </span>
                     </div>
-                  )
-              )}
+                    <ul
+                      className={`grid ${gridCols} items-start gap-2 ${
+                        vista === "listado" ? "divide-y gap-0.5" : ""
+                      }`}
+                    >
+                      {productosSinSubcategoria.map((prod) => (
+                        <LiProduct
+                          key={prod.id_producto}
+                          prod={prod}
+                          color={categoria.color}
+                          vista={vista}
+                          tamano={tamano}
+                          dark={dark}
+                        />
+                      ))}
+                    </ul>
+                  </section>
+                )}
+
+                {/* CON SUBCATEGORÍA */}
+                {productosConSubcategoria.map(
+                  ({ subcategoria, productos }) =>
+                    productos.length > 0 && (
+                      <section
+                        key={subcategoria.id}
+                        className={`rounded-xl border p-1.5 sm:p-2 ${
+                          dark
+                            ? "border-white/10 bg-gray-900/60"
+                            : "border-black/5 bg-white/70"
+                        }`}
+                      >
+                        <div className="mb-1.5 flex items-center gap-1.5 px-1.5 pt-0.5">
+                          <span
+                            className="h-3.5 w-1 shrink-0 rounded-full"
+                            style={{ background: categoria.color }}
+                          />
+                          <h3
+                            className={`text-[11px] font-semibold uppercase tracking-wider ${
+                              dark ? "text-gray-200" : "text-gray-600"
+                            }`}
+                          >
+                            {subcategoria.nombre}
+                          </h3>
+                          <span
+                            className="ml-auto shrink-0 rounded-full px-1.5 py-px text-[10px] font-semibold text-white"
+                            style={{ background: categoria.color }}
+                          >
+                            {productos.length}
+                          </span>
+                        </div>
+                        <ul
+                          className={`grid ${gridCols} items-start gap-2 ${
+                            vista === "listado" ? "divide-y gap-0.5" : ""
+                          }`}
+                        >
+                          {productos.map((prod) => (
+                            <LiProduct
+                              key={prod.id_producto}
+                              prod={prod}
+                              color={categoria.color}
+                              vista={vista}
+                              tamano={tamano}
+                              dark={dark}
+                            />
+                          ))}
+                        </ul>
+                      </section>
+                    )
+                )}
+              </div>
             </div>
-          )
+          );
+        }
       )}
     </div>
   );

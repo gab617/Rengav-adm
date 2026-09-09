@@ -463,6 +463,11 @@ function PedidoDetallePanel({ pedido, dark, onConfirmar, onCancelar, procesando,
                       {item.marca && (
                         <span className={`text-xs ${dark ? "text-gray-500" : "text-gray-400"}`}>{item.marca}</span>
                       )}
+                      {item.talle && (
+                        <span className={`inline-block mt-0.5 rounded px-1 py-px text-[10px] font-semibold ${dark ? "bg-gray-700 text-purple-300" : "bg-purple-100 text-purple-700"}`}>
+                          Talle {item.talle}
+                        </span>
+                      )}
                     </div>
                     <div className="text-right shrink-0">
                       <span className={`text-xs font-medium ${dark ? "text-gray-400" : "text-gray-500"}`}>x{item.cantidad}</span>

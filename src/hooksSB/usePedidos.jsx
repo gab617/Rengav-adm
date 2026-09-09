@@ -108,13 +108,21 @@ export function usePedidos({ userId }) {
         productsMap[p.id] = p;
       });
 
-      // Verificar stock suficiente
+      // Verificar stock suficiente: contra el talle si el producto
+      // tiene desglose y el pedido trae talle; si no, contra el stock general.
       for (const item of items) {
         const prod = productsMap[item.producto_id];
         if (!prod) {
           throw new Error(`Producto ${item.producto_id} no encontrado en tu sucursal`);
         }
-        if (prod.stock < item.cantidad) {
+        if (item.talle && prod.stock_talles && item.talle in prod.stock_talles) {
+          const stockTalle = Number(prod.stock_talles[item.talle]) || 0;
+          if (stockTalle < item.cantidad) {
+            throw new Error(
+              `Stock insuficiente para "${item.nombre}" (Talle ${item.talle}): tenés ${stockTalle}, el pedido pide ${item.cantidad}`
+            );
+          }
+        } else if (prod.stock < item.cantidad) {
           throw new Error(
             `Stock insuficiente para "${item.nombre}": tenés ${prod.stock}, el pedido pide ${item.cantidad}`
           );
@@ -148,7 +156,7 @@ export function usePedidos({ userId }) {
         cantidad: item.cantidad,
         precio_unitario: item.precio_unitario,
         precio_compra: productsMap[item.producto_id]?.precio_compra || 0,
-        talle: null,
+        talle: item.talle || null,
       }));
 
       const { data: detalles, error: errDetalles } = await supabase
@@ -162,7 +170,7 @@ export function usePedidos({ userId }) {
       const stockPayload = items.map((item) => ({
         id: item.producto_id,
         cantidad: item.cantidad,
-        talle: null,
+        talle: item.talle || null,
       }));
 
       const { error: errStock } = await supabase.rpc("update_stocks", {
