@@ -23,6 +23,8 @@ export function LiProduct({
   color,
   vista = "mosaico",
   tamano = "normal",
+  menuAbierto = false,
+  onToggleMenu = null,
 }) {
   const {
     actualizarProducto,
@@ -61,8 +63,28 @@ export function LiProduct({
   });
   const [pesoSeleccionado, setPesoSeleccionado] = useState(null);
   const [cantidad, setCantidad] = useState(1);
-  const [adminMenuOpen, setAdminMenuOpen] = useState(false);
+  const [adminMenuLocal, setAdminMenuLocal] = useState(false);
   const [imagenIndex, setImagenIndex] = useState(0);
+
+  // Menú admin: cuando llega onToggleMenu (acordeón desde el padre) es controlado;
+  // si no, cae a estado local para no romper otros usos de LiProduct.
+  const adminMenuOpen = onToggleMenu ? menuAbierto : adminMenuLocal;
+
+  const toggleAdminMenu = () => {
+    if (onToggleMenu) {
+      onToggleMenu();
+      return;
+    }
+    setAdminMenuLocal((v) => !v);
+  };
+
+  const closeAdminMenu = () => {
+    if (onToggleMenu) {
+      onToggleMenu();
+      return;
+    }
+    setAdminMenuLocal(false);
+  };
 
   useEffect(() => {
     setEditedProduct({
@@ -264,6 +286,7 @@ export function LiProduct({
         className={`
         group relative isolate
         rounded-xl border-2 transition-all duration-200
+        ${adminMenuOpen ? "z-40" : ""}
         ${vista === "listado"
           ? "flex items-center justify-between md:p-2 md:h-[60px] gap-2"
           : "flex flex-col justify-between p-2 pt-5 min-h-[110px]"
@@ -476,7 +499,7 @@ export function LiProduct({
       <button
         onClick={(e) => {
           e.stopPropagation();
-          setAdminMenuOpen((v) => !v);
+          toggleAdminMenu();
         }}
         title="Acciones de administración"
         className={`h-8 w-8 flex items-center justify-center rounded-lg transition-colors shadow-sm active:scale-95 ${
@@ -502,7 +525,7 @@ export function LiProduct({
             className="h-8 w-8 flex items-center justify-center text-xs sm:text-sm bg-blue-500 hover:bg-blue-400 text-white rounded-lg transition-colors shadow-sm active:scale-95"
             onClick={() => {
               setIsEditing(!isEditing);
-              setAdminMenuOpen(false);
+              closeAdminMenu();
             }}
             title="Editar producto"
           >
@@ -545,7 +568,7 @@ export function LiProduct({
             }`}
             onClick={() => {
               setShowConfirmDelete(true);
-              setAdminMenuOpen(false);
+              closeAdminMenu();
             }}
             title="Eliminar producto"
           >

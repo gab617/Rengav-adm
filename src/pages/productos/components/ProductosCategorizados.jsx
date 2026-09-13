@@ -17,6 +17,9 @@ export function ProductosCategorizados({ productosPorCategoria }) {
   const [vista, setVista] = useState("mosaico");
   const [tamano, setTamano] = useState("normal");
 
+  // Acordeón: solo un menú admin abierto a la vez en todo el listado.
+  const [menuAbiertoId, setMenuAbiertoId] = useState(null);
+
   useEffect(() => {
     if (preferencias?.view_products) {
       setVista(preferencias.view_products === "list" ? "listado" : "mosaico");
@@ -203,12 +206,18 @@ export function ProductosCategorizados({ productosPorCategoria }) {
                     >
                       {productosSinSubcategoria.map((prod) => (
                         <LiProduct
-                          key={prod.id_producto}
+                          key={prod.id}
                           prod={prod}
                           color={categoria.color}
                           vista={vista}
                           tamano={tamano}
                           dark={dark}
+                          menuAbierto={menuAbiertoId === prod.id}
+                          onToggleMenu={() =>
+                            setMenuAbiertoId((cur) =>
+                              cur === prod.id ? null : prod.id,
+                            )
+                          }
                         />
                       ))}
                     </ul>
@@ -253,12 +262,18 @@ export function ProductosCategorizados({ productosPorCategoria }) {
                         >
                           {productos.map((prod) => (
                             <LiProduct
-                              key={prod.id_producto}
+                              key={prod.id}
                               prod={prod}
                               color={categoria.color}
                               vista={vista}
                               tamano={tamano}
                               dark={dark}
+                              menuAbierto={menuAbiertoId === prod.id}
+                              onToggleMenu={() =>
+                                setMenuAbiertoId((cur) =>
+                                  cur === prod.id ? null : prod.id,
+                                )
+                              }
                             />
                           ))}
                         </ul>

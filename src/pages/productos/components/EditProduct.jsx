@@ -65,21 +65,21 @@ export function EditProduct({
       }}
     >
       <div
-        className={`rounded-2xl bgb border shadow-2xl p-4 sm:p-6 w-full max-w-lg min-h-[70vh] sm:min-h-0 sm:max-h-[85vh] overflow-y-auto ${bg} mt-[5vh] sm:mt-0`}
+        className={`rounded-2xl bgb border shadow-2xl p-3 sm:p-4 w-full max-w-lg max-h-[90vh] sm:max-h-[80vh] overflow-y-auto ${bg} mt-[3vh] sm:mt-0`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-xl font-bold">Editar Producto</h3>
+        <div className="flex justify-between items-center mb-2">
+          <h3 className="text-lg font-bold">Editar Producto</h3>
           <button
             onClick={handleCancel}
-            className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors text-lg
+            className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors
               ${dark ? "bg-gray-700 hover:bg-gray-600" : "bg-gray-200 hover:bg-gray-300"}`}
           >
             ✕
           </button>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-2.5">
           <div>
             <label className="block text-sm font-semibold mb-1">Nombre (base)</label>
             <input
@@ -92,7 +92,7 @@ export function EditProduct({
               }
               disabled={editedProduct.tipo !== "custom"}
               onChange={editedProduct.tipo === "custom" ? handleChange : undefined}
-              className={`w-full p-3 border rounded-lg text-base ${
+              className={`w-full p-2 border rounded-lg text-sm ${
                 editedProduct.tipo !== "custom" ? inputDisabledBg : inputBg
               }`}
             />
@@ -106,7 +106,7 @@ export function EditProduct({
                 name="precio_venta"
                 value={editedProduct.precio_venta}
                 onChange={handleChange}
-                className={`w-full p-3 border rounded-lg text-base ${inputBg}`}
+                className={`w-full p-2 border rounded-lg text-sm ${inputBg}`}
               />
             </div>
             <div>
@@ -116,13 +116,13 @@ export function EditProduct({
                 name="precio_compra"
                 value={editedProduct.precio_compra}
                 onChange={handleChange}
-                className={`w-full p-3 border rounded-lg text-base ${inputBg}`}
+                className={`w-full p-2 border rounded-lg text-sm ${inputBg}`}
               />
             </div>
           </div>
 
           {ventaMenorQueCompra && (
-            <div className={`p-3 rounded-xl border-2 ${
+            <div className={`p-2 rounded-xl border-2 ${
               dark ? "bg-red-900/30 border-red-500" : "bg-red-50 border-red-400"
             }`}>
               <div className="flex items-start gap-2">
@@ -142,7 +142,7 @@ export function EditProduct({
           )}
 
           {!ventaMenorQueCompra && precioVenta > 0 && precioCompra > 0 && (
-            <div className={`p-3 rounded-lg text-center ${
+            <div className={`p-2 rounded-lg text-center ${
               dark ? "bg-green-900/30" : "bg-green-50"
             }`}>
               <p className={`text-sm font-medium ${dark ? "text-green-400" : "text-green-600"}`}>
@@ -153,7 +153,7 @@ export function EditProduct({
 
           {hayTalles ? (
             <div>
-              <div className={`p-3 rounded-xl border ${dark ? "border-gray-600 bg-gray-900/50" : "border-gray-200 bg-gray-50"}`}>
+              <div className={`p-2 rounded-xl border ${dark ? "border-gray-600 bg-gray-900/50" : "border-gray-200 bg-gray-50"}`}>
                 <StockPorTalle
                   sizes={productSizes}
                   value={editedProduct.stock_talles || {}}
@@ -162,7 +162,7 @@ export function EditProduct({
                   }
                   dark={dark}
                 />
-                <p className={`text-xs mt-2 font-medium ${dark ? "text-gray-400" : "text-gray-500"}`}>
+                <p className={`text-xs mt-1.5 font-medium ${dark ? "text-gray-400" : "text-gray-500"}`}>
                   📦 Stock total: {sumStockTalles(editedProduct.stock_talles)}
                 </p>
               </div>
@@ -173,7 +173,7 @@ export function EditProduct({
                   name="proveedor_nombre"
                   value={editedProduct.proveedor_nombre}
                   onChange={handleChange}
-                  className={`w-full p-3 border rounded-lg text-base ${inputBg}`}
+                  className={`w-full p-2 border rounded-lg text-sm ${inputBg}`}
                 />
               </div>
             </div>
@@ -187,7 +187,7 @@ export function EditProduct({
                   value={editedProduct.stock === 0 ? "" : editedProduct.stock}
                   onChange={handleChange}
                   placeholder="0"
-                  className={`w-full p-3 border rounded-lg text-base ${inputBg}`}
+                  className={`w-full p-2 border rounded-lg text-sm ${inputBg}`}
                 />
               </div>
               <div>
@@ -197,7 +197,7 @@ export function EditProduct({
                   name="proveedor_nombre"
                   value={editedProduct.proveedor_nombre}
                   onChange={handleChange}
-                  className={`w-full p-3 border rounded-lg text-base ${inputBg}`}
+                  className={`w-full p-2 border rounded-lg text-sm ${inputBg}`}
                 />
               </div>
             </div>
@@ -209,12 +209,12 @@ export function EditProduct({
               name="descripcion"
               value={editedProduct.descripcion}
               onChange={handleChange}
-              rows={3}
-              className={`w-full p-3 border rounded-lg text-base ${inputBg}`}
+              rows={2}
+              className={`w-full p-2 border rounded-lg text-sm ${inputBg}`}
             />
           </div>
 
-          <div className={`p-3 rounded-xl border ${dark ? "border-gray-600 bg-gray-900/50" : "border-gray-200 bg-gray-50"}`}>
+          <div className={`p-2 rounded-xl border ${dark ? "border-gray-600 bg-gray-900/50" : "border-gray-200 bg-gray-50"}`}>
             <ProductImagesEditor
               tenantId={profile?.tenant_id}
               productId={editedProduct.id}
@@ -228,9 +228,9 @@ export function EditProduct({
           </div>
         </div>
 
-        <div className="flex gap-3 mt-6">
+        <div className="flex gap-3 mt-3">
           <button
-            className={`flex-1 py-3 rounded-xl font-semibold transition-colors text-base ${btnSave}`}
+            className={`flex-1 py-2.5 rounded-xl font-semibold transition-colors text-sm ${btnSave}`}
             onClick={handleSubmit}
             disabled={ventaMenorQueCompra}
           >
@@ -238,7 +238,7 @@ export function EditProduct({
           </button>
 
           <button
-            className={`px-6 py-3 rounded-xl font-semibold transition-colors text-base ${btnCancel}`}
+            className={`px-6 py-2.5 rounded-xl font-semibold transition-colors text-sm ${btnCancel}`}
             onClick={handleCancel}
           >
             Cancelar
