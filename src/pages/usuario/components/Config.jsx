@@ -73,7 +73,7 @@ export function Config() {
       {/* ===================== INFO ===================== */}
       <div className={`p-4 rounded-xl ${cardBg} border ${borderColor} text-center`}>
         <p className="text-sm text-gray-500">
-          © 2024 ComercioApp - Tu gestión de ventas
+          © 2026 Rengav Admin - Gestión comercial
         </p>
       </div>
     </div>
