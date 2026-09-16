@@ -88,8 +88,11 @@ export function usePedidos({ userId }) {
 
   // -----------------------------------------------------
   // CONFIRMAR PEDIDO → crear venta + descontar stock
+  // metodoPago (opcional): override del método de la venta.
+  // Si no se pasa, usa el del pedido (tienda/transferencia →
+  // efectivo/transferencia).
   // -----------------------------------------------------
-  const confirmarPedido = useCallback(async (pedido) => {
+  const confirmarPedido = useCallback(async (pedido, metodoPago = null) => {
     setProcesando(pedido.id);
     try {
       const items = pedido.items || [];
@@ -129,6 +132,16 @@ export function usePedidos({ userId }) {
         }
       }
 
+      // Método de pago de la venta: override explícito o herencia del pedido
+      const metodoVenta =
+        metodoPago === "transferencia"
+          ? "transferencia"
+          : metodoPago === "efectivo"
+            ? "efectivo"
+            : pedido.metodo_pago === "transferencia"
+              ? "transferencia"
+              : "efectivo";
+
       // 2) Crear la venta en user_sales (con datos del cliente del pedido)
       const cliente = pedido.cliente || {};
       const { data: nuevaVenta, error: errVenta } = await supabase
@@ -140,7 +153,7 @@ export function usePedidos({ userId }) {
           cliente_nombre: cliente.nombre || null,
           cliente_telefono: cliente.telefono || null,
           cliente_email: cliente.email || null,
-          metodo_pago: "efectivo",
+          metodo_pago: metodoVenta,
           estado: "confirmado",
         })
         .select()

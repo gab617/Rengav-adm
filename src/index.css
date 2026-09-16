@@ -1,9 +1,8 @@
 @import "tailwindcss";
 
 /* ============================================================
-   Toast de pedidos nuevos: tarjeta ámbar sólida, texto oscuro,
-   más grande que el resto y con titileo hasta confirmar.
-   ------------------------------------------------------------
+   Toast de pedidos nuevos: card glass premium, theme-aware.
+   -----------------------------------------------------------------
    Por qué tanta especificidad y cero keyframes: el toastClassName
    global usa utilidades Tailwind CON !important (!bg-gray-900/85).
    Las animaciones CSS viven en un nivel INFERIOR al !important de
@@ -11,28 +10,45 @@
    El parpadeo se hace desde JS alternando .toast-pedido-flash, y
    ambas fases son declaraciones estáticas lo bastante específicas
    para ganarle a las utilidades globales.
-   El diseño es agnóstico del theme: ámbar sólido + texto casi
-   negro contrasta bien sobre fondo claro y sobre gray-800.
    ============================================================ */
 
 div.Toastify__toast.toast-pedido-alerta.toast-pedido-alerta {
-  background-color: #fbbf24 !important;
+  background: rgba(255, 255, 255, 0.92) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  backdrop-filter: blur(12px) !important;
   color: #111827 !important;
-  border: 2px solid #111827 !important;
-  font-size: 1rem !important;
-  line-height: 1.35 !important;
-  padding-top: 0.7rem !important;
-  padding-bottom: 0.7rem !important;
+  border: 1px solid rgba(17, 24, 39, 0.08) !important;
+  border-radius: 1rem !important;
+  padding: 0 !important;
   box-shadow:
-    0 0 0 3px rgba(251, 191, 36, 0.55),
-    0 14px 30px rgba(0, 0, 0, 0.45) !important;
+    0 0 0 1px rgba(251, 191, 36, 0.18),
+    0 18px 40px -8px rgba(0, 0, 0, 0.35) !important;
+  overflow: hidden;
+}
+
+.dark div.Toastify__toast.toast-pedido-alerta.toast-pedido-alerta {
+  background: rgba(17, 24, 39, 0.88) !important;
+  color: #f9fafb !important;
+  border: 1px solid rgba(251, 191, 36, 0.2) !important;
+  box-shadow:
+    0 0 0 1px rgba(251, 191, 36, 0.15),
+    0 18px 40px -8px rgba(0, 0, 0, 0.55) !important;
 }
 
 div.Toastify__toast.toast-pedido-alerta.toast-pedido-alerta.toast-pedido-flash {
-  background-color: #fffbeb !important;
+  border-color: rgba(251, 191, 36, 0.45) !important;
   box-shadow:
-    0 0 0 8px rgba(251, 191, 36, 0.3),
-    0 14px 30px rgba(0, 0, 0, 0.45) !important;
+    0 0 0 3px rgba(251, 191, 36, 0.25),
+    0 0 24px rgba(251, 191, 36, 0.3),
+    0 18px 40px -8px rgba(0, 0, 0, 0.35) !important;
+}
+
+.dark div.Toastify__toast.toast-pedido-alerta.toast-pedido-alerta.toast-pedido-flash {
+  border-color: rgba(251, 191, 36, 0.5) !important;
+  box-shadow:
+    0 0 0 3px rgba(251, 191, 36, 0.2),
+    0 0 28px rgba(251, 191, 36, 0.25),
+    0 18px 40px -8px rgba(0, 0, 0, 0.55) !important;
 }
 
 /* ============================================================

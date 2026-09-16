@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { useAuth } from "../contexto/AuthContext";
 import { usePedidosRealtime } from "../hooksSB/usePedidosRealtime";
+import { IconBell, IconArrowRight } from "./icons";
 import {
   EVENTO_PEDIDOS_CAMBIO,
   sonarNotificacion,
@@ -13,6 +14,53 @@ import {
 const RESPETA_MOVIMIENTO_REDUCIDO =
   typeof window.matchMedia === "function" &&
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+// Tarjeta premium del toast de pedido nuevo: usa tokens adaptados a
+// tema. El contenedor .toast-pedido-alerta solo aporta fondo/blur/shadow;
+// el contenido lo arma este componente para no pelearse con el CSS.
+function ContenidoPedido({ nombre, cantidad, onVer }) {
+  const esPrimero = cantidad <= 1;
+
+  return (
+    <div className="flex items-center gap-3 min-w-[250px] px-3 py-2.5 md:px-4 md:py-3">
+      <div className="relative shrink-0">
+        <div className="flex items-center justify-center w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 shadow-lg shadow-orange-500/30">
+          <IconBell className="w-5 h-5 text-white" />
+        </div>
+        <span className="absolute -top-1 -right-1 flex w-3 h-3">
+          <span className="absolute inline-flex w-full h-full rounded-full bg-emerald-400 opacity-75 animate-ping" />
+          <span className="relative inline-flex w-3 h-3 rounded-full bg-emerald-500" />
+        </span>
+      </div>
+
+      <button
+        onClick={onVer}
+        className="flex-1 min-w-0 text-left focus:outline-none"
+      >
+        <p className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate">
+          {esPrimero ? (
+            <>Pedido nuevo de <span className="truncate">{nombre}</span></>
+          ) : (
+            <>
+              <span className="inline-block text-amber-600 dark:text-amber-400">{cantidad}</span> pedidos nuevos
+            </>
+          )}
+        </p>
+        <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+          Tocá para confirmarlo
+        </p>
+      </button>
+
+      <span
+        onClick={onVer}
+        className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-semibold bg-gradient-to-r from-amber-400 to-orange-500 text-white shadow-md shadow-orange-500/25 cursor-pointer"
+      >
+        Ver
+        <IconArrowRight className="w-3.5 h-3.5" />
+      </span>
+    </div>
+  );
+}
 
 // Dueño del ÚNICO canal realtime de pedidos de la app.
 // - INSERT: toast + sonido + parpadeo de título
@@ -46,7 +94,7 @@ export function NotificadorPedidos() {
       document
         .querySelector(".toast-pedido-alerta")
         ?.classList.toggle("toast-pedido-flash");
-    }, 500);
+    }, 900);
   }, []);
 
   usePedidosRealtime(
@@ -66,17 +114,22 @@ export function NotificadorPedidos() {
 
       const esPrimero = cantidadRef.current === 1;
       const nombre = nuevo?.cliente?.nombre || "un cliente";
-      const mensaje = esPrimero
-        ? `🛒 Nuevo pedido de ${nombre} — Tocá para ver →`
-        : `🛒 Tenés ${cantidadRef.current} pedidos nuevos sin confirmar — Tocá para ver →`;
 
       const irAPedidos = () => {
         toast.dismiss(toastIdRef.current);
         navigate("/pedidos-web");
       };
 
+      const contenido = (
+        <ContenidoPedido
+          nombre={nombre}
+          cantidad={cantidadRef.current}
+          onVer={irAPedidos}
+        />
+      );
+
       if (esPrimero || !toast.isActive(toastIdRef.current)) {
-        toastIdRef.current = toast.info(mensaje, {
+        toastIdRef.current = toast.info(contenido, {
           autoClose: false,
           className: "toast-pedido-alerta",
           onClick: irAPedidos,
@@ -90,7 +143,7 @@ export function NotificadorPedidos() {
         iniciarFlash();
       } else {
         toast.update(toastIdRef.current, {
-          render: mensaje,
+          render: contenido,
           autoClose: false,
           className: "toast-pedido-alerta",
           onClick: irAPedidos,

@@ -8,6 +8,7 @@ import { supabase } from "../../services/supabaseClient";
 import { usePedidos } from "../../hooksSB/usePedidos";
 import { useAppContext } from "../../contexto/Context";
 import { useAuth } from "../../contexto/AuthContext";
+import { IconCheck } from "../../components/icons";
 
 const publicUrl = (path) => {
   if (!path) return null;
@@ -170,7 +171,7 @@ const abrirEmailDesktop = (evento, pedido, mensaje) => {
     .catch(() => {});
 };
 
-function ModalConfirmacion({ open, titulo, mensaje, onConfirmar, onCancelar, dark, loading }) {
+function ModalConfirmacion({ open, titulo, mensaje, onConfirmar, onCancelar, dark, loading, children }) {
   if (!open) return null;
   return (
     <AnimatePresence>
@@ -195,10 +196,11 @@ function ModalConfirmacion({ open, titulo, mensaje, onConfirmar, onCancelar, dar
           <h3 className={`text-lg font-bold mb-2 ${dark ? "text-white" : "text-gray-900"}`}>
             {titulo}
           </h3>
-          <p className={`text-sm mb-6 ${dark ? "text-gray-400" : "text-gray-500"}`}>
+          <p className={`text-sm mb-4 ${dark ? "text-gray-400" : "text-gray-500"}`}>
             {mensaje}
           </p>
-          <div className="flex gap-3 justify-end">
+          {children}
+          <div className="flex gap-3 justify-end mt-5">
             <button
               onClick={onCancelar}
               disabled={loading}
@@ -542,7 +544,7 @@ export function PedidosWeb() {
   } = usePedidos({ userId: user?.id });
 
   const [pedidoActivo, setPedidoActivo] = useState(null);
-  const [modal, setModal] = useState({ open: false, tipo: null, pedido: null });
+  const [modal, setModal] = useState({ open: false, tipo: null, pedido: null, metodoPago: "efectivo" });
   const [filtroMetodo, setFiltroMetodo] = useState("todos");
   const [busqueda, setBusqueda] = useState("");
 
@@ -580,9 +582,9 @@ export function PedidosWeb() {
   ];
 
   const handleConfirmar = async () => {
-    const { pedido } = modal;
-    setModal({ open: false, tipo: null, pedido: null });
-    const result = await confirmarPedido(pedido);
+    const { pedido, metodoPago } = modal;
+    setModal({ open: false, tipo: null, pedido: null, metodoPago: "efectivo" });
+    const result = await confirmarPedido(pedido, metodoPago);
     if (result.success) {
       registrarVentaLocal(result.venta, result.detalles);
 
@@ -606,7 +608,7 @@ export function PedidosWeb() {
 
   const handleCancelar = async () => {
     const { pedido } = modal;
-    setModal({ open: false, tipo: null, pedido: null });
+    setModal({ open: false, tipo: null, pedido: null, metodoPago: "efectivo" });
     const result = await cancelarPedido(pedido);
     if (result.success) {
       toast.success("Pedido cancelado");
@@ -617,12 +619,14 @@ export function PedidosWeb() {
 
   const abrirModalConfirmar = (pedido) => {
     setPedidoActivo(null);
-    setTimeout(() => setModal({ open: true, tipo: "confirmar", pedido }), 350);
+    const metodoInicial =
+      pedido.metodo_pago === "transferencia" ? "transferencia" : "efectivo";
+    setTimeout(() => setModal({ open: true, tipo: "confirmar", pedido, metodoPago: metodoInicial }), 350);
   };
 
   const abrirModalCancelar = (pedido) => {
     setPedidoActivo(null);
-    setTimeout(() => setModal({ open: true, tipo: "cancelar", pedido }), 350);
+    setTimeout(() => setModal({ open: true, tipo: "cancelar", pedido, metodoPago: "efectivo" }), 350);
   };
 
   if (loading) {
@@ -917,10 +921,56 @@ export function PedidosWeb() {
             : `¿Cancelar el pedido de ${modal.pedido?.cliente?.nombre || "este cliente"}? Esta acción no se puede deshacer.`
         }
         onConfirmar={modal.tipo === "confirmar" ? handleConfirmar : handleCancelar}
-        onCancelar={() => setModal({ open: false, tipo: null, pedido: null })}
+        onCancelar={() => setModal({ open: false, tipo: null, pedido: null, metodoPago: "efectivo" })}
         dark={dark}
         loading={procesando === modal.pedido?.id}
-      />
+      >
+        {modal.tipo === "confirmar" && (
+          <div className={`p-3 rounded-xl border ${dark ? "bg-gray-700/50 border-gray-600" : "bg-gray-50 border-gray-200"}`}>
+            <p className={`text-xs font-medium mb-2 uppercase tracking-wide ${dark ? "text-gray-400" : "text-gray-500"}`}>
+              Método de pago de la venta
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setModal((m) => ({ ...m, metodoPago: "efectivo" }))}
+                aria-pressed={modal.metodoPago === "efectivo"}
+                className={`relative flex-1 px-3 py-2.5 rounded-lg text-sm font-bold transition-all ${
+                  modal.metodoPago === "efectivo"
+                    ? "bg-blue-600 text-white ring-2 ring-blue-400 shadow-lg shadow-blue-600/30"
+                    : dark
+                      ? "bg-gray-700 text-gray-400 hover:bg-gray-600"
+                      : "bg-white text-gray-500 hover:bg-gray-100 border border-gray-200"
+                }`}
+              >
+                {modal.metodoPago === "efectivo" && (
+                  <span className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-blue-500 border-2 border-white dark:border-gray-800 flex items-center justify-center">
+                    <IconCheck className="w-3 h-3 text-white" />
+                  </span>
+                )}
+                Efectivo
+              </button>
+              <button
+                onClick={() => setModal((m) => ({ ...m, metodoPago: "transferencia" }))}
+                aria-pressed={modal.metodoPago === "transferencia"}
+                className={`relative flex-1 px-3 py-2.5 rounded-lg text-sm font-bold transition-all ${
+                  modal.metodoPago === "transferencia"
+                    ? "bg-purple-600 text-white ring-2 ring-purple-400 shadow-lg shadow-purple-600/30"
+                    : dark
+                      ? "bg-gray-700 text-gray-400 hover:bg-gray-600"
+                      : "bg-white text-gray-500 hover:bg-gray-100 border border-gray-200"
+                }`}
+              >
+                {modal.metodoPago === "transferencia" && (
+                  <span className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-purple-500 border-2 border-white dark:border-gray-800 flex items-center justify-center">
+                    <IconCheck className="w-3 h-3 text-white" />
+                  </span>
+                )}
+                Transferencia
+              </button>
+            </div>
+          </div>
+        )}
+      </ModalConfirmacion>
     </div>
   );
 }
