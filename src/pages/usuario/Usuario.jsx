@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import { useAuth } from "../../contexto/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { FormCustomProduct } from "../productos/components/FormCustomProduct";
@@ -8,6 +8,20 @@ import { Config } from "./components/Config";
 import { InactiveProductsViewer } from "./components/InactiveProductsViewer";
 import { AgregarProductosSistema } from "./components/AgregarProductosSistema";
 import { BulkEditProducts } from "./components/BulkEditProducts";
+import {
+  IconUser,
+  IconInfo,
+  IconBookOpen,
+  IconLogOut,
+  IconPlus,
+  IconDatabase,
+  IconClipboard,
+  IconPackage,
+  IconSettings,
+  IconEdit,
+  IconMoon,
+  IconClose,
+} from "../../components/icons";
 
 export function Usuario() {
   const { logout, user } = useAuth();
@@ -28,11 +42,6 @@ export function Usuario() {
     productosCustom: customProducts.length,
     productosInactivos: inactiveProducts.length,
   }), [products, customProducts, inactiveProducts]);
-
-  // useEffect después
-  useEffect(() => {
-    // dummy
-  }, []);
 
   // Early return DESPUÉS de todos los hooks
   if (appLoading) {
@@ -60,11 +69,13 @@ export function Usuario() {
   const borderColor = dark ? "border-gray-700" : "border-gray-200";
 
   const tabs = [
-    { id: "productos", label: "Productos", icon: "📦", count: stats.productosCustom },
-    { id: "edicion", label: "Edición Masiva", icon: "✏️", count: stats.productosActivos },
-    { id: "config", label: "Configuración", icon: "⚙️", count: null },
-    { id: "inactivos", label: "Inactivos", icon: "💤", count: stats.productosInactivos },
+    { id: "productos", label: "Productos", icon: <IconPackage className="w-5 h-5" />, count: stats.productosCustom },
+    { id: "edicion", label: "Edición Masiva", icon: <IconEdit className="w-5 h-5" />, count: stats.productosActivos },
+    { id: "config", label: "Configuración", icon: <IconSettings className="w-5 h-5" />, count: null },
+    { id: "inactivos", label: "Inactivos", icon: <IconMoon className="w-5 h-5" />, count: stats.productosInactivos },
   ];
+
+  const tabInactiveClass = dark ? "text-gray-400 hover:text-white" : "text-gray-500 hover:text-gray-900";
 
   return (
     <div className={`min-h-screen ${bgMain} transition-colors duration-300`}>
@@ -72,33 +83,27 @@ export function Usuario() {
       {/* HEADER */}
       <div className={`p-4 md:p-6 ${bgCard} border-b ${borderColor}`}>
         <div className="max-w-4xl  mx-auto">
-                        {isAdmin && (
-                <button
-                  onClick={() => navigate("/admin")}
-                  className={`px-3 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${
-                    dark
-                      ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
-                      : "bg-red-100 text-red-600 hover:bg-red-200"
-                  }`}
-                  title="Panel de Administrador"
-                >
-                  ⚙️ Admin
-                </button>
-              )}
           {/* TOP ROW */}
           <div className="flex items-center justify-between mb-4">
-            <div>
-              <h1 className={`text-xl md:text-2xl font-bold ${textPrimary}`}>
-                👤 Mi Panel
-              </h1>
-              <p className={`text-sm ${textSecondary}`}>
-                {user?.email}
-              </p>
+            <div className="flex items-center gap-3 min-w-0">
+              <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-white shrink-0 ${
+                dark
+                  ? "bg-gradient-to-br from-yellow-400/80 to-orange-500/80"
+                  : "bg-gradient-to-br from-yellow-400 to-orange-500"
+              }`}>
+                <IconUser className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <h1 className={`text-xl md:text-2xl font-bold truncate ${textPrimary}`}>
+                  Mi Panel
+                </h1>
+                <p className={`text-sm truncate ${textSecondary}`}>
+                  {user?.email}
+                </p>
+              </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              {/* ADMIN PANEL - Solo para admins */}
-
+            <div className="flex items-center gap-2 shrink-0">
               {/* TUTORIAL RÁPIDO */}
               <button
                 onClick={() => setShowTutorial(true)}
@@ -109,19 +114,20 @@ export function Usuario() {
                 }`}
                 title="Tutorial rápido"
               >
-                📖
+                <IconInfo className="w-5 h-5" />
               </button>
 
               {/* TUTORIAL COMPLETO */}
               <button
                 onClick={() => navigate("/info-app")}
-                className={`px-3 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${
+                className={`p-2 rounded-xl transition-all ${
                   dark
                     ? "bg-purple-500/20 text-purple-400 hover:bg-purple-500/30"
                     : "bg-purple-100 text-purple-600 hover:bg-purple-200"
                 }`}
+                title="Tutorial completo"
               >
-                📚 Tutorial completo
+                <IconBookOpen className="w-5 h-5" />
               </button>
 
               {/* LOGOUT */}
@@ -134,7 +140,7 @@ export function Usuario() {
                 }`}
                 title="Cerrar sesión"
               >
-                🚪
+                <IconLogOut className="w-5 h-5" />
               </button>
             </div>
           </div>
@@ -173,7 +179,7 @@ export function Usuario() {
                   ? dark
                     ? "bg-blue-500/20 text-blue-400"
                     : "bg-blue-100 text-blue-600"
-                  : `${textSecondary} hover:${textPrimary}`
+                  : tabInactiveClass
               }`}
             >
               <span>{tab.icon}</span>
@@ -197,8 +203,9 @@ export function Usuario() {
             {/* FORMULARIO */}
             <div className={`p-4 rounded-2xl ${bgCard} border ${borderColor}`}>
               <div className="flex items-center justify-between mb-3">
-                <h2 className={`text-lg font-bold ${textPrimary}`}>
-                  ➕ Crear Producto
+                <h2 className={`text-lg font-bold flex items-center gap-2 ${textPrimary}`}>
+                  <IconPlus className={`w-5 h-5 ${dark ? "text-blue-400" : "text-blue-500"}`} />
+                  {isAdmin ? "Crear Producto" : "Productos del sistema"}
                 </h2>
                 <button
                   onClick={() => setShowAgregarSistema(true)}
@@ -208,7 +215,8 @@ export function Usuario() {
                       : "bg-green-100 text-green-600 hover:bg-green-200"
                   }`}
                 >
-                  📦 Del sistema
+                  <IconDatabase className="w-4 h-4" />
+                  Del sistema
                 </button>
               </div>
               {isAdmin && <FormCustomProduct userId={user?.id} />}
@@ -216,14 +224,19 @@ export function Usuario() {
 
             {/* LISTA */}
             <div className={`p-4 rounded-2xl ${bgCard} border ${borderColor}`}>
-              <h2 className={`text-lg font-bold mb-3 ${textPrimary}`}>
-                📋 Mis Productos ({customProducts.length})
+              <h2 className={`text-lg font-bold mb-3 flex items-center gap-2 ${textPrimary}`}>
+                <IconClipboard className={`w-5 h-5 ${dark ? "text-blue-400" : "text-blue-500"}`} />
+                Mis Productos ({customProducts.length})
               </h2>
               {customProducts.length > 0 ? (
                 <UlCustomProducts customProducts={customProducts} />
               ) : (
                 <div className={`text-center py-8 ${textSecondary}`}>
-                  <span className="text-4xl mb-2 block">📦</span>
+                  <div className={`w-16 h-16 mx-auto mb-3 rounded-2xl flex items-center justify-center ${
+                    dark ? "bg-gray-700/50 text-gray-400" : "bg-gray-100 text-gray-400"
+                  }`}>
+                    <IconPackage className="w-8 h-8" />
+                  </div>
                   <p>No tenés productos personalizados</p>
                   <p className="text-sm">Creá tu primer producto arriba</p>
                 </div>
@@ -233,18 +246,11 @@ export function Usuario() {
         )}
 
         {activeTab === "edicion" && (
-          <div className={`p-4 rounded-2xl ${bgCard} border ${borderColor}`}>
-            <BulkEditProducts />
-          </div>
+          <BulkEditProducts />
         )}
 
         {activeTab === "config" && (
-          <div className={`p-4 rounded-2xl ${bgCard} border ${borderColor}`}>
-            <h2 className={`text-lg font-bold mb-4 ${textPrimary}`}>
-              ⚙️ Configuración
-            </h2>
-            <Config />
-          </div>
+          <Config />
         )}
 
         {activeTab === "inactivos" && (
@@ -259,7 +265,11 @@ export function Usuario() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className={`p-6 rounded-2xl shadow-2xl max-w-sm w-full ${bgCard}`}>
             <div className="text-center mb-4">
-              <span className="text-5xl mb-3 block">🚪</span>
+              <div className={`w-14 h-14 mx-auto mb-3 rounded-2xl flex items-center justify-center ${
+                dark ? "bg-red-500/20 text-red-400" : "bg-red-100 text-red-600"
+              }`}>
+                <IconLogOut className="w-7 h-7" />
+              </div>
               <h3 className={`text-lg font-bold ${textPrimary}`}>
                 Cerrar sesión
               </h3>
@@ -344,7 +354,7 @@ function TutorialModal({ dark, onClose }) {
             onClick={onClose}
             className={`p-2 rounded-lg ${dark ? "hover:bg-gray-700" : "hover:bg-gray-100"}`}
           >
-            ✕
+            <IconClose className="w-5 h-5" />
           </button>
         </div>
 

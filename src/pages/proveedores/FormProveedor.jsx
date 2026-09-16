@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAppContext } from "../../contexto/Context";
+import { IconBuilding, IconCheck, IconWarning } from "../../components/icons";
 
 function InputField({ name, label, type = "text", required, placeholder, value, onChange, onBlur, error, isValid, dark }) {
   const inputBg = dark
@@ -31,13 +32,13 @@ function InputField({ name, label, type = "text", required, placeholder, value, 
         />
         {isValid && (
           <span className="absolute right-3 top-1/2 -translate-y-1/2 text-green-500">
-            ✓
+            <IconCheck className="w-5 h-5" />
           </span>
         )}
       </div>
       {error && (
         <p className="text-red-500 text-xs mt-1 flex items-center gap-1">
-          <span>⚠</span>
+          <IconWarning className="w-3.5 h-3.5 shrink-0" />
           <span>{error}</span>
         </p>
       )}
@@ -74,16 +75,18 @@ export function FormProveedor({ onSuccess, onError }) {
         if (!value.trim()) return "El nombre es obligatorio";
         if (value.trim().length < 2) return "Mínimo 2 caracteres";
         return "";
-      case "telefono":
+      case "telefono": {
         if (!value.trim()) return "El teléfono es obligatorio";
         const cleanPhone = value.replace(/\D/g, "");
         if (cleanPhone.length < 6) return "Teléfono muy corto";
         return "";
-      case "email":
+      }
+      case "email": {
         if (!value.trim()) return "El email es obligatorio";
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(value)) return "Email inválido";
         return "";
+      }
       default:
         return "";
     }
@@ -158,7 +161,15 @@ export function FormProveedor({ onSuccess, onError }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       <div className="text-center mb-2">
-        <span className="text-4xl">🏢</span>
+        <span
+          className={`mx-auto mb-3 w-16 h-16 rounded-2xl flex items-center justify-center text-white ${
+            dark
+              ? "bg-gradient-to-br from-blue-600 to-indigo-700 shadow-lg shadow-blue-900/40 border border-blue-700/50"
+              : "bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg shadow-blue-500/30"
+          }`}
+        >
+          <IconBuilding className="w-8 h-8" />
+        </span>
         <h3 className={`text-xl font-bold mt-2 ${textPrimary}`}>
           Nuevo Proveedor
         </h3>
@@ -243,12 +254,12 @@ export function FormProveedor({ onSuccess, onError }) {
         >
           {submitting ? (
             <>
-              <span className="animate-spin text-lg">⟳</span>
+              <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
               <span>Guardando...</span>
             </>
           ) : (
             <>
-              <span className="text-lg">✓</span>
+              <IconCheck className="w-5 h-5" />
               <span>Crear Proveedor</span>
             </>
           )}

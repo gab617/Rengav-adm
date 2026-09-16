@@ -57,14 +57,11 @@ export function AdminDashboard() {
     setLoading(true);
 
     try {
-      const [usersRes, prodsCount, catsCount, brandsCount] = await Promise.all([
+      const [usersRes] = await Promise.all([
         supabase
           .from("profiles")
           .select("id, name, role, created_at")
           .eq("tenant_id", tid),
-        supabase.from("products_base").select("id", { count: "exact", head: true }),
-        supabase.from("categories").select("id", { count: "exact", head: true }),
-        supabase.from("brands").select("id", { count: "exact", head: true }),
       ]);
       if (usersRes.error) throw usersRes.error;
 
@@ -90,7 +87,7 @@ export function AdminDashboard() {
           supabase
             .from("user_products")
             .select(
-              "stock, stock_talles, active, products_base(name), user_custom_products(name)"
+              "stock, stock_talles, active, base_id, custom_id, products_base(name, category_id, brands(name)), user_custom_products(name, category_id, brand_id, brand_text, brands(name))"
             )
             .in("user_id", userIds),
         ]);
@@ -115,6 +112,32 @@ export function AdminDashboard() {
         .sort();
       const porCobrarMasVieja = fechasPend[0] || null;
 
+      // --- Catálogo del tenant: productos, categorías y marcas reales ---
+      const baseIds = new Set();
+      const customIds = new Set();
+      let productosLocales = 0;
+      const catIds = new Set();
+      const brandNames = new Set();
+
+      stockRows.forEach((p) => {
+        const base = p.products_base;
+        const custom = p.user_custom_products;
+
+        if (p.base_id) {
+          baseIds.add(p.base_id);
+          if (base?.category_id) catIds.add(base.category_id);
+          const marca = base?.brands?.name;
+          if (marca) brandNames.add(marca);
+        } else if (p.custom_id) {
+          customIds.add(p.custom_id);
+          if (custom?.category_id) catIds.add(custom.category_id);
+          const marca = custom?.brands?.name || custom?.brand_text;
+          if (marca) brandNames.add(marca);
+        } else {
+          productosLocales += 1;
+        }
+      });
+
       // --- Stock bajo ---
       const stockBajo = stockRows
         .filter((p) => p.active !== false)
@@ -133,9 +156,9 @@ export function AdminDashboard() {
 
       commit({
         totalUsers: users.length,
-        totalProductsBase: prodsCount.count ?? 0,
-        totalCategories: catsCount.count ?? 0,
-        totalBrands: brandsCount.count ?? 0,
+        totalProductsBase: baseIds.size + customIds.size + productosLocales,
+        totalCategories: catIds.size,
+        totalBrands: brandNames.size,
         porCobrarMonto,
         porCobrarN: pendientes.length,
         porCobrarMasVieja,
@@ -355,7 +378,7 @@ export function AdminDashboard() {
       {/* MÉTRICAS DEL SISTEMA */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
         <MetricCard dark={dark} icon="👥" label="Usuarios" value={data.totalUsers} color="blue" />
-        <MetricCard dark={dark} icon="📦" label="Productos base" value={data.totalProductsBase} color="green" />
+        <MetricCard dark={dark} icon="📦" label="Productos" value={data.totalProductsBase} color="green" />
         <MetricCard dark={dark} icon="🏷️" label="Categorías" value={data.totalCategories} color="purple" />
         <MetricCard dark={dark} icon="🏪" label="Marcas" value={data.totalBrands} color="yellow" />
       </div>

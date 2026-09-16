@@ -3,6 +3,22 @@ import { useAppContext } from "../../../contexto/Context";
 import { useAuth } from "../../../contexto/AuthContext";
 import { useProductosSistema } from "../../../hooksSB/useProductosSistema";
 import { supabase } from "../../../services/supabaseClient";
+import { toast } from "react-toastify";
+// motion se usa en JSX (<motion.div>) pero sin jsx-uses-vars el
+// linter no ve referencias JSX y lo marca "unused". NO BORRAR.
+// eslint-disable-next-line no-unused-vars
+import { AnimatePresence, motion } from "framer-motion";
+import {
+  IconPackage,
+  IconCheck,
+  IconClose,
+  IconSearch,
+  IconWarning,
+  IconClipboard,
+  IconSave,
+  IconEdit,
+  IconPlus,
+} from "../../../components/icons";
 
 export function AgregarProductosSistema({ onClose }) {
   const { user } = useAuth();
@@ -127,6 +143,9 @@ export function AgregarProductosSistema({ onClose }) {
   
   // Historial de productos agregados
   const [historialAgregados, setHistorialAgregados] = useState([]);
+
+  // Confirm dialog personalizado (reemplaza confirm())
+  const [confirmInfo, setConfirmInfo] = useState(null);
 
   // Formulario para un solo producto
   const [formSingle, setFormSingle] = useState({
@@ -318,21 +337,28 @@ export function AgregarProductosSistema({ onClose }) {
     if (productosArray.length === 0) return;
     
     // Validar ganancia negativa
-    for (const item of productosArray) {
+    const conPerdida = productosArray.find((item) => {
       const pc = item.data.precio_compra;
       const pv = item.data.precio_venta;
-      if (pc > 0 && pv > 0 && pc > pv) {
-        const confirmacion = confirm(
-          `⚠️ Ganancia negativa en "${item.name}"\n\n` +
-          `Precio Compra: $${pc.toLocaleString()}\n` +
-          `Precio Venta: $${pv.toLocaleString()}\n` +
-          `Ganancia por unidad: -$${(pc - pv).toLocaleString()}\n\n` +
-          `¿Deseas continuar de todos modos?`
-        );
-        if (!confirmacion) return;
-        break;
-      }
+      return pc > 0 && pv > 0 && pc > pv;
+    });
+
+    if (conPerdida) {
+      setConfirmInfo({
+        nombre: conPerdida.name,
+        pc: conPerdida.data.precio_compra,
+        pv: conPerdida.data.precio_venta,
+      });
+      return;
     }
+    
+    await confirmAgregar();
+  };
+
+  // Ejecuta el agregado (llamado directo o tras confirmar pérdida)
+  const confirmAgregar = async () => {
+    const productosArray = getSelectedProductsArray();
+    if (productosArray.length === 0) return;
     
     setSubmitting(true);
 
@@ -364,9 +390,9 @@ export function AgregarProductosSistema({ onClose }) {
       result.productos.forEach(p => agregarProductoBase(p));
       setSelectedProductsMap({});
       setFormSingle({ precio_compra: "", precio_venta: "", stock: "", descripcion: "" });
-      alert(`✅ ${result.productos.length} producto(s) agregado(s)`);
+      toast.success(`${result.productos.length} producto(s) agregado(s)`);
     } else {
-      alert(result.error || "Error al agregar");
+      toast.error(result.error || "Error al agregar");
     }
   };
 
@@ -386,9 +412,9 @@ export function AgregarProductosSistema({ onClose }) {
     if (result.success && result.productos.length > 0) {
       result.productos.forEach(p => agregarProductoBase(p));
       setSelectedProductsMap({});
-      alert(`✅ ${result.productos.length} productos agregados`);
+      toast.success(`${result.productos.length} productos agregados`);
     } else {
-      alert(result.error || "Error al agregar");
+      toast.error(result.error || "Error al agregar");
     }
   };
 
@@ -412,7 +438,7 @@ export function AgregarProductosSistema({ onClose }) {
     });
     setSubmitting(false);
     setSelectedProductsMap({});
-    alert("✅ Producto actualizado");
+    toast.success("Producto actualizado");
   };
 
   // Estilos
@@ -447,28 +473,34 @@ export function AgregarProductosSistema({ onClose }) {
       >
         {/* HEADER */}
         <div className={`p-4 flex items-center justify-between border-b ${borderColor}`}>
-          <div>
-            <h2 className={`text-lg font-bold ${textPrimary}`}>
-              📦 Productos del Sistema
-            </h2>
-            <p className={`text-sm ${textSecondary}`}>
-              {loading ? "Cargando..." : `${productosDisponibles.length} disponibles • ${productosAsignados.length} agregados`}
-            </p>
+          <div className="flex items-center gap-2 min-w-0">
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${dark ? "bg-green-500/20 text-green-400" : "bg-green-100 text-green-600"}`}>
+              <IconPackage className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <h2 className={`text-lg font-bold truncate ${textPrimary}`}>
+                Productos del Sistema
+              </h2>
+              <p className={`text-sm truncate ${textSecondary}`}>
+                {loading ? "Cargando..." : `${productosDisponibles.length} disponibles • ${productosAsignados.length} agregados`}
+              </p>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             {historialAgregados.length > 0 && (
               <button
                 onClick={() => setShowHistorial(!showHistorial)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium ${dark ? "bg-blue-500/20 text-blue-400 hover:bg-blue-500/30" : "bg-blue-100 text-blue-600 hover:bg-blue-200"}`}
+                className={`px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 ${dark ? "bg-blue-500/20 text-blue-400 hover:bg-blue-500/30" : "bg-blue-100 text-blue-600 hover:bg-blue-200"}`}
               >
-                📋 {historialAgregados.length}
+                <IconClipboard className="w-4 h-4" />
+                {historialAgregados.length}
               </button>
             )}
             <button
               onClick={onClose}
-              className={`p-2 rounded-xl ${dark ? "hover:bg-gray-500 text-white" : "hover:bg-gray-200"}`}
+              className={`p-2 rounded-xl transition-colors ${dark ? "hover:bg-gray-700 text-white" : "hover:bg-gray-200 text-gray-600"}`}
             >
-              ✕
+              <IconClose className="w-5 h-5" />
             </button>
           </div>
         </div>
@@ -476,8 +508,9 @@ export function AgregarProductosSistema({ onClose }) {
         {/* HISTORIAL COLAPSABLE */}
         {showHistorial && historialAgregados.length > 0 && (
           <div className={`px-4 py-3 border-b ${dark ? "bg-blue-500/10 border-blue-500/30" : "bg-blue-50 border-blue-200"}`}>
-            <h3 className={`text-xs font-bold mb-2 ${dark ? "text-blue-400" : "text-blue-600"}`}>
-              📋 Últimos agregados
+            <h3 className={`text-xs font-bold mb-2 flex items-center gap-1.5 ${dark ? "text-blue-400" : "text-blue-600"}`}>
+              <IconClipboard className="w-3.5 h-3.5" />
+              Últimos agregados
             </h3>
             <div className="flex gap-2 overflow-x-auto pb-1">
               {historialAgregados.slice(0, 5).map((item) => (
@@ -516,7 +549,7 @@ export function AgregarProductosSistema({ onClose }) {
                   : "bg-gray-100 text-gray-600"
               }`}
             >
-              <span>📦</span>
+              <IconPackage className="w-4 h-4" />
               Disponibles
               <span className={`px-1.5 py-0.5 rounded-full text-xs ${dark ? "bg-gray-600" : "bg-gray-200"}`}>
                 {productosDisponibles.length}
@@ -537,7 +570,7 @@ export function AgregarProductosSistema({ onClose }) {
                   : "bg-gray-100 text-gray-600"
               }`}
             >
-              <span>✅</span>
+              <IconCheck className="w-4 h-4" />
               Ya Agregados
               <span className={`px-1.5 py-0.5 rounded-full text-xs ${dark ? "bg-gray-600" : "bg-gray-200"}`}>
                 {productosAsignados.length}
@@ -550,19 +583,25 @@ export function AgregarProductosSistema({ onClose }) {
         {activeTab === "disponibles" && selectedCount > 0 && !esMobile && (
           <div className={`px-4 py-2 border-b ${borderColor} ${dark ? "bg-green-500/10" : "bg-green-50"}`}>
             <div className="flex items-center justify-between mb-2">
-              <span className={`text-sm ${textPrimary}`}>
+              <span className={`text-sm font-medium text-green-600 dark:text-green-400`}>
                 {isSingleSelection && (
-                  <span>📝 1 producto seleccionado - Editar datos</span>
+                  <span className="flex items-center gap-1.5">
+                    <IconEdit className="w-4 h-4" />
+                    1 producto seleccionado - Editar datos
+                  </span>
                 )}
                 {isMultiSelection && (
-                  <span>📋 {selectedCount} productos seleccionados - Carga masiva</span>
+                  <span className="flex items-center gap-1.5">
+                    <IconClipboard className="w-4 h-4" />
+                    {selectedCount} productos seleccionados - Carga masiva
+                  </span>
                 )}
               </span>
               <button
                 onClick={() => { setSelectedProductsMap({}); }}
-                className={`px-3 py-1 rounded-lg text-sm ${dark ? "hover:bg-gray-700 text-gray-400" : "hover:bg-gray-200 text-gray-600"}`}
+                className={`px-3 py-1 rounded-lg text-sm flex items-center gap-1.5 ${dark ? "hover:bg-gray-700 text-gray-400" : "hover:bg-gray-200 text-gray-600"}`}
               >
-                ✕ Cancelar
+                <IconClose className="w-4 h-4" /> Cancelar
               </button>
             </div>
             
@@ -582,7 +621,7 @@ export function AgregarProductosSistema({ onClose }) {
                     disabled={!bulkPrecioVenta}
                     className="px-1.5 py-1 bg-purple-500 text-white rounded text-xs disabled:opacity-40"
                   >
-                    Apply
+                    Aplicar
                   </button>
                 </div>
                 <div className="flex items-center gap-1">
@@ -598,7 +637,7 @@ export function AgregarProductosSistema({ onClose }) {
                     disabled={!bulkPrecioCompra}
                     className="px-1.5 py-1 bg-blue-500 text-white rounded text-xs disabled:opacity-40"
                   >
-                    Apply
+                    Aplicar
                   </button>
                 </div>
                 <div className="flex items-center gap-1">
@@ -614,7 +653,7 @@ export function AgregarProductosSistema({ onClose }) {
                     disabled={!bulkStock && bulkStock !== "0"}
                     className="px-1.5 py-1 bg-green-500 text-white rounded text-xs disabled:opacity-40"
                   >
-                    Apply
+                    Aplicar
                   </button>
                 </div>
                 <button
@@ -634,7 +673,9 @@ export function AgregarProductosSistema({ onClose }) {
           <div className={`flex-1 overflow-y-auto p-2 sm:p-4 ${borderColor} md:border-r ${selectedCount > 0 && esMobile ? "pb-28" : ""}`}>
             {/* BÚSQUEDA */}
             <div className="relative mb-3">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2">🔍</span>
+              <span className="absolute left-3 top-1/2 -translate-y-1/2">
+                <IconSearch className={`w-4 h-4 ${dark ? "text-gray-500" : "text-gray-400"}`} />
+              </span>
               <input
                 type="text"
                 placeholder="Buscar producto..."
@@ -645,9 +686,9 @@ export function AgregarProductosSistema({ onClose }) {
               {search && (
                 <button
                   onClick={() => setSearch("")}
-                  className={`absolute right-3 top-1/2 -translate-y-1/2 ${textSecondary}`}
+                  className={`absolute right-3 top-1/2 -translate-y-1/2 ${dark ? "text-gray-500 hover:text-gray-300" : "text-gray-400 hover:text-gray-600"}`}
                 >
-                  ✕
+                  <IconClose className="w-4 h-4" />
                 </button>
               )}
             </div>
@@ -727,18 +768,15 @@ export function AgregarProductosSistema({ onClose }) {
               </div>
             )}
 
-            {/* LISTA */}
+{/* LISTA */}
             {loading ? (
               <div className="flex items-center justify-center py-8">
-                <span className="animate-spin text-2xl">⟳</span>
+                <div className={`w-6 h-6 rounded-full border-2 border-t-transparent animate-spin ${dark ? "border-gray-500" : "border-gray-300"}`} style={{ borderTopColor: dark ? "#22c55e" : "#16a34a" }}></div>
               </div>
             ) : productosFiltrados.length === 0 ? (
               <div className="text-center py-8">
-                <span className="text-4xl mb-2 block">
-                  {activeTab === "disponibles" ? "🎉" : "📭"}
-                </span>
-                <p className={textSecondary}>
-                  {activeTab === "disponibles" 
+                <p className={`text-sm ${textSecondary}`}>
+                  {activeTab === "disponibles"
                     ? "Todos los productos ya están agregados"
                     : "No hay productos agregados aún"}
                 </p>
@@ -786,7 +824,7 @@ export function AgregarProductosSistema({ onClose }) {
                               ? "border-gray-500"
                               : "border-gray-300"
                           }`}>
-                            {isSelected && <span className="text-white text-xs">✓</span>}
+                            {isSelected && <IconCheck className="w-3 h-3 text-white" />}
                           </div>
                         )}
 
@@ -804,16 +842,18 @@ export function AgregarProductosSistema({ onClose }) {
                             </div>
                             <div className="flex items-center gap-1 flex-shrink-0">
                               {isInactive ? (
-                                <span className={`px-2 py-0.5 rounded text-xs ${
+                                <span className={`px-2 py-0.5 rounded text-xs flex items-center gap-1 ${
                                   dark ? "bg-red-500/30 text-red-400" : "bg-red-100 text-red-600"
                                 }`}>
-                                  ⛔ Inactivo
+                                  <IconClose className="w-3 h-3" />
+                                  Inactivo
                                 </span>
                               ) : infoUsuario ? (
-                                <span className={`px-2 py-0.5 rounded text-xs ${
+                                <span className={`px-2 py-0.5 rounded text-xs flex items-center gap-1 ${
                                   dark ? "bg-blue-500/30 text-blue-400" : "bg-blue-100 text-blue-600"
                                 }`}>
-                                  ✓
+                                  <IconCheck className="w-3 h-3" />
+                                  Agregado
                                 </span>
                               ) : (
                                 <span className={`px-2 py-0.5 rounded text-xs ${
@@ -869,7 +909,9 @@ export function AgregarProductosSistema({ onClose }) {
           <div className={`hidden md:block md:w-80 p-4 overflow-y-auto ${bgModal}`}>
             {selectedCount === 0 ? (
               <div className={`text-center py-8 ${textSecondary}`}>
-                <span className="text-4xl mb-2 block">👆</span>
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-2 ${dark ? "bg-gray-700" : "bg-gray-100"}`}>
+                  <IconPackage className="w-5 h-5" />
+                </div>
                 <p className="text-sm">Hacé click en un producto para seleccionarlo</p>
               </div>
             ) : isSingleSelection ? (
@@ -944,11 +986,17 @@ export function AgregarProductosSistema({ onClose }) {
                           </div>
 
                           {pv > 0 && pc > 0 && (
-                            <div className={`p-2 rounded-lg text-xs ${gananciaNegativa ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" : "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"}`}>
+                            <div className={`p-2 rounded-lg text-xs flex items-center gap-1.5 ${gananciaNegativa ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" : "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"}`}>
                               {gananciaNegativa ? (
-                                <span>⚠️ Ganancia: -${Math.abs(ganancia).toLocaleString()} por unidad</span>
+                                <>
+                                  <IconWarning className="w-3.5 h-3.5" />
+                                  <span>Ganancia: -${Math.abs(ganancia).toLocaleString()} por unidad</span>
+                                </>
                               ) : (
-                                <span>✓ Ganancia: ${ganancia.toLocaleString()} por unidad</span>
+                                <>
+                                  <IconCheck className="w-3.5 h-3.5" />
+                                  <span>Ganancia: +${ganancia.toLocaleString()} por unidad</span>
+                                </>
                               )}
                             </div>
                           )}
@@ -980,7 +1028,7 @@ export function AgregarProductosSistema({ onClose }) {
                       <button
                         onClick={activeTab === "asignados" ? (esAdmin ? handleActualizar : null) : (esAdmin ? handleAgregar : handleAgregarBulkSimple)}
                         disabled={submitting || (activeTab === "asignados" && !esAdmin)}
-                        className={`w-full py-2 text-white rounded-lg font-medium disabled:opacity-50 transition-colors text-sm ${
+                        className={`w-full py-2 text-white rounded-lg font-medium disabled:opacity-50 transition-colors text-sm flex items-center justify-center gap-1.5 ${
                           activeTab === "asignados"
                             ? "bg-blue-500 hover:bg-blue-600"
                             : gananciaNegativa && esAdmin
@@ -989,14 +1037,14 @@ export function AgregarProductosSistema({ onClose }) {
                         }`}
                       >
                         {submitting
-                          ? "..."
+                          ? <div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
                           : activeTab === "asignados"
-                            ? "💾 Guardar cambios"
+                            ? <><IconSave className="w-4 h-4" /> Guardar cambios</>
                             : esAdmin
                               ? gananciaNegativa
-                                ? "⚠️ Agregar con pérdida"
-                                : "✓ Agregar"
-                              : "✓ Agregar sin precios"}
+                                ? <><IconWarning className="w-4 h-4" /> Agregar con pérdida</>
+                                : <><IconPlus className="w-4 h-4" /> Agregar</>
+                              : <><IconPlus className="w-4 h-4" /> Agregar sin precios</>}
                       </button>
                     </>
                   );
@@ -1005,8 +1053,9 @@ export function AgregarProductosSistema({ onClose }) {
             ) : (
               <div className="space-y-3">
                 <div>
-                  <h3 className={`font-bold ${textPrimary}`}>
-                    📋 {selectedCount} productos
+                  <h3 className={`font-bold text-sm flex items-center gap-1.5 ${textPrimary}`}>
+                    <IconClipboard className="w-4 h-4" />
+                    {selectedCount} productos
                   </h3>
                   <p className={`text-xs ${textSecondary}`}>Carga masiva - Seleccioná los valores a aplicar</p>
                 </div>
@@ -1022,14 +1071,14 @@ export function AgregarProductosSistema({ onClose }) {
                           placeholder="P. Venta"
                           value={bulkPrecioVenta}
                           onChange={(e) => setBulkPrecioVenta(e.target.value)}
-                          className={`flex-1 px-2 py-1 rounded border text-xs ${inputBg} ${borderColor}`}
+                          className={`flex-1 min-w-0 px-2 py-1 rounded border text-xs ${inputBg} ${borderColor}`}
                         />
                         <button
                           onClick={() => { applyBulkToAll("precio_venta", bulkPrecioVenta); }}
                           disabled={!bulkPrecioVenta}
-                          className="px-2 py-1 bg-purple-500 text-white rounded text-xs disabled:opacity-40"
+                          className="px-2 py-1 bg-purple-500 text-white rounded text-xs disabled:opacity-40 shrink-0"
                         >
-                          Apply
+                          Aplicar
                         </button>
                       </div>
                       <div className="flex items-center gap-2">
@@ -1038,14 +1087,14 @@ export function AgregarProductosSistema({ onClose }) {
                           placeholder="P. Compra"
                           value={bulkPrecioCompra}
                           onChange={(e) => setBulkPrecioCompra(e.target.value)}
-                          className={`flex-1 px-2 py-1 rounded border text-xs ${inputBg} ${borderColor}`}
+                          className={`flex-1 min-w-0 px-2 py-1 rounded border text-xs ${inputBg} ${borderColor}`}
                         />
                         <button
                           onClick={() => { applyBulkToAll("precio_compra", bulkPrecioCompra); }}
                           disabled={!bulkPrecioCompra}
-                          className="px-2 py-1 bg-blue-500 text-white rounded text-xs disabled:opacity-40"
+                          className="px-2 py-1 bg-blue-500 text-white rounded text-xs disabled:opacity-40 shrink-0"
                         >
-                          Apply
+                          Aplicar
                         </button>
                       </div>
                       <div className="flex items-center gap-2">
@@ -1054,14 +1103,14 @@ export function AgregarProductosSistema({ onClose }) {
                           placeholder="Stock"
                           value={bulkStock}
                           onChange={(e) => setBulkStock(e.target.value)}
-                          className={`flex-1 px-2 py-1 rounded border text-xs ${inputBg} ${borderColor}`}
+                          className={`flex-1 min-w-0 px-2 py-1 rounded border text-xs ${inputBg} ${borderColor}`}
                         />
                         <button
                           onClick={() => { applyBulkToAll("stock", bulkStock); }}
                           disabled={!bulkStock && bulkStock !== "0"}
-                          className="px-2 py-1 bg-green-500 text-white rounded text-xs disabled:opacity-40"
+                          className="px-2 py-1 bg-green-500 text-white rounded text-xs disabled:opacity-40 shrink-0"
                         >
-                          Apply
+                          Aplicar
                         </button>
                       </div>
                     </div>
@@ -1084,9 +1133,9 @@ export function AgregarProductosSistema({ onClose }) {
                       </div>
                       <button
                         onClick={() => toggleProductSelection(item.producto)}
-                        className={`p-1 rounded text-xs ${dark ? "hover:bg-gray-700 text-gray-400" : "hover:bg-gray-100 text-gray-500"}`}
+                        className={`p-1 rounded ${dark ? "hover:bg-gray-700 text-gray-400" : "hover:bg-gray-100 text-gray-500"}`}
                       >
-                        ✕
+                        <IconClose className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   ))}
@@ -1095,9 +1144,13 @@ export function AgregarProductosSistema({ onClose }) {
                 <button
                   onClick={esAdmin && hasAnyData ? handleAgregar : handleAgregarBulkSimple}
                   disabled={submitting}
-                  className="w-full py-2 bg-green-500 text-white rounded-lg font-medium disabled:opacity-50 hover:bg-green-600 transition-colors text-sm"
+                  className="w-full py-2 bg-green-500 text-white rounded-lg font-medium disabled:opacity-50 hover:bg-green-600 transition-colors text-sm flex items-center justify-center gap-1.5"
                 >
-                  {submitting ? "..." : esAdmin && hasAnyData ? `✓ Agregar ${selectedCount} con precios` : `✓ Agregar ${selectedCount}`}
+                  {submitting
+                    ? <div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                    : esAdmin && hasAnyData
+                      ? <><IconPlus className="w-4 h-4" /> Agregar {selectedCount} con precios</>
+                      : <><IconPlus className="w-4 h-4" /> Agregar {selectedCount}</>}
                 </button>
               </div>
             )}
@@ -1125,14 +1178,18 @@ export function AgregarProductosSistema({ onClose }) {
                           </p>
                           <button
                             onClick={() => { setSelectedProductsMap({}); }}
-                            className={`p-1 rounded text-xs ${dark ? "bg-gray-700 text-gray-300" : "bg-gray-200 text-gray-600"}`}
+                            className={`p-1 rounded ${dark ? "bg-gray-700 text-gray-300" : "bg-gray-200 text-gray-600"}`}
                           >
-                            ✕
+                            <IconClose className="w-3.5 h-3.5" />
                           </button>
                         </div>
                         {pv > 0 && pc > 0 && (
-                          <p className={`text-[10px] px-1 ${gananciaNegativa ? "text-red-500" : "text-green-500"}`}>
-                            {gananciaNegativa ? `⚠️ -$${Math.abs(ganancia).toLocaleString()}/u` : `✓ +$${ganancia.toLocaleString()}/u`}
+                          <p className={`text-[10px] px-1 flex items-center gap-1 ${gananciaNegativa ? "text-red-500" : "text-green-500"}`}>
+                            {gananciaNegativa ? (
+                              <><IconWarning className="w-3 h-3" /> -${Math.abs(ganancia).toLocaleString()}/u</>
+                            ) : (
+                              <><IconCheck className="w-3 h-3" /> +${ganancia.toLocaleString()}/u</>
+                            )}
                           </p>
                         )}
                         {esAdmin && (
@@ -1161,7 +1218,7 @@ export function AgregarProductosSistema({ onClose }) {
                             <button
                               onClick={activeTab === "asignados" ? handleActualizar : handleAgregar}
                               disabled={submitting}
-                              className={`px-2 py-1 text-white rounded font-medium text-xs disabled:opacity-50 ${
+                              className={`px-2 py-1 text-white rounded font-medium text-xs disabled:opacity-50 flex items-center gap-1 ${
                                 activeTab === "asignados"
                                   ? "bg-blue-500"
                                   : gananciaNegativa
@@ -1169,7 +1226,11 @@ export function AgregarProductosSistema({ onClose }) {
                                     : "bg-green-500"
                               }`}
                             >
-                              {activeTab === "asignados" ? "💾" : "✓"}
+                              {submitting
+                                ? <div className="w-3 h-3 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                                : activeTab === "asignados"
+                                  ? <IconSave className="w-3.5 h-3.5" />
+                                  : <IconCheck className="w-3.5 h-3.5" />}
                             </button>
                           </div>
                         )}
@@ -1183,9 +1244,11 @@ export function AgregarProductosSistema({ onClose }) {
                               <button
                                 onClick={handleAgregarBulkSimple}
                                 disabled={submitting}
-                                className="px-3 py-1 bg-green-500 text-white rounded font-medium text-xs disabled:opacity-50"
+                                className="px-3 py-1 bg-green-500 text-white rounded font-medium text-xs disabled:opacity-50 flex items-center gap-1"
                               >
-                                {submitting ? "..." : "✓ Agregar sin precios"}
+                                {submitting
+                                  ? <div className="w-3 h-3 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                                  : <><IconPlus className="w-3.5 h-3.5" /> Agregar sin precios</>}
                               </button>
                             )}
                           </div>
@@ -1198,15 +1261,16 @@ export function AgregarProductosSistema({ onClose }) {
                 <div className="space-y-1">
                   <div className="flex items-center gap-2 mb-1">
                     <div className="flex-1 min-w-0">
-                      <p className={`text-xs font-medium ${textPrimary}`}>
-                        📋 {selectedCount} productos
+                      <p className={`text-xs font-medium flex items-center gap-1.5 ${textPrimary}`}>
+                        <IconClipboard className="w-3.5 h-3.5" />
+                        {selectedCount} productos
                       </p>
                     </div>
                     <button
                       onClick={() => { setSelectedProductsMap({}); }}
-                      className={`p-1 rounded text-xs ${dark ? "bg-gray-700 text-gray-300" : "bg-gray-200 text-gray-600"}`}
+                      className={`p-1 rounded ${dark ? "bg-gray-700 text-gray-300" : "bg-gray-200 text-gray-600"}`}
                     >
-                      ✕
+                      <IconClose className="w-3.5 h-3.5" />
                     </button>
                   </div>
                   {esAdmin && (
@@ -1234,9 +1298,9 @@ export function AgregarProductosSistema({ onClose }) {
                       />
                       <button
                         onClick={() => { applyBulkToAll("precio_venta", bulkPrecioVenta); applyBulkToAll("precio_compra", bulkPrecioCompra); applyBulkToAll("stock", bulkStock); }}
-                        className="px-2 py-1 bg-purple-500 text-white rounded text-xs"
+                        className="px-2 py-1 bg-purple-500 text-white rounded text-xs shrink-0"
                       >
-                        Apply
+                        Aplicar
                       </button>
                     </div>
                   )}
@@ -1244,9 +1308,13 @@ export function AgregarProductosSistema({ onClose }) {
                     <button
                       onClick={esAdmin && hasAnyData ? handleAgregar : handleAgregarBulkSimple}
                       disabled={submitting}
-                      className="px-3 py-1 bg-green-500 text-white rounded font-medium text-xs disabled:opacity-50"
+                      className="px-3 py-1 bg-green-500 text-white rounded font-medium text-xs disabled:opacity-50 flex items-center gap-1"
                     >
-                      {submitting ? "..." : esAdmin && hasAnyData ? "✓ Agregar c/precios" : "✓ Agregar"}
+                      {submitting
+                        ? <div className="w-3 h-3 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                        : esAdmin && hasAnyData
+                          ? <><IconPlus className="w-3.5 h-3.5" /> Agregar c/precios</>
+                          : <><IconPlus className="w-3.5 h-3.5" /> Agregar</>}
                     </button>
                   </div>
                 </div>
@@ -1257,11 +1325,58 @@ export function AgregarProductosSistema({ onClose }) {
           {/* INDICADOR MOBILE CUANDO NO HAY SELECCIÓN */}
           {esMobile && selectedCount === 0 && (
             <div className={`md:hidden fixed bottom-0 left-0 right-0 p-2 ${bgModal} border-t ${borderColor}`}>
-              <p className={`text-xs text-center ${textSecondary}`}>👆 Seleccioná productos</p>
+              <p className={`text-xs text-center ${textSecondary}`}>Seleccioná productos</p>
             </div>
           )}
         </div>
       </div>
+
+      {/* CONFIRM DIALOG — Ganancia negativa */}
+      {confirmInfo && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={() => setConfirmInfo(null)}>
+          <div
+            className={`w-full max-w-sm rounded-2xl shadow-xl border ${bgCard} ${borderColor}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-5 text-center">
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 ${dark ? "bg-yellow-500/20" : "bg-yellow-100"}`}>
+                <IconWarning className="w-6 h-6 text-yellow-500" />
+              </div>
+              <h3 className={`font-bold text-lg mb-1 ${textPrimary}`}>Ganancia negativa</h3>
+              <p className={`text-sm mb-3 ${textSecondary}`}>
+                Ganancia negativa en <strong>{confirmInfo.nombre}</strong>
+              </p>
+              <div className={`grid grid-cols-2 gap-2 text-sm p-3 rounded-xl mb-1 ${dark ? "bg-gray-700" : "bg-gray-100"}`}>
+                <div>
+                  <span className={`text-xs ${textSecondary}`}>Compra</span>
+                  <p className={`font-bold ${textPrimary}`}>${confirmInfo.pc.toLocaleString()}</p>
+                </div>
+                <div>
+                  <span className={`text-xs ${textSecondary}`}>Venta</span>
+                  <p className={`font-bold ${textPrimary}`}>${confirmInfo.pv.toLocaleString()}</p>
+                </div>
+              </div>
+              <p className="text-sm font-medium text-red-500">
+                -${(confirmInfo.pc - confirmInfo.pv).toLocaleString()} por unidad
+              </p>
+            </div>
+            <div className={`flex border-t ${borderColor}`}>
+              <button
+                onClick={() => setConfirmInfo(null)}
+                className={`flex-1 py-3 text-sm font-medium ${dark ? "text-gray-400 hover:text-white" : "text-gray-600 hover:text-black"}`}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => { setConfirmInfo(null); confirmAgregar(); }}
+                className="flex-1 py-3 text-sm font-medium text-yellow-600 hover:text-yellow-500 border-l border-red-500/20"
+              >
+                Agregar de todos modos
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

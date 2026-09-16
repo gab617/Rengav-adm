@@ -205,7 +205,11 @@ export function NavBar() {
               onClick={() => storeUrl && setModalTienda(true)}
               title={profile?.name}
               aria-label="Ir a la tienda online"
-              className="w-[2.25em] h-[2.25em] 940:w-[2.75em] 940:h-[2.75em] xl:w-[3.25em] xl:h-[3.25em] rounded-lg border overflow-hidden flex items-center justify-center backdrop-blur-md transition-all duration-300 hover:scale-110"
+              className={`w-[2.25em] h-[2.25em] 940:w-[2.75em] 940:h-[2.75em] xl:w-[3.25em] xl:h-[3.25em] rounded-2xl ring-1 ring-inset overflow-hidden flex items-center justify-center backdrop-blur-md transition-all duration-300 hover:scale-110 focus-visible:ring-2 focus-visible:ring-yellow-400 focus-visible:outline-none ${
+              dark
+                ? "bg-gray-800/70 ring-gray-600 hover:ring-yellow-400/70 hover:shadow-xl hover:shadow-yellow-500/10"
+                : "bg-white/70 ring-gray-300 hover:ring-yellow-400 hover:shadow-xl hover:shadow-yellow-500/15"
+            }`}
             >
               <img
                 src={publicUrl(logoUrl)}
@@ -223,12 +227,19 @@ export function NavBar() {
           <button
             onClick={() => navigate("/pedidos-web")}
             title="Pedidos web pendientes"
-            className="relative w-[2em] h-[2em] 940:w-[2.5em] 940:h-[2.5em] xl:w-[3em] xl:h-[3em] rounded-full border flex items-center justify-center backdrop-blur-md transition-all duration-300 hover:scale-110"
+            aria-label="Pedidos web pendientes"
+            className={`relative inline-flex items-center justify-center w-[2em] h-[2em] 940:w-[2.5em] 940:h-[2.5em] xl:w-[3em] xl:h-[3em] rounded-xl border backdrop-blur-md transition-all duration-300 hover:scale-110 focus-visible:ring-2 focus-visible:ring-yellow-400 focus-visible:outline-none active:scale-95 ${
+              dark
+                ? "bg-gray-800/60 border-gray-600/70 text-gray-300 hover:text-yellow-300 hover:border-yellow-400/70 hover:shadow-lg hover:shadow-yellow-500/10"
+                : "bg-white/70 border-gray-300 text-gray-600 hover:text-yellow-600 hover:border-yellow-400 hover:shadow-lg hover:shadow-yellow-500/15"
+            }`}
           >
-            <span className="text-base 940:text-lg xl:text-xl">🔔</span>
+            <IconBell className="w-[1.15em] h-[1.15em] 940:w-[1.35em] 940:h-[1.35em] xl:w-[1.5em] xl:h-[1.5em]" />
             {pendientes > 0 && (
               <span
-                className="absolute -top-1 -right-1 min-w-[1.25rem] h-5 px-1 rounded-full bg-red-500 text-white text-xs font-bold flex items-center justify-center"
+                className={`absolute -top-1.5 -right-1.5 min-w-[1.1rem] h-5 px-1 rounded-full bg-red-500 text-white text-xs font-bold flex items-center justify-center ring-2 shadow-md shadow-red-500/30 ${
+                  dark ? "ring-gray-800" : "ring-white"
+                }`}
               >
                 {pendientes > 99 ? "99+" : pendientes}
               </span>
@@ -237,13 +248,30 @@ export function NavBar() {
 
           <button
             onClick={toggleTheme}
-            className="w-[2em] h-[2em] 940:w-[2.5em] 940:h-[2.5em] xl:w-[3em] xl:h-[3em] rounded-full border flex items-center justify-center backdrop-blur-md transition-all duration-300 hover:scale-110"
+            title="Cambiar tema"
+            aria-label="Cambiar tema"
+            className={`inline-flex items-center justify-center w-[2em] h-[2em] 940:w-[2.5em] 940:h-[2.5em] xl:w-[3em] xl:h-[3em] rounded-xl border backdrop-blur-md transition-all duration-300 hover:scale-110 focus-visible:ring-2 focus-visible:ring-yellow-400 focus-visible:outline-none active:scale-95 ${
+              dark
+                ? "bg-gray-800/60 border-gray-600/70 text-gray-300 hover:text-yellow-300 hover:border-yellow-400/70 hover:shadow-lg hover:shadow-yellow-500/10"
+                : "bg-white/70 border-gray-300 text-gray-600 hover:text-yellow-600 hover:border-yellow-400 hover:shadow-lg hover:shadow-yellow-500/15"
+            }`}
           >
-            <img
-              src={dark ? "./tema-dark.png" : "./tema-light.png"}
-              alt="theme toggle"
-              className="w-[1.25em] h-[1.25em] 940:w-[1.5em] 940:h-[1.5em] xl:w-[2em] xl:h-[2em] opacity-90"
-            />
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.span
+                key={dark ? "moon" : "sun"}
+                initial={{ rotate: -90, opacity: 0, scale: 0.4 }}
+                animate={{ rotate: 0, opacity: 1, scale: 1 }}
+                exit={{ rotate: 90, opacity: 0, scale: 0.4 }}
+                transition={{ duration: 0.22 }}
+                className="inline-flex items-center justify-center"
+              >
+                {dark ? (
+                  <IconMoon className="w-[1.15em] h-[1.15em] 940:w-[1.35em] 940:h-[1.35em] xl:w-[1.5em] xl:h-[1.5em]" />
+                ) : (
+                  <IconSun className="w-[1.15em] h-[1.15em] 940:w-[1.35em] 940:h-[1.35em] xl:w-[1.5em] xl:h-[1.5em]" />
+                )}
+              </motion.span>
+            </AnimatePresence>
           </button>
         </div>
       </div>
@@ -464,5 +492,58 @@ export function NavBar() {
         document.body
       )}
     </nav>
+  );
+}
+
+function IconBell({ className = "" }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+      <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+    </svg>
+  );
+}
+
+function IconSun({ className = "" }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+    </svg>
+  );
+}
+
+function IconMoon({ className = "" }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+    </svg>
   );
 }

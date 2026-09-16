@@ -1,25 +1,31 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
+// motion se usa en JSX (<motion.div>) pero sin jsx-uses-vars el
+// linter no ve referencias JSX y lo marca "unused". NO BORRAR.
+// eslint-disable-next-line no-unused-vars
+import { AnimatePresence, motion } from "framer-motion";
 import { useAppContext } from "../../contexto/Context";
 import { FormProveedor } from "./FormProveedor";
 import { ListProveedores } from "./components/ListProveedores";
 import { Toast } from "./components/Toast";
+import {
+  IconArrowDown,
+  IconArrowUp,
+  IconBuilding,
+  IconClose,
+  IconPlus,
+  IconSearch,
+  IconSort,
+} from "../../components/icons";
 
 export function Proveedores() {
   const { proveedores, preferencias } = useAppContext();
   const dark = preferencias?.theme === "dark";
-  
-  const [esMobile, setEsMobile] = useState(window.innerWidth < 768);
+
   const [searchTerm, setSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState("nombre");
   const [sortOrder, setSortOrder] = useState("asc");
   const [showForm, setShowForm] = useState(false);
   const [toast, setToast] = useState(null);
-
-  useEffect(() => {
-    const handleResize = () => setEsMobile(window.innerWidth < 768);
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
 
   const showToast = (message, type = "success") => {
     setToast({ message, type });
@@ -40,7 +46,7 @@ export function Proveedores() {
 
     result.sort((a, b) => {
       let valA, valB;
-      
+
       switch (sortBy) {
         case "nombre":
           valA = a.nombre?.toLowerCase() || "";
@@ -85,10 +91,28 @@ export function Proveedores() {
   const borderColor = dark ? "border-gray-700" : "border-gray-200";
   const inputBg = dark ? "bg-gray-700 text-white border-gray-600" : "bg-white text-gray-900 border-gray-300";
 
+  const total = proveedores.length;
+  const filtered = filteredAndSortedProveedores.length;
+
   const SortIcon = ({ field }) => {
-    if (sortBy !== field) return <span className="text-gray-500">⇅</span>;
-    return <span className={dark ? "text-blue-400" : "text-blue-600"}>{sortOrder === "asc" ? "↑" : "↓"}</span>;
+    const size = "w-3.5 h-3.5";
+    if (sortBy === field) {
+      return sortOrder === "asc" ? (
+        <IconArrowUp className={size} />
+      ) : (
+        <IconArrowDown className={size} />
+      );
+    }
+    return <IconSort className={`${size} opacity-50`} />;
   };
+
+  const sortBtn = (field) => `px-3 py-3 text-sm font-medium transition-all flex items-center gap-1.5 ${
+    sortBy === field
+      ? dark
+        ? "bg-blue-600 text-white"
+        : "bg-blue-500 text-white"
+      : `${inputBg} ${textSecondary}`
+  } ${sortBy !== field ? "hover:opacity-80" : ""}`;
 
   return (
     <div className={`min-h-screen p-4 md:p-6 transition-colors duration-300 ${bgMain} pb-24 md:pb-6`}>
@@ -98,14 +122,30 @@ export function Proveedores() {
       <div className="max-w-5xl mx-auto mb-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
           <div>
-            <h1 className={`text-2xl md:text-3xl font-bold ${textPrimary}`}>
-              📜 Proveedores
+            <h1 className={`text-2xl md:text-3xl font-bold flex items-center gap-3 ${textPrimary}`}>
+              <span
+                className={`w-11 h-11 rounded-2xl flex items-center justify-center text-white ${
+                  dark
+                    ? "bg-gradient-to-br from-blue-600 to-indigo-700 shadow-lg shadow-blue-900/40"
+                    : "bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg shadow-blue-500/30"
+                }`}
+              >
+                <IconBuilding className="w-6 h-6" />
+              </span>
+              Proveedores
             </h1>
-            <p className={`text-sm ${textSecondary}`}>
-              {filteredAndSortedProveedores.length} de {proveedores.length} proveedores
-            </p>
+            <div className="mt-2 flex items-center gap-2">
+              <span
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
+                  dark ? "bg-gray-800 text-gray-300" : "bg-blue-50 text-blue-600"
+                }`}
+              >
+                {filtered} de {total}
+              </span>
+              <span className={`text-sm ${textSecondary}`}>proveedores</span>
+            </div>
           </div>
-          
+
           <button
             onClick={() => setShowForm(!showForm)}
             className={`px-4 py-2.5 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 shadow-lg ${
@@ -113,49 +153,74 @@ export function Proveedores() {
                 ? dark
                   ? "bg-gray-700 text-gray-300"
                   : "bg-gray-200 text-gray-700"
-                : "bg-blue-600 text-white hover:bg-blue-500 hover:scale-105"
+                : "bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-500 hover:to-indigo-500 hover:scale-105 shadow-blue-500/25 hover:shadow-blue-500/40"
             }`}
           >
-            <span className="text-xl">{showForm ? "✕" : "+"}</span>
-            <span>{showForm ? "Cerrar" : "Agregar"}</span>
+            {showForm ? (
+              <>
+                <IconClose className="w-5 h-5" />
+                <span>Cerrar</span>
+              </>
+            ) : (
+              <>
+                <IconPlus className="w-5 h-5" />
+                <span>Agregar</span>
+              </>
+            )}
           </button>
         </div>
 
         {/* FORMULARIO COLAPSABLE */}
-        <div
-          className={`transition-all duration-500 ease-out overflow-hidden ${
-            showForm ? "max-h-[800px] opacity-100 mb-6" : "max-h-0 opacity-0"
-          }`}
-        >
-          <div className={`p-4 md:p-6 rounded-2xl ${bgCard} border ${borderColor} shadow-xl`}>
-            <FormProveedor
-              onSuccess={(msg) => {
-                showToast(msg, "success");
-                setShowForm(false);
-              }}
-              onError={(msg) => showToast(msg, "error")}
-            />
-          </div>
-        </div>
+        <AnimatePresence initial={false}>
+          {showForm && (
+            <motion.div
+              key="form-proveedor"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.3, ease: "easeInOut" }}
+              className="overflow-hidden"
+            >
+              <div className={`p-4 md:p-6 rounded-2xl ${bgCard} border ${borderColor} shadow-xl mb-6`}>
+                <FormProveedor
+                  onSuccess={(msg) => {
+                    showToast(msg, "success");
+                    setShowForm(false);
+                  }}
+                  onError={(msg) => showToast(msg, "error")}
+                />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* BÚSQUEDA Y FILTROS */}
         <div className="flex flex-col sm:flex-row gap-3">
           {/* BUSCADOR */}
           <div className="relative flex-1">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg">🔍</span>
+            <IconSearch
+              className={`absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 ${
+                dark ? "text-gray-400" : "text-gray-400"
+              }`}
+            />
             <input
               type="text"
               placeholder="Buscar por nombre, email o teléfono..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className={`w-full pl-10 pr-4 py-3 rounded-xl border ${inputBg} text-sm md:text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all`}
+              className={`w-full pl-10 pr-10 py-3 rounded-xl border ${inputBg} text-sm md:text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all`}
             />
             {searchTerm && (
               <button
                 onClick={() => setSearchTerm("")}
-                className={`absolute right-3 top-1/2 -translate-y-1/2 ${textSecondary} hover:text-red-500 transition-colors`}
+                aria-label="Limpiar búsqueda"
+                className={`absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:outline-none ${
+                  dark
+                    ? "text-gray-400 hover:text-red-400 hover:bg-gray-600/60"
+                    : "text-gray-400 hover:text-red-500 hover:bg-gray-100"
+                }`}
               >
-                ✕
+                <IconClose className="w-4 h-4" />
               </button>
             )}
           </div>
@@ -164,26 +229,13 @@ export function Proveedores() {
           <div className={`flex rounded-xl border ${borderColor} overflow-hidden`}>
             <button
               onClick={() => toggleSort("nombre")}
-              className={`px-3 py-3 text-sm font-medium transition-all flex items-center gap-1 ${
-                sortBy === "nombre"
-                  ? dark
-                    ? "bg-blue-600 text-white"
-                    : "bg-blue-500 text-white"
-                  : `${inputBg} ${textSecondary} hover:${textPrimary}`
+              className={`${sortBtn("nombre")} ${
+                sortBy === "nombre" ? "" : `border-r ${borderColor}`
               }`}
             >
               Nombre <SortIcon field="nombre" />
             </button>
-            <button
-              onClick={() => toggleSort("fecha")}
-              className={`px-3 py-3 text-sm font-medium transition-all flex items-center gap-1 border-l ${borderColor} ${
-                sortBy === "fecha"
-                  ? dark
-                    ? "bg-blue-600 text-white"
-                    : "bg-blue-500 text-white"
-                  : `${inputBg} ${textSecondary} hover:${textPrimary}`
-              }`}
-            >
+            <button onClick={() => toggleSort("fecha")} className={sortBtn("fecha")}>
               Fecha <SortIcon field="fecha" />
             </button>
           </div>
@@ -192,25 +244,46 @@ export function Proveedores() {
 
       {/* LISTA DE PROVEEDORES */}
       <div className="max-w-5xl mx-auto">
-        {filteredAndSortedProveedores.length === 0 ? (
-          <div className={`text-center py-16 ${bgCard} rounded-2xl border ${borderColor}`}>
-            <div className="text-6xl mb-4">{proveedores.length === 0 ? "📦" : "🔍"}</div>
-            <h3 className={`text-xl font-semibold ${textPrimary} mb-2`}>
-              {proveedores.length === 0 ? "Sin proveedores" : "Sin resultados"}
-            </h3>
-            <p className={textSecondary}>
-              {proveedores.length === 0
-                ? "Agrega tu primer proveedor para comenzar"
-                : `No hay proveedores que coincidan con "${searchTerm}"`}
-            </p>
-            {searchTerm && (
-              <button
-                onClick={() => setSearchTerm("")}
-                className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+        {filtered === 0 ? (
+          <div className={`text-center py-16 rounded-3xl ${bgCard} border ${borderColor} relative overflow-hidden`}>
+            <div
+              className={`absolute inset-0 pointer-events-none ${
+                dark
+                  ? "bg-gradient-to-b from-blue-900/10 to-transparent"
+                  : "bg-gradient-to-b from-blue-50 to-transparent"
+              }`}
+            />
+            <div className="relative">
+              <span
+                className={`mx-auto mb-5 w-20 h-20 rounded-3xl flex items-center justify-center ${
+                  dark
+                    ? "bg-gradient-to-br from-blue-600/30 to-indigo-600/20 text-blue-400 border border-blue-700/40"
+                    : "bg-gradient-to-br from-blue-100 to-indigo-100 text-blue-500 border border-blue-200"
+                }`}
               >
-                Limpiar búsqueda
-              </button>
-            )}
+                {total === 0 ? (
+                  <IconBuilding className="w-10 h-10" />
+                ) : (
+                  <IconSearch className="w-10 h-10" />
+                )}
+              </span>
+              <h3 className={`text-xl font-semibold ${textPrimary} mb-2`}>
+                {total === 0 ? "Sin proveedores" : "Sin resultados"}
+              </h3>
+              <p className={textSecondary}>
+                {total === 0
+                  ? "Agregá tu primer proveedor para comenzar"
+                  : `No hay proveedores que coincidan con "${searchTerm}"`}
+              </p>
+              {searchTerm && (
+                <button
+                  onClick={() => setSearchTerm("")}
+                  className="mt-5 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg font-medium hover:from-blue-500 hover:to-indigo-500 transition-all"
+                >
+                  Limpiar búsqueda
+                </button>
+              )}
+            </div>
           </div>
         ) : (
           <ListProveedores
