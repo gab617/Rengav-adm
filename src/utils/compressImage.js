@@ -226,8 +226,26 @@ const comprimirConFallback = async (file, options, maxDim) => {
   );
 };
 
+// Los celulares muestran un cold-start determinístico: el PRIMER intento de
+// compresión de una selección falla (decodificador frío, memoria del renderer
+// recién asignada) y el segundo funciona siempre. Un único reintento convierte
+// ese primer archivo en un "intento 2" que ya sabemos que suele ganar.
+const comprimirConReintento = async (file, options, maxDim) => {
+  try {
+    return await comprimirConFallback(file, options, maxDim);
+  } catch (primerError) {
+    console.warn(
+      "[compressImage] el primer intento de compresión falló; se reintenta:",
+      primerError.message
+    );
+    // Pausa breve para dejar que el GC libere lo del primer intento.
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    return comprimirConFallback(file, options, maxDim);
+  }
+};
+
 export const compressImage = async (file) =>
-  comprimirConFallback(file, PRODUCT_OPTIONS, 1200);
+  comprimirConReintento(file, PRODUCT_OPTIONS, 1200);
 
 export const compressBrandingImage = async (file) =>
-  comprimirConFallback(file, BRANDING_OPTIONS, 800);
+  comprimirConReintento(file, BRANDING_OPTIONS, 800);
