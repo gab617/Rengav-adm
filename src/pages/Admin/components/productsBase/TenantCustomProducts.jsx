@@ -342,6 +342,12 @@ export function TenantCustomProducts({ dark, tenantId, categories, subcategories
     [editingImage]
   );
 
+  useEffect(() => {
+    return () => {
+      if (newImagePreview) URL.revokeObjectURL(newImagePreview);
+    };
+  }, [newImagePreview]);
+
   const editGallery = useMemo(() => {
     if (!editingId) return [];
     const base = gallery[editingId] || [];

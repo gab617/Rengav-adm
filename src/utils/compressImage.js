@@ -95,35 +95,9 @@ const dibujarAjpeg = (bitmap, ancho, alto, name, quality) =>
 const redimensionarManual = async (file, maxDim, quality) => {
   const name = file.name.replace(/\.[^.$]+$/, "") + ".jpg";
 
-  // Camino 1 (baja memoria): decodifica YA redimensionado. Solo maneja JPEG,
-  // pero es el formato con el que fallaba el celular (image/jpeg).
-  const dims = await leerDimensionesJpeg(file);
-  if (dims) {
-    const escala = Math.min(1, maxDim / Math.max(dims.ancho, dims.alto));
-    const target = {
-      ancho: Math.max(1, Math.round(dims.ancho * escala)),
-      alto: Math.max(1, Math.round(dims.alto * escala)),
-    };
-    const bitmap = await createImageBitmap(file, {
-      resizeWidth: target.ancho,
-      resizeHeight: target.alto,
-      resizeQuality: "high",
-    });
-    try {
-      return await dibujarAjpeg(
-        bitmap,
-        target.ancho,
-        target.alto,
-        name,
-        quality
-      );
-    } finally {
-      bitmap.close();
-    }
-  }
-
-  // Camino 2 (compatible con cualquier formato): Image + canvas, sirve como
-  // respaldo para PNG/WebP o cuando el header JPEG no se pudo leer.
+  // createImageBitmap con resize decodifica a resolución completa y recién
+  // después escala (verificado en ImageBitmap.cpp de Chromium). Este camino
+  // NO ahorra memoria; queda solo como red de seguridad de formato.
   const { img, ancho, alto } = await cargarComoImagen(file);
   const escala = Math.min(1, maxDim / Math.max(ancho, alto));
   return dibujarAjpeg(
@@ -135,34 +109,75 @@ const redimensionarManual = async (file, maxDim, quality) => {
   );
 };
 
-// Indica si el archivo es un JPEG de cámara (formato real con el que fallaba
-// el móvil) y si el navegador soporta decodificación con resize.
-const esJpegRedimensionable = async (file) => {
-  if (
-    typeof createImageBitmap !== "function" ||
-    typeof file.arrayBuffer !== "function"
-  ) {
-    return false;
-  }
+// Camino VERDADERO de baja memoria (Chromium): WebCodecs ImageDecoder con
+// desiredWidth/desiredHeight redimensiona DURANTE el decode del JPEG
+// (JPEGImageDecoder::DesiredScaleNumerator). Nunca materializa el bitmap de
+// resolución completa (~192MB), que es lo que tira el renderer del celular.
+// Disponible en Chrome 94+ (escritorio y Android); devuelve null si no aplica.
+const decodificarJpegReducido = async (file, dims, maxDim, quality) => {
+  if (typeof ImageDecoder === "undefined") return null;
+
+  const soportado = await ImageDecoder.isTypeSupported(
+    file.type || "image/jpeg"
+  );
+  if (!soportado) return null;
+
+  const escala = Math.min(1, maxDim / Math.max(dims.ancho, dims.alto));
+  const target = {
+    ancho: Math.max(1, Math.round(dims.ancho * escala)),
+    alto: Math.max(1, Math.round(dims.alto * escala)),
+  };
+
+  const buffer = await file.arrayBuffer();
+  const decoder = new ImageDecoder({
+    type: file.type || "image/jpeg",
+    data: buffer,
+    desiredWidth: target.ancho,
+    desiredHeight: target.alto,
+  });
+
   try {
-    const cabecera = new DataView(await file.slice(0, 2).arrayBuffer());
-    return cabecera.getUint16(0) === 0xffd8;
-  } catch {
-    return false;
+    const { image } = await decoder.decode();
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = target.ancho;
+      canvas.height = target.alto;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+      const blob = await new Promise((resolve) =>
+        canvas.toBlob(resolve, "image/jpeg", quality)
+      );
+      if (!blob) throw new Error("El canvas no pudo generar el JPEG");
+
+      const name = file.name.replace(/\.[^.$]+$/, "") + ".jpg";
+      return new File([blob], name, { type: "image/jpeg" });
+    } finally {
+      image.close?.();
+    }
+  } finally {
+    decoder.close?.();
   }
 };
 
 const comprimirConFallback = async (file, options, maxDim) => {
   if (file.size <= 150 * 1024) return file;
 
-  // 1) Baja memoria PRIORITARIO: JPEG se decodifica YA a la dimensión final.
-  //    Nunca materializa el bitmap de resolución completa (~192MB) que tumba
-  //    y deja sin memoria el renderer del celular para intentos posteriores.
-  if (await esJpegRedimensionable(file)) {
+  // 1) Reduce el JPEG DURANTE el decode (WebCodecs, solo Chromium). Es la
+  //    única ruta que no pide el bitmap completo de memoria al móvil.
+  const dims = await leerDimensionesJpeg(file);
+  if (dims) {
     try {
-      return await redimensionarManual(file, maxDim, options.initialQuality);
+      const reducida = await decodificarJpegReducido(
+        file,
+        dims,
+        maxDim,
+        options.initialQuality
+      );
+      if (reducida) return reducida;
+      console.warn("[compressImage] ImageDecoder no disponible o no aplicó");
     } catch (err) {
-      console.warn("[compressImage] ruta de baja memoria falló:", err);
+      console.warn("[compressImage] ImageDecoder falló:", err);
     }
   }
 

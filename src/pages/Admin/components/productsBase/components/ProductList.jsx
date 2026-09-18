@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import { useAppContext } from "../../../../../contexto/Context";
 import { supabase } from "../../../../../services/supabaseClient";
 import { toast } from "react-toastify";
@@ -198,6 +198,12 @@ export function ProductList({ products = [], categories = [], subcategories = []
     () => (editNewImage ? URL.createObjectURL(editNewImage) : null),
     [editNewImage]
   );
+
+  useEffect(() => {
+    return () => {
+      if (editPreviewUrl) URL.revokeObjectURL(editPreviewUrl);
+    };
+  }, [editPreviewUrl]);
 
   const handleEditImageChange = (e) => {
     const file = e.target.files?.[0];
