@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { supabase } from "../../../services/supabaseClient";
 import { toast } from "react-toastify";
-import { compressImage } from "../../../utils/compressImage";
+import { compressImage, guardarHuella, liberarCacheLectura } from "../../../utils/compressImage";
 
 const generarUuid = () =>
   typeof crypto !== "undefined" && crypto.randomUUID
@@ -46,6 +46,9 @@ export function ProductImagesEditor({
   const [maxImagenes, setMaxImagenes] = useState(3);
   const [subiendo, setSubiendo] = useState(false);
   const fileInputRef = useRef(null);
+  // path subido -> huella del archivo original, para liberar el buffer de la
+  // caché de lectura (RAM del celular) cuando el usuario elimina la imagen.
+  const huellasPorPathRef = useRef(new Map());
 
   useEffect(() => {
     if (!tenantId) return;
@@ -111,6 +114,9 @@ export function ProductImagesEditor({
         try {
           const ext = "jpg";
           const path = `${tenantId}/${productId}/${generarUuid()}.${ext}`;
+          // Guardamos la huella del ORIGINAL (no del comprimido): la caché de
+          // lectura está keyed por el archivo que vino del selector.
+          huellasPorPathRef.current.set(path, guardarHuella(file));
 
           const { error } = await supabase.storage
             .from("product-images")
@@ -152,6 +158,15 @@ export function ProductImagesEditor({
     const path = imagenes[idx];
     const nuevas = imagenes.filter((_, i) => i !== idx);
     onImagenesChange(nuevas);
+
+    // Liberamos UNA VEZ la memoria del buffer original (~6.7MB por foto).
+    // Si el usuario vuelve a pickear la MISMA foto, se lee de nuevo (1 FD);
+    // si no, no quedamos reteniendo RAM innecesaria en el celular.
+    const huella = huellasPorPathRef.current.get(path);
+    if (huella && liberarCacheLectura(huella)) {
+      console.debug("[ProductImagesEditor] buffer de imagen liberado del caché");
+    }
+    huellasPorPathRef.current.delete(path);
 
     // Solo purgamos del bucket lo subido a la carpeta PROPIA de esta
     // asignación. Los customs comparten un pool entre molde y todas

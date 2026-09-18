@@ -31,11 +31,18 @@ const esperar = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // y Chromium filtran file descriptors: tras varios agrega/elimina el sistema
 // no puede abrir más y TODA lectura falla. Si la foto ya se leyó antes,
 // reusamos el buffer en RAM y ni tocamos el content://.
+// ACOTADA a la cantidad máxima de imágenes (3) y con liberación explícita al
+// eliminar (ver liberarCacheLectura): los buffers originales pesan ~6.7MB c/u
+// y retenerlos indefinidamente mata al móvil por RAM, no por FDs.
 const CACHE_LECTURAS = new Map();
-const MAX_CACHE_LECTURAS = 6;
+const MAX_CACHE_LECTURAS = 3;
 
 const huellaArchivo = (file) =>
   `${file.name}|${file.size}|${file.lastModified}`;
+
+// El editor guarda esta huella junto al path subido para poder liberar el
+// buffer exacto cuando el usuario elimina esa imagen (ver liberarCacheLectura).
+export const guardarHuella = (file) => huellaArchivo(file);
 
 const cachearLectura = (file, buffer) => {
   const huella = huellaArchivo(file);
@@ -45,6 +52,14 @@ const cachearLectura = (file, buffer) => {
     CACHE_LECTURAS.delete(masVieja);
   }
   CACHE_LECTURAS.set(huella, buffer);
+};
+
+// Libera del caché el buffer de una foto puntual. La usa el editor cuando el
+// usuario ELIMINA una imagen: si quedara retenido, estaríamos ocupando ~6.7MB
+// de RAM en el celular por una foto que ya nadie va a reutilizar.
+export const liberarCacheLectura = (huella) => {
+  if (!huella) return false;
+  return CACHE_LECTURAS.delete(huella);
 };
 
 // Serializa errores de forma legible (los ProgressEvent/Event de la lib
