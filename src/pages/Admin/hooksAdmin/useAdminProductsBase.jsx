@@ -163,19 +163,20 @@ export function useAdminProductsBase(onProductCreated, tenantId) {
 
     setCreating(true);
 
-    const { data: inserted, error } = await supabase
-      .from("products_base")
-      .insert([
-        {
-          name,
-          brand_id: brand_id || null,
-          category_id,
-          subcategory_id,
-          type_unit,
-          talles: talles.map(Number),
-        },
-      ])
-      .select(`
+    try {
+      const { data: inserted, error } = await supabase
+        .from("products_base")
+        .insert([
+          {
+            name,
+            brand_id: brand_id || null,
+            category_id,
+            subcategory_id,
+            type_unit,
+            talles: talles.map(Number),
+          },
+        ])
+        .select(`
         id,
         name,
         type_unit,
@@ -188,33 +189,29 @@ export function useAdminProductsBase(onProductCreated, tenantId) {
         categories ( id, name ),
         subcategories ( id, name )
       `)
-      .single();
+        .single();
 
-    if (error) {
-      setCreating(false);
-      throw error;
-    }
+      if (error) throw error;
 
-    let data = inserted;
+      let data = inserted;
 
-    if (imageFile) {
-      const compressed = await compressImage(imageFile);
-      const path = `base/${inserted.id}/${Date.now()}-image.jpg`;
-      const { error: uploadErr } = await supabase.storage
-        .from("product-images")
-        .upload(path, compressed, { contentType: "image/jpeg" });
+      if (imageFile) {
+        const compressed = await compressImage(imageFile);
+        const path = `base/${inserted.id}/${Date.now()}-image.jpg`;
+        const { error: uploadErr } = await supabase.storage
+          .from("product-images")
+          .upload(path, compressed, { contentType: "image/jpeg" });
 
-      if (uploadErr) {
-        await supabase.from("products_base").delete().eq("id", inserted.id);
-        setCreating(false);
-        throw uploadErr;
-      }
+        if (uploadErr) {
+          await supabase.from("products_base").delete().eq("id", inserted.id);
+          throw uploadErr;
+        }
 
-      const { data: updated, error: imgErr } = await supabase
-        .from("products_base")
-        .update({ image_url: path })
-        .eq("id", inserted.id)
-        .select(`
+        const { data: updated, error: imgErr } = await supabase
+          .from("products_base")
+          .update({ image_url: path })
+          .eq("id", inserted.id)
+          .select(`
           id,
           name,
           type_unit,
@@ -227,39 +224,37 @@ export function useAdminProductsBase(onProductCreated, tenantId) {
           categories ( id, name ),
           subcategories ( id, name )
         `)
-        .single();
+          .single();
 
-      if (imgErr) {
-        setCreating(false);
-        throw imgErr;
+        if (imgErr) throw imgErr;
+
+        data = updated;
       }
 
-      data = updated;
-    }
+      const newProduct = {
+        ...data,
+        enUso: false,
+        enCatalogo: adminCategoryIds.includes(data.category_id),
+      };
 
-    setCreating(false);
+      setProducts((prev) =>
+        [...prev, newProduct].sort((a, b) =>
+          a.name.localeCompare(b.name)
+        )
+      );
 
-    const newProduct = {
-      ...data,
-      enUso: false,
-      enCatalogo: adminCategoryIds.includes(data.category_id),
-    };
+      if (data.image_url && !data.image_url.startsWith("http")) {
+        setBaseGallery((prev) => ({
+          ...prev,
+          [data.id]: [data.image_url],
+        }));
+      }
 
-    setProducts((prev) =>
-      [...prev, newProduct].sort((a, b) =>
-        a.name.localeCompare(b.name)
-      )
-    );
-
-    if (data.image_url && !data.image_url.startsWith("http")) {
-      setBaseGallery((prev) => ({
-        ...prev,
-        [data.id]: [data.image_url],
-      }));
-    }
-
-    if (onProductCreated) {
-      onProductCreated();
+      if (onProductCreated) {
+        onProductCreated();
+      }
+    } finally {
+      setCreating(false);
     }
   }, [onProductCreated, adminCategoryIds, profile?.role]);
 

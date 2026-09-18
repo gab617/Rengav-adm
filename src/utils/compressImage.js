@@ -4,14 +4,14 @@ const PRODUCT_OPTIONS = {
   maxSizeMB: 0.5,
   maxWidthOrHeight: 1200,
   initialQuality: 0.82,
-  useWebWorker: true,
+  useWebWorker: false,
 };
 
 const BRANDING_OPTIONS = {
   maxSizeMB: 0.5,
   maxWidthOrHeight: 800,
   initialQuality: 0.90,
-  useWebWorker: true,
+  useWebWorker: false,
 };
 
 export const compressImage = async (file) => {
