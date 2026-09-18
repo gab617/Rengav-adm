@@ -20,18 +20,35 @@ const MAX_BUCKET_SIZE = 5 * 1024 * 1024;
 // Techo de seguridad: nunca mandar al bucket algo que se acerque al límite.
 const MAX_SAFE_OUTPUT = 4.5 * 1024 * 1024;
 
-// Lee ancho/alto de un JPEG leyendo SOLO el header (barato, sin decodificar
-// la imagen completa). Devuelve null si el archivo no es un JPEG simple.
-const leerDimensionesJpeg = async (file) => {
+// Serializa errores de forma legible (los ProgressEvent/Event de la lib
+// aparecen como "[object X]" y ocultan el dato importante).
+const describirError = (err) => {
+  if (!err) return "desconocido";
+  if (typeof err === "string") return err;
+  const msg = err?.message;
+  if (msg && typeof msg === "string" && msg.length) return msg;
+  if (err?.loaded !== undefined && err?.total !== undefined) {
+    return `${err?.type || "Leer archivo"}: ${err.loaded}/${err.total} bytes`;
+  }
+  return err?.type || err?.name || String(err);
+};
+
+// Dice si el archivo ES un JPEG y, de serlo, lee ancho/alto del header.
+// Las fotos de celular suelen tener EXIF enorme (GPS + thumbnail): el
+// marcador SOF principal aparece MUY después de los primeros 64KB, así que
+// leemos hasta 2MB. Devuelve { esJpeg, dims } (dims = null si JPEG pero no
+// se encontró el SOF dentro del rango leído).
+const analizarJpeg = async (file) => {
   try {
-    const buf = await file.slice(0, 65536).arrayBuffer();
+    const tope = Math.min(file.size, 2 * 1024 * 1024);
+    const buf = await file.slice(0, tope).arrayBuffer();
     const view = new DataView(buf);
 
-    if (view.getUint16(0) !== 0xffd8) return null;
+    if (view.getUint16(0) !== 0xffd8) return { esJpeg: false, dims: null };
 
     let offset = 2;
     while (offset + 4 <= buf.byteLength) {
-      if (view.getUint8(offset) !== 0xff) return null;
+      if (view.getUint8(offset) !== 0xff) return { esJpeg: true, dims: null };
       const marker = view.getUint8(offset + 1);
       const isSof =
         (marker >= 0xc0 && marker <= 0xcf) &&
@@ -41,15 +58,15 @@ const leerDimensionesJpeg = async (file) => {
       if (isSof) {
         const alto = view.getUint16(offset + 5);
         const ancho = view.getUint16(offset + 7);
-        return { ancho, alto };
+        return { esJpeg: true, dims: { ancho, alto } };
       }
       const len = view.getUint16(offset + 2);
-      if (len < 2) return null;
+      if (len < 2) return { esJpeg: true, dims: null };
       offset += 2 + len;
     }
-    return null;
+    return { esJpeg: true, dims: null };
   } catch {
-    return null;
+    return { esJpeg: false, dims: null };
   }
 };
 
@@ -114,6 +131,8 @@ const redimensionarManual = async (file, maxDim, quality) => {
 // (JPEGImageDecoder::DesiredScaleNumerator). Nunca materializa el bitmap de
 // resolución completa (~192MB), que es lo que tira el renderer del celular.
 // Disponible en Chrome 94+ (escritorio y Android); devuelve null si no aplica.
+// `dims` puede ser null: en ese caso las dimensiones se toman de la metadata
+// del track del decoder (funciona para EXIF gigante o SOF fuera del rango).
 const decodificarJpegReducido = async (file, dims, maxDim, quality) => {
   if (typeof ImageDecoder === "undefined") return null;
 
@@ -122,42 +141,75 @@ const decodificarJpegReducido = async (file, dims, maxDim, quality) => {
   );
   if (!soportado) return null;
 
-  const escala = Math.min(1, maxDim / Math.max(dims.ancho, dims.alto));
-  const target = {
-    ancho: Math.max(1, Math.round(dims.ancho * escala)),
-    alto: Math.max(1, Math.round(dims.alto * escala)),
+  const buffer = await file.arrayBuffer();
+
+  const decodificar = async (target) => {
+    const name = file.name.replace(/\.[^.$]+$/, "") + ".jpg";
+    const decoder = new ImageDecoder({
+      type: file.type || "image/jpeg",
+      data: buffer,
+      ...(target
+        ? { desiredWidth: target.ancho, desiredHeight: target.alto }
+        : {}),
+    });
+
+    try {
+      const { image } = await decoder.decode();
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = target?.ancho || image.displayWidth || image.codedWidth || 1;
+        canvas.height = target?.alto || image.displayHeight || image.codedHeight || 1;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+        const blob = await new Promise((resolve) =>
+          canvas.toBlob(resolve, "image/jpeg", quality)
+        );
+        if (!blob) throw new Error("El canvas no pudo generar el JPEG");
+
+        return new File([blob], name, { type: "image/jpeg" });
+      } finally {
+        image.close?.();
+      }
+    } finally {
+      decoder.close?.();
+    }
   };
 
-  const buffer = await file.arrayBuffer();
-  const decoder = new ImageDecoder({
+  const calcularTarget = (d) => {
+    const escala = Math.min(1, maxDim / Math.max(d.ancho, d.alto));
+    return {
+      ancho: Math.max(1, Math.round(d.ancho * escala)),
+      alto: Math.max(1, Math.round(d.alto * escala)),
+    };
+  };
+
+  // 1) Si tenemos dims del header, es el caso directo.
+  if (dims?.ancho && dims?.alto) {
+    return decodificar(calcularTarget(dims));
+  }
+
+  // 2) Sin dims: preguntamos la metadata al decoder SIN decodificar todo.
+  const probe = new ImageDecoder({
     type: file.type || "image/jpeg",
     data: buffer,
-    desiredWidth: target.ancho,
-    desiredHeight: target.alto,
   });
-
+  let reales = null;
   try {
-    const { image } = await decoder.decode();
-    try {
-      const canvas = document.createElement("canvas");
-      canvas.width = target.ancho;
-      canvas.height = target.alto;
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-
-      const blob = await new Promise((resolve) =>
-        canvas.toBlob(resolve, "image/jpeg", quality)
-      );
-      if (!blob) throw new Error("El canvas no pudo generar el JPEG");
-
-      const name = file.name.replace(/\.[^.$]+$/, "") + ".jpg";
-      return new File([blob], name, { type: "image/jpeg" });
-    } finally {
-      image.close?.();
+    const track = probe.tracks?.[0] || probe.tracks?.selectedTrack;
+    const info = track?.imageInfo;
+    if (info) {
+      reales = {
+        ancho: info.displayWidth || info.codedWidth,
+        alto: info.displayHeight || info.codedHeight,
+      };
     }
   } finally {
-    decoder.close?.();
+    probe.close?.();
   }
+
+  if (!reales?.ancho || !reales?.alto) return null;
+  return decodificar(calcularTarget(reales));
 };
 
 const comprimirConFallback = async (file, options, maxDim) => {
@@ -167,27 +219,29 @@ const comprimirConFallback = async (file, options, maxDim) => {
 
   // 1) Reduce el JPEG DURANTE el decode (WebCodecs, solo Chromium). Es la
   //    única ruta que no pide el bitmap completo de memoria al móvil.
-  const dims = await leerDimensionesJpeg(file);
-  if (dims) {
+  //    Se intenta SIEMPRE (incluso si el header no dio dims por EXIF
+  //    gigante): en ese caso las dims salen de la metadata del decoder.
+  const analizado = await analizarJpeg(file);
+  if (typeof ImageDecoder !== "undefined") {
     try {
       const reducida = await decodificarJpegReducido(
         file,
-        dims,
+        analizado.dims,
         maxDim,
         options.initialQuality
       );
       if (reducida) return reducida;
       razones.push(
-        typeof ImageDecoder === "undefined"
-          ? "WebCodecs no disponible"
-          : "ImageDecoder no aplicó la ruta reducida"
+        analizado.esJpeg
+          ? "ImageDecoder no aplicó la ruta reducida"
+          : "no es un JPEG simple"
       );
     } catch (err) {
-      razones.push(`ImageDecoder: ${err?.name || err?.message || err}`);
+      razones.push(`ImageDecoder: ${describirError(err)}`);
       console.warn("[compressImage] ImageDecoder falló:", err);
     }
   } else {
-    razones.push("no es un JPEG simple");
+    razones.push("WebCodecs no disponible");
   }
 
   // 2) Lib oficial (maneja EXIF de forma explícita y formatos no JPEG).
@@ -200,9 +254,7 @@ const comprimirConFallback = async (file, options, maxDim) => {
         : "browser-image-compression devolvió null"
     );
   } catch (err) {
-    razones.push(
-      `browser-image-compression: ${err?.name || err?.message || err}`
-    );
+    razones.push(`browser-image-compression: ${describirError(err)}`);
     console.warn("[compressImage] browser-image-compression falló:", err);
   }
 
@@ -210,7 +262,7 @@ const comprimirConFallback = async (file, options, maxDim) => {
   try {
     return await redimensionarManual(file, maxDim, options.initialQuality);
   } catch (err) {
-    razones.push(`recorte manual: ${err?.name || err?.message || err}`);
+    razones.push(`recorte manual: ${describirError(err)}`);
     console.warn("[compressImage] recorte manual falló:", err);
   }
 
