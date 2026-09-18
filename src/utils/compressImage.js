@@ -26,6 +26,27 @@ const MAX_SAFE_OUTPUT = 4.5 * 1024 * 1024;
 
 const esperar = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Caché en memoria de archivos YA leídos, por huella (nombre+tamaño+última
+// modificación). En Android, re-pickear la misma foto reabre el content://
+// y Chromium filtran file descriptors: tras varios agrega/elimina el sistema
+// no puede abrir más y TODA lectura falla. Si la foto ya se leyó antes,
+// reusamos el buffer en RAM y ni tocamos el content://.
+const CACHE_LECTURAS = new Map();
+const MAX_CACHE_LECTURAS = 6;
+
+const huellaArchivo = (file) =>
+  `${file.name}|${file.size}|${file.lastModified}`;
+
+const cachearLectura = (file, buffer) => {
+  const huella = huellaArchivo(file);
+  if (CACHE_LECTURAS.has(huella)) return;
+  if (CACHE_LECTURAS.size >= MAX_CACHE_LECTURAS) {
+    const masVieja = CACHE_LECTURAS.keys().next().value;
+    CACHE_LECTURAS.delete(masVieja);
+  }
+  CACHE_LECTURAS.set(huella, buffer);
+};
+
 // Serializa errores de forma legible (los ProgressEvent/Event de la lib
 // aparecen como "[object X]" y ocultan el dato importante).
 const describirError = (err) => {
@@ -46,6 +67,12 @@ const describirError = (err) => {
 // Todas las rutas de compresión reusan el buffer en memoria, así ninguna
 // vuelve a tocar el content:// que es lo que falla.
 const leerArchivo = async (file) => {
+  const cacheado = CACHE_LECTURAS.get(huellaArchivo(file));
+  if (cacheado) {
+    console.debug("[compressImage] reusando buffer cacheado (sin tocar content://)");
+    return cacheado;
+  }
+
   const estrategias = [
     () => file.arrayBuffer(),
     async () => {
@@ -82,7 +109,9 @@ const leerArchivo = async (file) => {
   for (const estrategia of estrategias) {
     for (let intento = 1; intento <= 3; intento += 1) {
       try {
-        return await estrategia();
+        const buffer = await estrategia();
+        cachearLectura(file, buffer);
+        return buffer;
       } catch (err) {
         ultimoError = err;
         console.warn(
