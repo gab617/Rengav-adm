@@ -82,25 +82,39 @@ export function ProductImagesEditor({
 
     try {
       for (const file of aSubir) {
-        if (!file.type.startsWith("image/")) {
-          toast.error(`"${file.name}" no es una imagen`);
-          continue;
+        try {
+          if (!file.type.startsWith("image/")) {
+            toast.error(`"${file.name}" no es una imagen`);
+            continue;
+          }
+
+          const compressed = await compressImage(file);
+          const ext = "jpg";
+          const path = `${tenantId}/${productId}/${generarUuid()}.${ext}`;
+
+          const { error } = await supabase.storage
+            .from("product-images")
+            .upload(path, compressed, { contentType: "image/jpeg" });
+
+          if (error) {
+            toast.error(`Error subiendo "${file.name}": ${error.message}`);
+            continue;
+          }
+
+          subidos.push(path);
+        } catch (err) {
+          console.error("[ProductImagesEditor] Error al procesar imagen:", {
+            nombre: file.name,
+            tipo: file.type,
+            tamano: file.size,
+            err,
+          });
+          toast.error(
+            `No se pudo procesar "${file.name}" (${file.type}, ${(
+              file.size / 1024
+            ).toFixed(0)} KB): ${err?.message || err}`
+          );
         }
-
-        const compressed = await compressImage(file);
-        const ext = "jpg";
-        const path = `${tenantId}/${productId}/${generarUuid()}.${ext}`;
-
-        const { error } = await supabase.storage
-          .from("product-images")
-          .upload(path, compressed, { contentType: "image/jpeg" });
-
-        if (error) {
-          toast.error(`Error subiendo "${file.name}": ${error.message}`);
-          continue;
-        }
-
-        subidos.push(path);
       }
     } finally {
       setSubiendo(false);
