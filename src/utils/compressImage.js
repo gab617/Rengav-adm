@@ -20,6 +20,39 @@ const MAX_BUCKET_SIZE = 5 * 1024 * 1024;
 // Techo de seguridad: nunca mandar al bucket algo que se acerque al límite.
 const MAX_SAFE_OUTPUT = 4.5 * 1024 * 1024;
 
+// Lee ancho/alto de un JPEG leyendo SOLO el header (barato, sin decodificar
+// la imagen completa). Devuelve null si el archivo no es un JPEG simple.
+const leerDimensionesJpeg = async (file) => {
+  try {
+    const buf = await file.slice(0, 65536).arrayBuffer();
+    const view = new DataView(buf);
+
+    if (view.getUint16(0) !== 0xffd8) return null;
+
+    let offset = 2;
+    while (offset + 4 <= buf.byteLength) {
+      if (view.getUint8(offset) !== 0xff) return null;
+      const marker = view.getUint8(offset + 1);
+      const isSof =
+        (marker >= 0xc0 && marker <= 0xcf) &&
+        marker !== 0xc4 &&
+        marker !== 0xc8 &&
+        marker !== 0xcc;
+      if (isSof) {
+        const alto = view.getUint16(offset + 5);
+        const ancho = view.getUint16(offset + 7);
+        return { ancho, alto };
+      }
+      const len = view.getUint16(offset + 2);
+      if (len < 2) return null;
+      offset += 2 + len;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
 const cargarComoImagen = (file) =>
   new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
@@ -39,22 +72,65 @@ const cargarComoImagen = (file) =>
     img.src = url;
   });
 
+const dibujarAjpeg = (bitmap, ancho, alto, name) =>
+  new Promise((resolve, reject) => {
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, ancho);
+    canvas.height = Math.max(1, alto);
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) {
+          reject(new Error("El canvas no pudo generar el JPEG"));
+          return;
+        }
+        resolve(new File([blob], name, { type: "image/jpeg" }));
+      },
+      "image/jpeg",
+      0.82
+    );
+  });
+
 const redimensionarManual = async (file, maxDim) => {
+  const name = file.name.replace(/\.[^.$]+$/, "") + ".jpg";
+
+  // Camino 1 (baja memoria): decodifica YA redimensionado. Solo maneja JPEG,
+  // pero es el formato con el que fallaba el celular (image/jpeg).
+  const dims = await leerDimensionesJpeg(file);
+  if (dims) {
+    const escala = Math.min(1, maxDim / Math.max(dims.ancho, dims.alto));
+    const target = {
+      ancho: Math.max(1, Math.round(dims.ancho * escala)),
+      alto: Math.max(1, Math.round(dims.alto * escala)),
+    };
+    const bitmap = await createImageBitmap(file, {
+      resizeWidth: target.ancho,
+      resizeHeight: target.alto,
+      resizeQuality: "high",
+    });
+    try {
+      return await dibujarAjpeg(
+        bitmap,
+        target.ancho,
+        target.alto,
+        name
+      );
+    } finally {
+      bitmap.close();
+    }
+  }
+
+  // Camino 2 (compatible con cualquier formato): Image + canvas, sirve como
+  // respaldo para PNG/WebP o cuando el header JPEG no se pudo leer.
   const { img, ancho, alto } = await cargarComoImagen(file);
   const escala = Math.min(1, maxDim / Math.max(ancho, alto));
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.max(1, Math.round(ancho * escala));
-  canvas.height = Math.max(1, Math.round(alto * escala));
-  const ctx = canvas.getContext("2d");
-  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-  const blob = await new Promise((resolve) =>
-    canvas.toBlob(resolve, "image/jpeg", 0.82)
+  return dibujarAjpeg(
+    img,
+    Math.round(ancho * escala),
+    Math.round(alto * escala),
+    name
   );
-  if (!blob) throw new Error("El canvas no pudo generar el JPEG");
-
-  const name = file.name.replace(/\.[^.]+$/, "") + ".jpg";
-  return new File([blob], name, { type: "image/jpeg" });
 };
 
 const comprimirConFallback = async (file, options, maxDim) => {
