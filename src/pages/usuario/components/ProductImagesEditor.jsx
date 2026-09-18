@@ -103,7 +103,7 @@ export function ProductImagesEditor({
           toast.error(
             `No se pudo COMPRIMIR "${file.name}" (${file.type}, ${(
               file.size / 1024
-            ).toFixed(0)} KB): ${err?.type || err?.name || err?.message || err}`
+            ).toFixed(0)} KB): ${err?.message || err?.name || err?.type || err}`
           );
           continue;
         }
