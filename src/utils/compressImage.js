@@ -251,7 +251,10 @@ const decodificarJpegReducido = async (buffer, tipo, dims, maxDim, quality) => {
 };
 
 const comprimirConFallback = async (file, options, maxDim) => {
-  if (file.size <= 150 * 1024) return file;
+  // Imágenes chicas que ya entran al bucket: NO tocan el lector de archivos
+  // ni la compresión, se suben tal cual (el bucket soporta hasta 5MB). Esto
+  // evita el NotReadableError del content:// para archivos que no lo necesitan.
+  if (file.size <= 1024 * 1024) return file;
 
   const razones = [];
 
