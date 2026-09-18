@@ -20,6 +20,13 @@ const MAX_BUCKET_SIZE = 5 * 1024 * 1024;
 // Techo de seguridad: nunca mandar al bucket algo que se acerque al límite.
 const MAX_SAFE_OUTPUT = 4.5 * 1024 * 1024;
 
+// Los archivos del selector de Android son content:// y Chrome los lee de
+// forma INTERMITENTE (NotReadableError: "could not be read due to permission
+// problems"). Leerlos por trozos chicos y con reintentos estabiliza la lectura.
+const BYTES_POR_LECTURA = 512 * 1024;
+
+const esperar = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 // Serializa errores de forma legible (los ProgressEvent/Event de la lib
 // aparecen como "[object X]" y ocultan el dato importante).
 const describirError = (err) => {
@@ -33,21 +40,58 @@ const describirError = (err) => {
   return err?.type || err?.name || String(err);
 };
 
-// Dice si el archivo ES un JPEG y, de serlo, lee ancho/alto del header.
-// Las fotos de celular suelen tener EXIF enorme (GPS + thumbnail): el
-// marcador SOF principal aparece MUY después de los primeros 64KB, así que
-// leemos hasta 2MB. Devuelve { esJpeg, dims } (dims = null si JPEG pero no
-// se encontró el SOF dentro del rango leído).
-const analizarJpeg = async (file) => {
-  try {
-    const tope = Math.min(file.size, 2 * 1024 * 1024);
-    const buf = await file.slice(0, tope).arrayBuffer();
-    const view = new DataView(buf);
+// Lee UN trozo del archivo con reintentos y backoff.
+const leerTrozo = async (file, inicio, fin) => {
+  let ultimoError = null;
+  for (let intento = 1; intento <= 3; intento += 1) {
+    try {
+      return await file.slice(inicio, fin).arrayBuffer();
+    } catch (err) {
+      ultimoError = err;
+      if (intento < 3) {
+        console.warn(
+          `[compressImage] lectura falló (${inicio}-${fin}, intento ${intento}):`,
+          err
+        );
+        await esperar(400 * intento);
+      }
+    }
+  }
+  throw ultimoError;
+};
 
+// Lee el archivo COMPLETO UNA vez, por trozos, y lo devuelve como BufferSource.
+// Todas las rutas de compresión reusan este buffer en memoria: así ninguna
+// vuelve a tocar el content:// (que es lo que falla de forma intermitente).
+const leerArchivo = async (file) => {
+  const totalTrozo = Math.ceil(file.size / BYTES_POR_LECTURA);
+  const trozos = [];
+  for (let i = 0; i < totalTrozo; i += 1) {
+    const inicio = i * BYTES_POR_LECTURA;
+    const fin = Math.min(file.size, inicio + BYTES_POR_LECTURA);
+    trozos.push(await leerTrozo(file, inicio, fin));
+  }
+  const total = trozos.reduce((acc, t) => acc + t.byteLength, 0);
+  const union = new Uint8Array(total);
+  let offset = 0;
+  for (const t of trozos) {
+    union.set(new Uint8Array(t), offset);
+    offset += t.byteLength;
+  }
+  return union.buffer;
+};
+
+// Escanea el buffer en busca del marcador SOF (ancho/alto del JPEG). Las
+// fotos de celular suelen tener EXIF enorme (GPS + thumbnail): el SOF
+// principal aparece MUY después del inicio, por eso se recorre todo el buffer.
+// Devuelve { esJpeg, dims } (dims = null si el SOF no aparece).
+const analizarJpeg = (buffer) => {
+  try {
+    const view = new DataView(buffer);
     if (view.getUint16(0) !== 0xffd8) return { esJpeg: false, dims: null };
 
     let offset = 2;
-    while (offset + 4 <= buf.byteLength) {
+    while (offset + 4 <= view.byteLength) {
       if (view.getUint8(offset) !== 0xff) return { esJpeg: true, dims: null };
       const marker = view.getUint8(offset + 1);
       const isSof =
@@ -133,20 +177,15 @@ const redimensionarManual = async (file, maxDim, quality) => {
 // Disponible en Chrome 94+ (escritorio y Android); devuelve null si no aplica.
 // `dims` puede ser null: en ese caso las dimensiones se toman de la metadata
 // del track del decoder (funciona para EXIF gigante o SOF fuera del rango).
-const decodificarJpegReducido = async (file, dims, maxDim, quality) => {
+const decodificarJpegReducido = async (buffer, tipo, dims, maxDim, quality) => {
   if (typeof ImageDecoder === "undefined") return null;
 
-  const soportado = await ImageDecoder.isTypeSupported(
-    file.type || "image/jpeg"
-  );
+  const soportado = await ImageDecoder.isTypeSupported(tipo);
   if (!soportado) return null;
 
-  const buffer = await file.arrayBuffer();
-
   const decodificar = async (target) => {
-    const name = file.name.replace(/\.[^.$]+$/, "") + ".jpg";
     const decoder = new ImageDecoder({
-      type: file.type || "image/jpeg",
+      type: tipo,
       data: buffer,
       ...(target
         ? { desiredWidth: target.ancho, desiredHeight: target.alto }
@@ -157,8 +196,10 @@ const decodificarJpegReducido = async (file, dims, maxDim, quality) => {
       const { image } = await decoder.decode();
       try {
         const canvas = document.createElement("canvas");
-        canvas.width = target?.ancho || image.displayWidth || image.codedWidth || 1;
-        canvas.height = target?.alto || image.displayHeight || image.codedHeight || 1;
+        canvas.width =
+          target?.ancho || image.displayWidth || image.codedWidth || 1;
+        canvas.height =
+          target?.alto || image.displayHeight || image.codedHeight || 1;
         const ctx = canvas.getContext("2d");
         ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
 
@@ -167,7 +208,7 @@ const decodificarJpegReducido = async (file, dims, maxDim, quality) => {
         );
         if (!blob) throw new Error("El canvas no pudo generar el JPEG");
 
-        return new File([blob], name, { type: "image/jpeg" });
+        return blob;
       } finally {
         image.close?.();
       }
@@ -184,16 +225,13 @@ const decodificarJpegReducido = async (file, dims, maxDim, quality) => {
     };
   };
 
-  // 1) Si tenemos dims del header, es el caso directo.
+  // 1) Si tenemos dims del buffer, es el caso directo.
   if (dims?.ancho && dims?.alto) {
     return decodificar(calcularTarget(dims));
   }
 
   // 2) Sin dims: preguntamos la metadata al decoder SIN decodificar todo.
-  const probe = new ImageDecoder({
-    type: file.type || "image/jpeg",
-    data: buffer,
-  });
+  const probe = new ImageDecoder({ type: tipo, data: buffer });
   let reales = null;
   try {
     const track = probe.tracks?.[0] || probe.tracks?.selectedTrack;
@@ -217,22 +255,45 @@ const comprimirConFallback = async (file, options, maxDim) => {
 
   const razones = [];
 
+  // CAUSA RAÍZ: Chrome/Android lee los content:// del selector de forma
+  // intermitente. Antes cada ruta re-leía el archivo (header, ImageDecoder,
+  // lib, manual) y cualquier intento podía fallar. Ahora leemos UNA vez, en
+  // memoria, y todas las rutas reusan el mismo buffer.
+  let buffer;
+  try {
+    buffer = await leerArchivo(file);
+  } catch (err) {
+    console.warn("[compressImage] no se pudo leer el archivo:", err);
+    throw new Error(
+      `No se pudo leer el archivo desde el selector (${describirError(
+        err
+      )}). Reintentá subirlo.`
+    );
+  }
+
+  const tipo = file.type || "image/jpeg";
+  // File en memoria: las rutas siguientes (lib, manual) ya no tocan el
+  // content://, leen de memoria pura.
+  const archivoSeguro = new File([buffer], file.name, { type: tipo });
+
   // 1) Reduce el JPEG DURANTE el decode (WebCodecs, solo Chromium). Es la
   //    única ruta que no pide el bitmap completo de memoria al móvil.
-  //    Se intenta SIEMPRE (incluso si el header no dio dims por EXIF
-  //    gigante): en ese caso las dims salen de la metadata del decoder.
-  const analizado = await analizarJpeg(file);
+  const { esJpeg, dims } = analizarJpeg(buffer);
   if (typeof ImageDecoder !== "undefined") {
     try {
-      const reducida = await decodificarJpegReducido(
-        file,
-        analizado.dims,
+      const blob = await decodificarJpegReducido(
+        buffer,
+        tipo,
+        dims,
         maxDim,
         options.initialQuality
       );
-      if (reducida) return reducida;
+      if (blob) {
+        const name = file.name.replace(/\.[^.$]+$/, "") + ".jpg";
+        return new File([blob], name, { type: "image/jpeg" });
+      }
       razones.push(
-        analizado.esJpeg
+        esJpeg
           ? "ImageDecoder no aplicó la ruta reducida"
           : "no es un JPEG simple"
       );
@@ -246,7 +307,7 @@ const comprimirConFallback = async (file, options, maxDim) => {
 
   // 2) Lib oficial (maneja EXIF de forma explícita y formatos no JPEG).
   try {
-    const comprimida = await imageCompression(file, options);
+    const comprimida = await imageCompression(archivoSeguro, options);
     if (comprimida && comprimida.size <= MAX_SAFE_OUTPUT) return comprimida;
     razones.push(
       comprimida
@@ -260,7 +321,7 @@ const comprimirConFallback = async (file, options, maxDim) => {
 
   // 3) Recorte manual genérico como red de seguridad.
   try {
-    return await redimensionarManual(file, maxDim, options.initialQuality);
+    return await redimensionarManual(archivoSeguro, maxDim, options.initialQuality);
   } catch (err) {
     razones.push(`recorte manual: ${describirError(err)}`);
     console.warn("[compressImage] recorte manual falló:", err);
@@ -278,20 +339,18 @@ const comprimirConFallback = async (file, options, maxDim) => {
   );
 };
 
-// Los celulares muestran un cold-start determinístico: el PRIMER intento de
-// compresión de una selección falla (decodificador frío, memoria del renderer
-// recién asignada) y el segundo funciona siempre. Un único reintento convierte
-// ese primer archivo en un "intento 2" que ya sabemos que suele ganar.
+// La lectura de archivos del selector puede fallar transitoriamente: un
+// reintento completo de la compresión le da otra chance al mismo buffer sin
+// tocar el content:// de nuevo.
 const comprimirConReintento = async (file, options, maxDim) => {
   try {
     return await comprimirConFallback(file, options, maxDim);
   } catch (primerError) {
     console.warn(
-      "[compressImage] el primer intento de compresión falló; se reintenta:",
+      "[compressImage] el primer intento falló; se reintenta:",
       primerError.message
     );
-    // Pausa breve para dejar que el GC libere lo del primer intento.
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    await esperar(250);
     return comprimirConFallback(file, options, maxDim);
   }
 };
