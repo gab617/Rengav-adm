@@ -163,6 +163,8 @@ const decodificarJpegReducido = async (file, dims, maxDim, quality) => {
 const comprimirConFallback = async (file, options, maxDim) => {
   if (file.size <= 150 * 1024) return file;
 
+  const razones = [];
+
   // 1) Reduce el JPEG DURANTE el decode (WebCodecs, solo Chromium). Es la
   //    única ruta que no pide el bitmap completo de memoria al móvil.
   const dims = await leerDimensionesJpeg(file);
@@ -175,23 +177,32 @@ const comprimirConFallback = async (file, options, maxDim) => {
         options.initialQuality
       );
       if (reducida) return reducida;
-      console.warn("[compressImage] ImageDecoder no disponible o no aplicó");
+      razones.push(
+        typeof ImageDecoder === "undefined"
+          ? "WebCodecs no disponible"
+          : "ImageDecoder no aplicó la ruta reducida"
+      );
     } catch (err) {
+      razones.push(`ImageDecoder: ${err?.name || err?.message || err}`);
       console.warn("[compressImage] ImageDecoder falló:", err);
     }
+  } else {
+    razones.push("no es un JPEG simple");
   }
 
   // 2) Lib oficial (maneja EXIF de forma explícita y formatos no JPEG).
   try {
     const comprimida = await imageCompression(file, options);
     if (comprimida && comprimida.size <= MAX_SAFE_OUTPUT) return comprimida;
-    if (comprimida) {
-      console.warn(
-        "[compressImage] output demasiado grande, se intenta recorte manual:",
-        comprimida.size
-      );
-    }
+    razones.push(
+      comprimida
+        ? `browser-image-compression dio ${Math.round(comprimida.size / 1024)} KB`
+        : "browser-image-compression devolvió null"
+    );
   } catch (err) {
+    razones.push(
+      `browser-image-compression: ${err?.name || err?.message || err}`
+    );
     console.warn("[compressImage] browser-image-compression falló:", err);
   }
 
@@ -199,6 +210,7 @@ const comprimirConFallback = async (file, options, maxDim) => {
   try {
     return await redimensionarManual(file, maxDim, options.initialQuality);
   } catch (err) {
+    razones.push(`recorte manual: ${err?.name || err?.message || err}`);
     console.warn("[compressImage] recorte manual falló:", err);
   }
 
@@ -208,9 +220,9 @@ const comprimirConFallback = async (file, options, maxDim) => {
   }
 
   throw new Error(
-    `La imagen no se pudo comprimir y supera el límite del bucket (${(
-      MAX_BUCKET_SIZE / 1024 / 1024
-    ).toFixed(0)} MB)`
+    `No se pudo comprimir (${razones.join(" | ")}; original ${Math.round(
+      file.size / 1024
+    )} KB supera los ${(MAX_BUCKET_SIZE / 1024 / 1024).toFixed(0)} MB)`
   );
 };
 
