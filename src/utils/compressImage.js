@@ -72,7 +72,7 @@ const cargarComoImagen = (file) =>
     img.src = url;
   });
 
-const dibujarAjpeg = (bitmap, ancho, alto, name) =>
+const dibujarAjpeg = (bitmap, ancho, alto, name, quality) =>
   new Promise((resolve, reject) => {
     const canvas = document.createElement("canvas");
     canvas.width = Math.max(1, ancho);
@@ -88,11 +88,11 @@ const dibujarAjpeg = (bitmap, ancho, alto, name) =>
         resolve(new File([blob], name, { type: "image/jpeg" }));
       },
       "image/jpeg",
-      0.82
+      quality
     );
   });
 
-const redimensionarManual = async (file, maxDim) => {
+const redimensionarManual = async (file, maxDim, quality) => {
   const name = file.name.replace(/\.[^.$]+$/, "") + ".jpg";
 
   // Camino 1 (baja memoria): decodifica YA redimensionado. Solo maneja JPEG,
@@ -114,7 +114,8 @@ const redimensionarManual = async (file, maxDim) => {
         bitmap,
         target.ancho,
         target.alto,
-        name
+        name,
+        quality
       );
     } finally {
       bitmap.close();
@@ -129,30 +130,64 @@ const redimensionarManual = async (file, maxDim) => {
     img,
     Math.round(ancho * escala),
     Math.round(alto * escala),
-    name
+    name,
+    quality
   );
+};
+
+// Indica si el archivo es un JPEG de cámara (formato real con el que fallaba
+// el móvil) y si el navegador soporta decodificación con resize.
+const esJpegRedimensionable = async (file) => {
+  if (
+    typeof createImageBitmap !== "function" ||
+    typeof file.arrayBuffer !== "function"
+  ) {
+    return false;
+  }
+  try {
+    const cabecera = new DataView(await file.slice(0, 2).arrayBuffer());
+    return cabecera.getUint16(0) === 0xffd8;
+  } catch {
+    return false;
+  }
 };
 
 const comprimirConFallback = async (file, options, maxDim) => {
   if (file.size <= 150 * 1024) return file;
 
+  // 1) Baja memoria PRIORITARIO: JPEG se decodifica YA a la dimensión final.
+  //    Nunca materializa el bitmap de resolución completa (~192MB) que tumba
+  //    y deja sin memoria el renderer del celular para intentos posteriores.
+  if (await esJpegRedimensionable(file)) {
+    try {
+      return await redimensionarManual(file, maxDim, options.initialQuality);
+    } catch (err) {
+      console.warn("[compressImage] ruta de baja memoria falló:", err);
+    }
+  }
+
+  // 2) Lib oficial (maneja EXIF de forma explícita y formatos no JPEG).
   try {
     const comprimida = await imageCompression(file, options);
     if (comprimida && comprimida.size <= MAX_SAFE_OUTPUT) return comprimida;
-    console.warn(
-      "[compressImage] output demasiado grande, se reconvierte manualmente:",
-      comprimida?.size
-    );
+    if (comprimida) {
+      console.warn(
+        "[compressImage] output demasiado grande, se intenta recorte manual:",
+        comprimida.size
+      );
+    }
   } catch (err) {
     console.warn("[compressImage] browser-image-compression falló:", err);
   }
 
+  // 3) Recorte manual genérico como red de seguridad.
   try {
-    return await redimensionarManual(file, maxDim);
+    return await redimensionarManual(file, maxDim, options.initialQuality);
   } catch (err) {
-    console.warn("[compressImage] fallback manual falló:", err);
+    console.warn("[compressImage] recorte manual falló:", err);
   }
 
+  // 4) Sin otra salida: el original si entra en el bucket.
   if (file.size <= MAX_BUCKET_SIZE) {
     return file;
   }
