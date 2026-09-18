@@ -22,8 +22,7 @@ const MAX_SAFE_OUTPUT = 4.5 * 1024 * 1024;
 
 // Los archivos del selector de Android son content:// y Chrome los lee de
 // forma INTERMITENTE (NotReadableError: "could not be read due to permission
-// problems"). Leerlos por trozos chicos y con reintentos estabiliza la lectura.
-const BYTES_POR_LECTURA = 512 * 1024;
+// problems").
 
 const esperar = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -40,45 +39,61 @@ const describirError = (err) => {
   return err?.type || err?.name || String(err);
 };
 
-// Lee UN trozo del archivo con reintentos y backoff.
-const leerTrozo = async (file, inicio, fin) => {
+// Lee el archivo COMPLETO UNA vez, probando varias estrategias hasta que una
+// funcione. En Android, la lectura de un content:// seleccionado SOLO falla
+// intermitentemente (en lote funciona porque Android materializa las copias):
+// 1) arrayBuffer() completo  2) stream() por chunks  3) fetch() sobre blob URL.
+// Todas las rutas de compresión reusan el buffer en memoria, así ninguna
+// vuelve a tocar el content:// que es lo que falla.
+const leerArchivo = async (file) => {
+  const estrategias = [
+    () => file.arrayBuffer(),
+    async () => {
+      const lector = file.stream().getReader();
+      const trozos = [];
+      let total = 0;
+      for (;;) {
+        const { done, value } = await lector.read();
+        if (done) break;
+        trozos.push(value);
+        total += value.byteLength;
+      }
+      const union = new Uint8Array(total);
+      let offset = 0;
+      for (const t of trozos) {
+        union.set(t, offset);
+        offset += t.byteLength;
+      }
+      return union.buffer;
+    },
+    async () => {
+      const url = URL.createObjectURL(file);
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return await res.arrayBuffer();
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    },
+  ];
+
   let ultimoError = null;
-  for (let intento = 1; intento <= 3; intento += 1) {
-    try {
-      return await file.slice(inicio, fin).arrayBuffer();
-    } catch (err) {
-      ultimoError = err;
-      if (intento < 3) {
+  for (const estrategia of estrategias) {
+    for (let intento = 1; intento <= 3; intento += 1) {
+      try {
+        return await estrategia();
+      } catch (err) {
+        ultimoError = err;
         console.warn(
-          `[compressImage] lectura falló (${inicio}-${fin}, intento ${intento}):`,
+          `[compressImage] estrategia de lectura falló (intento ${intento}):`,
           err
         );
-        await esperar(400 * intento);
+        if (intento < 3) await esperar(500 * intento);
       }
     }
   }
   throw ultimoError;
-};
-
-// Lee el archivo COMPLETO UNA vez, por trozos, y lo devuelve como BufferSource.
-// Todas las rutas de compresión reusan este buffer en memoria: así ninguna
-// vuelve a tocar el content:// (que es lo que falla de forma intermitente).
-const leerArchivo = async (file) => {
-  const totalTrozo = Math.ceil(file.size / BYTES_POR_LECTURA);
-  const trozos = [];
-  for (let i = 0; i < totalTrozo; i += 1) {
-    const inicio = i * BYTES_POR_LECTURA;
-    const fin = Math.min(file.size, inicio + BYTES_POR_LECTURA);
-    trozos.push(await leerTrozo(file, inicio, fin));
-  }
-  const total = trozos.reduce((acc, t) => acc + t.byteLength, 0);
-  const union = new Uint8Array(total);
-  let offset = 0;
-  for (const t of trozos) {
-    union.set(new Uint8Array(t), offset);
-    offset += t.byteLength;
-  }
-  return union.buffer;
 };
 
 // Escanea el buffer en busca del marcador SOF (ancho/alto del JPEG). Las
