@@ -82,13 +82,33 @@ export function ProductImagesEditor({
 
     try {
       for (const file of aSubir) {
+        let compressed = null;
         try {
           if (!file.type.startsWith("image/")) {
             toast.error(`"${file.name}" no es una imagen`);
             continue;
           }
 
-          const compressed = await compressImage(file);
+          compressed = await compressImage(file);
+        } catch (err) {
+          console.error("[ProductImagesEditor] Error al COMPRIMIR imagen:", {
+            nombre: file.name,
+            tipo: file.type,
+            tamano: file.size,
+            progressEventTipo: err?.type,
+            progressEventLoaded: err?.loaded,
+            progressEventTotal: err?.total,
+            err,
+          });
+          toast.error(
+            `No se pudo COMPRIMIR "${file.name}" (${file.type}, ${(
+              file.size / 1024
+            ).toFixed(0)} KB): ${err?.type || err?.name || err?.message || err}`
+          );
+          continue;
+        }
+
+        try {
           const ext = "jpg";
           const path = `${tenantId}/${productId}/${generarUuid()}.${ext}`;
 
@@ -103,16 +123,19 @@ export function ProductImagesEditor({
 
           subidos.push(path);
         } catch (err) {
-          console.error("[ProductImagesEditor] Error al procesar imagen:", {
+          console.error("[ProductImagesEditor] Error al SUBIR imagen:", {
             nombre: file.name,
             tipo: file.type,
             tamano: file.size,
+            progressEventTipo: err?.type,
+            progressEventLoaded: err?.loaded,
+            progressEventTotal: err?.total,
             err,
           });
           toast.error(
-            `No se pudo procesar "${file.name}" (${file.type}, ${(
-              file.size / 1024
-            ).toFixed(0)} KB): ${err?.message || err}`
+            `No se pudo SUBIR "${file.name}" (${file.size / 1024} KB): ${
+              err?.type || err?.name || err?.message || err
+            }`
           );
         }
       }
