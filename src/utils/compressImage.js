@@ -62,6 +62,113 @@ export const liberarCacheLectura = (huella) => {
   return CACHE_LECTURAS.delete(huella);
 };
 
+// ============================================================================
+// CACHÉ PERSISTENTE EN DISCO (IndexedDB)
+// ----------------------------------------------------------------------------
+// Guarda el resultado COMPRIMIDO (~0.5MB) keyed por huella, NO el original de
+// 6.7MB. Sobrevive a recargar/cerrar la pestaña (a diferencia de la RAM), con
+// lo que re-pickear la misma foto NO vuelve a tocar el content:// (Android) ni
+// a re-leer de iCloud (iPhone). Es un CACHÉ, no un backup: max 30 entradas,
+// desalojo FIFO por fecha de inserción (no se toca el timestamp en el read;
+// con cap de 30 la diferencia con un LRU real es despreciable), y si
+// IndexedDB falla o no existe, degrada al comportamiento actual sin romper
+// nada.
+// ============================================================================
+const IDB_NOMBRE = "comercio-compresion";
+const IDB_STORE = "comprimidas";
+const MAX_CACHE_IDB = 30;
+
+let idbPromise = null;
+
+const abrirIdb = () => {
+  if (idbPromise) return idbPromise;
+  idbPromise = new Promise((resolve, reject) => {
+    if (typeof indexedDB === "undefined") {
+      reject(new Error("IndexedDB no disponible"));
+      return;
+    }
+    const req = indexedDB.open(IDB_NOMBRE, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(IDB_STORE)) {
+        db.createObjectStore(IDB_STORE);
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  return idbPromise;
+};
+
+const listarIdb = async (db) => {
+  const tx = db.transaction(IDB_STORE, "readonly");
+  const store = tx.objectStore(IDB_STORE);
+  const req = store.openCursor();
+  const entradas = [];
+  await new Promise((resolve, reject) => {
+    req.onsuccess = () => {
+      const cursor = req.result;
+      if (cursor) {
+        entradas.push({ key: cursor.key, ts: cursor.value?.ts || 0 });
+        cursor.continue();
+      } else {
+        resolve();
+      }
+    };
+    req.onerror = () => reject(req.error);
+  });
+  return entradas;
+};
+
+const desalojarIdb = async (db) => {
+  const entradas = await listarIdb(db);
+  if (entradas.length <= MAX_CACHE_IDB) return;
+  const ordenadas = [...entradas].sort((a, b) => a.ts - b.ts);
+  const sobrantes = ordenadas.slice(0, entradas.length - MAX_CACHE_IDB);
+  if (!sobrantes.length) return;
+
+  const tx = db.transaction(IDB_STORE, "readwrite");
+  const store = tx.objectStore(IDB_STORE);
+  for (const e of sobrantes) store.delete(e.key);
+  await new Promise((resolve, reject) => {
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+  });
+};
+
+const guardarComprimidaEnIdb = async (huella, file) => {
+  try {
+    const db = await abrirIdb();
+    const tx = db.transaction(IDB_STORE, "readwrite");
+    const store = tx.objectStore(IDB_STORE);
+    store.put({ file, ts: Date.now() }, huella);
+    await new Promise((resolve, reject) => {
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+    await desalojarIdb(db);
+  } catch (err) {
+    console.warn("[compressImage] no se pudo cachear en disco:", err);
+  }
+};
+
+const leerComprimidaDeIdb = async (huella) => {
+  try {
+    const db = await abrirIdb();
+    const tx = db.transaction(IDB_STORE, "readonly");
+    const store = tx.objectStore(IDB_STORE);
+    const req = store.get(huella);
+    const value = await new Promise((resolve, reject) => {
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    return value?.file || null;
+  } catch (err) {
+    console.warn("[compressImage] no se pudo leer caché de disco:", err);
+    return null;
+  }
+};
+
 // Serializa errores de forma legible (los ProgressEvent/Event de la lib
 // aparecen como "[object X]" y ocultan el dato importante).
 const describirError = (err) => {
@@ -326,10 +433,12 @@ const comprimirConFallback = async (file, options, maxDim) => {
     buffer = await leerArchivo(file);
   } catch (err) {
     console.warn("[compressImage] no se pudo leer el archivo:", err);
+    const pista =
+      eresIos && /i\/O|I\/O|permission|permis/i.test(describirError(err))
+        ? " Si la foto está en iCloud sin descargar, abrí la app Fotos, tocá la imagen para descargarla y volvé a elegirla."
+        : " Volvé a elegir la foto e intentá de nuevo.";
     throw new Error(
-      `No se pudo leer el archivo desde el selector (${describirError(
-        err
-      )}). Reintentá subirlo.`
+      `No se pudo leer el archivo desde el selector (${describirError(err)}).` + pista
     );
   }
 
@@ -401,24 +510,63 @@ const comprimirConFallback = async (file, options, maxDim) => {
   );
 };
 
-// La lectura de archivos del selector puede fallar transitoriamente: un
-// reintento completo de la compresión le da otra chance al mismo buffer sin
-// tocar el content:// de nuevo.
+const eresIos =
+  typeof navigator !== "undefined" &&
+  /iPad|iPhone|iPod/.test(navigator.userAgent);
+
+// La lectura de archivos del selector puede fallar TRANSITORIAMENTE (Android
+// content:// intermitente): 3 tiradas de la compresión completa con backoff
+// creciente, pero SOLO si el error fue de lectura (fresh dice al content://).
+// Si el archivo SÍ se leyó y falló la compresión, es un problema real: no se
+// reintenta, se eleva de una.
+const esErrorDeLectura = (err) =>
+  typeof err?.message === "string" &&
+  err.message.startsWith("No se pudo leer el archivo desde el selector");
+
 const comprimirConReintento = async (file, options, maxDim) => {
-  try {
-    return await comprimirConFallback(file, options, maxDim);
-  } catch (primerError) {
-    console.warn(
-      "[compressImage] el primer intento falló; se reintenta:",
-      primerError.message
-    );
-    await esperar(250);
-    return comprimirConFallback(file, options, maxDim);
+  const INTENTOS = 3;
+  let ultimoError = null;
+  for (let intento = 1; intento <= INTENTOS; intento += 1) {
+    try {
+      return await comprimirConFallback(file, options, maxDim);
+    } catch (err) {
+      ultimoError = err;
+      if (!esErrorDeLectura(err)) throw err;
+      console.warn(
+        `[compressImage] reintento de lectura ${intento}/${INTENTOS}:`,
+        err.message
+      );
+      if (intento < INTENTOS) await esperar(500 * intento);
+    }
   }
+  throw ultimoError;
 };
 
-export const compressImage = async (file) =>
-  comprimirConReintento(file, PRODUCT_OPTIONS, 1200);
+// Key de caché en disco: huella del archivo + variante de compresión. La
+// variante importa porque producto (1200px) y branding (800px) comprimen la
+// MISMA foto distinto y no deben pisarse.
+const huellaCacheIdb = (file, variante) => `${huellaArchivo(file)}|${variante}`;
 
-export const compressBrandingImage = async (file) =>
-  comprimirConReintento(file, BRANDING_OPTIONS, 800);
+export const compressImage = async (file) => {
+  if (file.size <= 1024 * 1024) return file;
+
+  const huella = huellaCacheIdb(file, "producto");
+  const cacheada = await leerComprimidaDeIdb(huella);
+  if (cacheada) return cacheada;
+
+  const resultado = await comprimirConReintento(file, PRODUCT_OPTIONS, 1200);
+  if (resultado !== file) await guardarComprimidaEnIdb(huella, resultado);
+  return resultado;
+};
+
+export const compressBrandingImage = async (file) => {
+  if (file.size <= 1024 * 1024) return file;
+
+  const huella = huellaCacheIdb(file, "branding");
+  const cacheada = await leerComprimidaDeIdb(huella);
+  if (cacheada) return cacheada;
+
+  const resultado = await comprimirConReintento(file, BRANDING_OPTIONS, 800);
+  if (resultado !== file) await guardarComprimidaEnIdb(huella, resultado);
+  return resultado;
+};

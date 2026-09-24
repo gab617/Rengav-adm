@@ -128,6 +128,16 @@ export function ProductImagesEditor({
           }
 
           subidos.push(path);
+
+          // La foto ya se comprimió y subió: su buffer ORIGINAL en RAM ya no
+          // hace falta, se libera de inmediato (no esperar a que eliminen).
+          // Si el usuario re-pickea la misma foto, la caché IDB la devuelve
+          // comprimida sin tocar content://, así que no se pierde nada.
+          const huellaSubida = huellasPorPathRef.current.get(path);
+          if (huellaSubida) {
+            liberarCacheLectura(huellaSubida);
+            huellasPorPathRef.current.delete(path);
+          }
         } catch (err) {
           console.error("[ProductImagesEditor] Error al SUBIR imagen:", {
             nombre: file.name,
