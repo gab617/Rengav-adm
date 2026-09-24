@@ -99,6 +99,12 @@ export function ProductImagesEditor({
             )}ms desde pick - ${file.name} (${(file.size / 1024).toFixed(0)} KB)`
           );
 
+          toast.info(
+            `📸 ${indice + 1}/${aSubir.length} — ${Math.round(
+              performance.now() - tPick
+            )}ms desde pick — ${file.name} (${(file.size / 1024).toFixed(0)} KB)`
+          );
+
           compressed = await compressImage(file);
         } catch (err) {
           console.error("[ProductImagesEditor] Error al COMPRIMIR imagen:", {
@@ -111,9 +117,11 @@ export function ProductImagesEditor({
             err,
           });
           toast.error(
-            `No se pudo COMPRIMIR "${file.name}" (${file.type}, ${(
-              file.size / 1024
-            ).toFixed(0)} KB): ${err?.message || err?.name || err?.type || err}`
+            `No se pudo COMPRIMIR "${file.name}" (${
+              file.size / 1024 < 1 ? (file.size / 1024).toFixed(2) : Math.round(file.size / 1024)
+            } KB) tras ${Math.round(performance.now() - tPick)}ms: ${
+              err?.message || err?.name || err?.type || err
+            }`
           );
           continue;
         }
