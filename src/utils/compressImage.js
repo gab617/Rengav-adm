@@ -185,7 +185,9 @@ const describirError = (err) => {
 // Lee el archivo COMPLETO UNA vez, probando varias estrategias hasta que una
 // funcione. En Android, la lectura de un content:// seleccionado SOLO falla
 // intermitentemente (en lote funciona porque Android materializa las copias):
-// 1) arrayBuffer() completo  2) stream() por chunks  3) fetch() sobre blob URL.
+// 1) clonar el File (bug 1063576: fuerza materializar al storage de Chromium)
+// 2) sonda de cabezal + arrayBuffer
+// 3) arrayBuffer() completo  4) stream() por chunks  5) fetch() sobre blob URL.
 // Todas las rutas de compresión reusan el buffer en memoria, así ninguna
 // vuelve a tocar el content:// que es lo que falla.
 const leerArchivo = async (file) => {
@@ -195,7 +197,25 @@ const leerArchivo = async (file) => {
     return cacheado;
   }
 
+  const t0 = performance.now();
   const estrategias = [
+    // Workaround documentado del bug chromium 1063576: clonar el File en un
+    // File/Blob NUEVO antes de leer fuerza a Chromium a copiar el contenido
+    // a su propio storage, dejando de depender del content:// (que en Android
+    // llega como placeholder temporal no materializado).
+    async () => {
+      const clon = new File([file], file.name, {
+        type: file.type,
+        lastModified: file.lastModified,
+      });
+      return clon.arrayBuffer();
+    },
+    // "Sonda de cabezal": el provide del content:// recién elegido a veces
+    // responde tras leer un trozo CHICO primero (despierta la materialización).
+    async () => {
+      await file.slice(0, Math.min(file.size, 64 * 1024)).arrayBuffer();
+      return file.arrayBuffer();
+    },
     () => file.arrayBuffer(),
     async () => {
       const lector = file.stream().getReader();
@@ -244,6 +264,11 @@ const leerArchivo = async (file) => {
       }
     }
   }
+  console.debug(
+    `[compressImage] lectura falló tras ${Math.round(
+      performance.now() - t0
+    )}ms (huella ${huellaArchivo(file)})`
+  );
   throw ultimoError;
 };
 

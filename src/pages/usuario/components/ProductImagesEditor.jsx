@@ -82,15 +82,22 @@ export function ProductImagesEditor({
 
     setSubiendo(true);
     const subidos = [];
+    const tPick = performance.now();
 
     try {
-      for (const file of aSubir) {
+      for (const [indice, file] of aSubir.entries()) {
         let compressed = null;
         try {
           if (!file.type.startsWith("image/")) {
             toast.error(`"${file.name}" no es una imagen`);
             continue;
           }
+
+          console.debug(
+            `[ProductImagesEditor] foto ${indice + 1}/${aSubir.length} - ${Math.round(
+              performance.now() - tPick
+            )}ms desde pick - ${file.name} (${(file.size / 1024).toFixed(0)} KB)`
+          );
 
           compressed = await compressImage(file);
         } catch (err) {
