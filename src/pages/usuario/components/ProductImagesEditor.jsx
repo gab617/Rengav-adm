@@ -8,6 +8,42 @@ const generarUuid = () =>
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
+// Selector nativo por File System Access API (showOpenFilePicker). En Chrome
+// Android M132+ usa un pipeline de SAF con URIs estables, que NO pasan por el
+// proxy roto de la galería (content://media/picker/...) que causa los errores
+// aleatorios de lectura en el <input type="file">. Si el navegador no lo
+// expone, devolvemos null y el caller cae al <input> clásico.
+const elegirConFsa = async (multiple) => {
+  if (typeof window === "undefined" || !window.showOpenFilePicker) return null;
+
+  try {
+    const handles = await window.showOpenFilePicker({
+      multiple,
+      excludeAcceptAllOption: false,
+      types: [
+        {
+          description: "Imágenes",
+          accept: {
+            "image/*": [".jpg", ".jpeg", ".png", ".webp", ".gif", ".heic"],
+          },
+        },
+      ],
+    });
+    const archivos = await Promise.all(
+      handles.map(async (h) => {
+        const file = await h.getFile();
+        return file;
+      })
+    );
+    return archivos;
+  } catch (err) {
+    // AbortError = el usuario canceló el selector; no es un fallo real.
+    if (err?.name === "AbortError") return [];
+    console.warn("[ProductImagesEditor] showOpenFilePicker no disponible:", err);
+    return null;
+  }
+};
+
 const maxImagesCache = new Map();
 const maxImagesPromises = new Map();
 
@@ -59,10 +95,7 @@ export function ProductImagesEditor({
   const publicUrl = (path) =>
     supabase.storage.from("product-images").getPublicUrl(path).data.publicUrl;
 
-  const handleFiles = async (e) => {
-    const archivos = Array.from(e.target.files || []);
-    e.target.value = "";
-
+  const procesarArchivos = async (archivos, origen = "input") => {
     if (!archivos.length) return;
 
     if (!tenantId) {
@@ -94,13 +127,13 @@ export function ProductImagesEditor({
           }
 
           console.debug(
-            `[ProductImagesEditor] foto ${indice + 1}/${aSubir.length} - ${Math.round(
+            `[ProductImagesEditor] [${origen}] foto ${indice + 1}/${aSubir.length} - ${Math.round(
               performance.now() - tPick
             )}ms desde pick - ${file.name} (${(file.size / 1024).toFixed(0)} KB)`
           );
 
           toast.info(
-            `📸 ${indice + 1}/${aSubir.length} — ${Math.round(
+            `📸 [${origen}] ${indice + 1}/${aSubir.length} — ${Math.round(
               performance.now() - tPick
             )}ms desde pick — ${file.name} (${(file.size / 1024).toFixed(0)} KB)`
           );
@@ -177,6 +210,12 @@ export function ProductImagesEditor({
     if (subidos.length) {
       onImagenesChange([...imagenes, ...subidos]);
     }
+  };
+
+  const handleFiles = (e) => {
+    const archivos = Array.from(e.target.files || []);
+    e.target.value = "";
+    procesarArchivos(archivos, "input");
   };
 
   const handleQuitar = async (idx) => {
@@ -346,7 +385,14 @@ export function ProductImagesEditor({
 
       <button
         type="button"
-        onClick={() => fileInputRef.current?.click()}
+        onClick={async () => {
+          const conFSA = await elegirConFsa(true);
+          if (conFSA) {
+            if (conFSA.length) procesarArchivos(conFSA, "fsa");
+          } else {
+            fileInputRef.current?.click();
+          }
+        }}
         disabled={completas || sinTenant || subiendo}
         className={`w-full py-2 rounded-lg border text-sm font-medium transition-colors ${
           completas || sinTenant || subiendo
