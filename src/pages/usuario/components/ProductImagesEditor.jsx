@@ -81,6 +81,8 @@ export function ProductImagesEditor({
 }) {
   const [maxImagenes, setMaxImagenes] = useState(3);
   const [subiendo, setSubiendo] = useState(false);
+  // Progreso de la subida actual: { actual, total } para mostrar qué foto va.
+  const [progresoSubida, setProgresoSubida] = useState(null);
   const fileInputRef = useRef(null);
   // path subido -> huella del archivo original, para liberar el buffer de la
   // caché de lectura (RAM del celular) cuando el usuario elimina la imagen.
@@ -114,11 +116,14 @@ export function ProductImagesEditor({
     }
 
     setSubiendo(true);
+    setProgresoSubida({ actual: 0, total: aSubir.length });
     const subidos = [];
     const tPick = performance.now();
 
     try {
       for (const [indice, file] of aSubir.entries()) {
+        setProgresoSubida({ actual: indice + 1, total: aSubir.length });
+
         let compressed = null;
         try {
           if (!file.type.startsWith("image/")) {
@@ -132,12 +137,6 @@ export function ProductImagesEditor({
             )}ms desde pick - ${file.name} (${(file.size / 1024).toFixed(0)} KB)`
           );
 
-          toast.info(
-            `📸 [${origen}] ${indice + 1}/${aSubir.length} — ${Math.round(
-              performance.now() - tPick
-            )}ms desde pick — ${file.name} (${(file.size / 1024).toFixed(0)} KB)`
-          );
-
           compressed = await compressImage(file);
         } catch (err) {
           console.error("[ProductImagesEditor] Error al COMPRIMIR imagen:", {
@@ -149,13 +148,7 @@ export function ProductImagesEditor({
             progressEventTotal: err?.total,
             err,
           });
-          toast.error(
-            `No se pudo COMPRIMIR "${file.name}" (${
-              file.size / 1024 < 1 ? (file.size / 1024).toFixed(2) : Math.round(file.size / 1024)
-            } KB) tras ${Math.round(performance.now() - tPick)}ms: ${
-              err?.message || err?.name || err?.type || err
-            }`
-          );
+          toast.error(`No se pudo comprimir "${file.name}": ${err?.message || err?.name || err?.type || err}`);
           continue;
         }
 
@@ -176,6 +169,9 @@ export function ProductImagesEditor({
           }
 
           subidos.push(path);
+          // Mostramos la foto apenas se subió, no al final del lote: el badge
+          // de éxito es la propia thumbnail apareciendo en la grilla.
+          onImagenesChange([...imagenes, ...subidos]);
 
           // La foto ya se comprimió y subió: su buffer ORIGINAL en RAM ya no
           // hace falta, se libera de inmediato (no esperar a que eliminen).
@@ -196,19 +192,12 @@ export function ProductImagesEditor({
             progressEventTotal: err?.total,
             err,
           });
-          toast.error(
-            `No se pudo SUBIR "${file.name}" (${file.size / 1024} KB): ${
-              err?.type || err?.name || err?.message || err
-            }`
-          );
+          toast.error(`No se pudo subir "${file.name}": ${err?.type || err?.name || err?.message || err}`);
         }
       }
     } finally {
       setSubiendo(false);
-    }
-
-    if (subidos.length) {
-      onImagenesChange([...imagenes, ...subidos]);
+      setProgresoSubida(null);
     }
   };
 
@@ -400,7 +389,11 @@ export function ProductImagesEditor({
             : btnBg
         }`}
       >
-        {subiendo ? "Subiendo..." : completas ? "Límite alcanzado" : "📷 Agregar imagen"}
+        {subiendo
+          ? `Subiendo ${progresoSubida?.actual ?? 1}/${progresoSubida?.total ?? ""}…`
+          : completas
+            ? "Límite alcanzado"
+            : "📷 Agregar imagen"}
       </button>
 
       <input

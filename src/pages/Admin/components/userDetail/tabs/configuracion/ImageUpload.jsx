@@ -45,6 +45,7 @@ export function ImageUpload({
       }
 
       onChange(path);
+      toast.success(`${label} subida correctamente`);
     } catch (err) {
       toast.error(`No se pudo subir ${label}: ${err.message}`);
     } finally {
@@ -85,7 +86,14 @@ export function ImageUpload({
 
         <div className="flex items-center gap-2 mt-1">
           <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors">
-            {uploading ? "Subiendo..." : "Subir imagen"}
+            {uploading ? (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                Subiendo...
+              </span>
+            ) : (
+              "Subir imagen"
+            )}
             <input
               ref={inputRef}
               type="file"

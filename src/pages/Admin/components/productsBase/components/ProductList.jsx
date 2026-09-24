@@ -986,7 +986,14 @@ export function ProductList({ products = [], categories = [], subcategories = []
                   disabled={savingBase}
                   className="px-4 py-2 rounded-lg text-sm font-medium bg-green-600 text-white hover:bg-green-500 disabled:opacity-50"
                 >
-                  {savingBase ? "Guardando..." : "💾 Guardar cambios"}
+                  {savingBase ? (
+                  <span className="inline-flex items-center gap-2">
+                    <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                    Guardando...
+                  </span>
+                ) : (
+                  "💾 Guardar cambios"
+                )}
                 </button>
               )}
             </div>

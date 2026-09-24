@@ -1307,7 +1307,14 @@ export function TenantCustomProducts({ dark, tenantId, categories, subcategories
                                 disabled={saving}
                                 className="w-full py-2.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-500 disabled:opacity-50"
                               >
-                                {saving ? "Guardando..." : "💾 Guardar cambios"}
+                                {saving ? (
+                <span className="inline-flex items-center justify-center gap-2">
+                  <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                  Guardando...
+                </span>
+              ) : (
+                "💾 Guardar cambios"
+              )}
                               </button>
                                 </form>
                               </div>

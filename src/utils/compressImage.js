@@ -274,16 +274,19 @@ const leerArchivo = async (file) => {
 
 // Escanea el buffer en busca del marcador SOF (ancho/alto del JPEG). Las
 // fotos de celular suelen tener EXIF enorme (GPS + thumbnail): el SOF
-// principal aparece MUY después del inicio, por eso se recorre todo el buffer.
-// Devuelve { esJpeg, dims } (dims = null si el SOF no aparece).
+// principal aparece MUY después del inicio y el THUMBNAIL embebido (APP1)
+// puede traer un SOF pequeño ANTES. Por eso se recorre todo el buffer y nos
+// quedamos con el SOF de MAYOR resolución (el del payload real), ignorando
+// thumbnails. Devuelve { esJpeg, dims } (dims = null si no aparece SOF).
 const analizarJpeg = (buffer) => {
   try {
     const view = new DataView(buffer);
     if (view.getUint16(0) !== 0xffd8) return { esJpeg: false, dims: null };
 
     let offset = 2;
+    let mejor = null;
     while (offset + 4 <= view.byteLength) {
-      if (view.getUint8(offset) !== 0xff) return { esJpeg: true, dims: null };
+      if (view.getUint8(offset) !== 0xff) return { esJpeg: true, dims: mejor };
       const marker = view.getUint8(offset + 1);
       const isSof =
         (marker >= 0xc0 && marker <= 0xcf) &&
@@ -293,13 +296,15 @@ const analizarJpeg = (buffer) => {
       if (isSof) {
         const alto = view.getUint16(offset + 5);
         const ancho = view.getUint16(offset + 7);
-        return { esJpeg: true, dims: { ancho, alto } };
+        if (!mejor || ancho * alto > mejor.ancho * mejor.alto) {
+          mejor = { ancho, alto };
+        }
       }
       const len = view.getUint16(offset + 2);
-      if (len < 2) return { esJpeg: true, dims: null };
+      if (len < 2) return { esJpeg: true, dims: mejor };
       offset += 2 + len;
     }
-    return { esJpeg: true, dims: null };
+    return { esJpeg: true, dims: mejor };
   } catch {
     return { esJpeg: false, dims: null };
   }
@@ -387,10 +392,18 @@ const decodificarJpegReducido = async (buffer, tipo, dims, maxDim, quality) => {
       const { image } = await decoder.decode();
       try {
         const canvas = document.createElement("canvas");
-        canvas.width =
-          target?.ancho || image.displayWidth || image.codedWidth || 1;
-        canvas.height =
-          target?.alto || image.displayHeight || image.codedHeight || 1;
+
+        // IMPORTANTE: las dims de DISPLAY del frame ya tienen aplicada la
+        // orientación EXIF (el SOF del JPEG trae las dims CODED, rotadas si
+        // la foto tiene orientation=6/8). Usar las coded estiraba las
+        // imágenes horizontales: el drawImage aplastaba el frame a un canvas
+        // con el aspect invertido.
+        const dispW = image.displayWidth || image.codedWidth || 1;
+        const dispH = image.displayHeight || image.codedHeight || 1;
+        const escala = Math.min(1, maxDim / Math.max(dispW, dispH));
+        canvas.width = Math.max(1, Math.round(dispW * escala));
+        canvas.height = Math.max(1, Math.round(dispH * escala));
+
         const ctx = canvas.getContext("2d");
         ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
 
@@ -409,6 +422,10 @@ const decodificarJpegReducido = async (buffer, tipo, dims, maxDim, quality) => {
   };
 
   const calcularTarget = (d) => {
+    // Las dims del SOF / coded SIEMPRE son pre-rotación. El ImageDecoder
+    // aplica la orientación EXIF por su cuenta al frame resultante; si
+    // swappearamos acá le pasaríamos un aspect incorrecto. Solo el canvas
+    // (que usa displayWidth/Height ya rotados) tiene que ser correcto.
     const escala = Math.min(1, maxDim / Math.max(d.ancho, d.alto));
     return {
       ancho: Math.max(1, Math.round(d.ancho * escala)),
@@ -429,8 +446,8 @@ const decodificarJpegReducido = async (buffer, tipo, dims, maxDim, quality) => {
     const info = track?.imageInfo;
     if (info) {
       reales = {
-        ancho: info.displayWidth || info.codedWidth,
-        alto: info.displayHeight || info.codedHeight,
+        ancho: info.codedWidth,
+        alto: info.codedHeight,
       };
     }
   } finally {
